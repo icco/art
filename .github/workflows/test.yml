@@ -32,7 +32,9 @@ jobs:
       - name: Build
         run: go build -v ./...
       - name: Test with coverage
-        run: go test -v -coverprofile=coverage.out ./...
+        # -p 1 serializes per-package test binaries; multiple packages call
+        # testdb.Open which drop+migrates the same Postgres schema.
+        run: go test -v -p 1 -coverprofile=coverage.out ./...
       - name: Enforce coverage threshold
         run: |
           total=$(go tool cover -func=coverage.out | awk '/^total:/ {print $3}' | tr -d '%')

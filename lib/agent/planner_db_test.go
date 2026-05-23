@@ -2,7 +2,7 @@ package agent_test
 
 import (
 	"context"
-	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -11,24 +11,43 @@ import (
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/testdb"
-	"gorm.io/datatypes"
 )
 
+// newPlanner builds a Planner against the test DB. Tests that call Run() must
+// skip when VERTEX_PROJECT_ID is unset, since Run now delegates to Vertex.
 func newPlanner(t *testing.T) *agent.Planner {
 	t.Helper()
 	db := testdb.Open(t)
 	tz, _ := time.LoadLocation("America/Los_Angeles")
 	cfg := &config.Config{
 		Timezone: tz,
-		Vertex:   config.VertexConfig{},
+		Vertex: config.VertexConfig{
+			ProjectID: os.Getenv("VERTEX_PROJECT_ID"),
+			Location:  cmpOr(os.Getenv("VERTEX_LOCATION"), "us-central1"),
+		},
 	}
 	flow := oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: db})
 	return &agent.Planner{Cfg: cfg, DB: db, OAuth: flow}
 }
 
-// With no projects/habits and no linked accounts the planner should still
-// record a successful agent_run row.
+func cmpOr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func skipUnlessVertex(t *testing.T) {
+	t.Helper()
+	if os.Getenv("VERTEX_PROJECT_ID") == "" {
+		t.Skip("VERTEX_PROJECT_ID not set; skipping LLM-backed planner test")
+	}
+}
+
+// Run delegates to the Vertex Gemini agent; we can only exercise it when
+// real credentials are present. CI skips this by default.
 func TestPlannerRunEmpty(t *testing.T) {
+	skipUnlessVertex(t)
 	p := newPlanner(t)
 	if err := p.Run(context.Background()); err != nil {
 		t.Fatalf("Run: %v", err)
@@ -37,42 +56,6 @@ func TestPlannerRunEmpty(t *testing.T) {
 	p.DB.Model(&models.AgentRun{}).Count(&n)
 	if n != 1 {
 		t.Fatalf("expected 1 agent_run row, got %d", n)
-	}
-}
-
-// With a project but no linked account, planProjects records a per-item
-// error in the summary but the cycle still succeeds.
-func TestPlannerRunUnlinkedAccount(t *testing.T) {
-	p := newPlanner(t)
-	deadline := time.Now().Add(3 * 24 * time.Hour)
-	if err := p.DB.Create(&models.Project{
-		Name:        "Design X",
-		Kind:        models.SlotWork,
-		TargetHours: 2,
-		Deadline:    &deadline,
-		Status:      models.ProjectActive,
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	cadJSON, _ := json.Marshal(models.Cadence{Type: "per_week", Count: 1})
-	if err := p.DB.Create(&models.Habit{
-		Name:                 "Walk",
-		Kind:                 models.SlotPersonal,
-		BlockDurationMinutes: 30,
-		Cadence:              datatypes.JSON(cadJSON),
-		Active:               true,
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Run(context.Background()); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-	var run models.AgentRun
-	if err := p.DB.Order("started_at DESC").First(&run).Error; err != nil {
-		t.Fatal(err)
-	}
-	if run.Status != models.AgentRunSucceeded {
-		t.Fatalf("expected succeeded, got %s", run.Status)
 	}
 }
 
