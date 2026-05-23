@@ -83,8 +83,8 @@ func TestLoadValidate(t *testing.T) {
 	if !cfg.OwnerAllowed("you@example.com") {
 		t.Fatal("owner email not picked up")
 	}
-	if cfg.Vertex.Model == "" {
-		t.Fatal("Vertex model default missing")
+	if cfg.Vertex.Location == "" {
+		t.Fatal("Vertex location default missing")
 	}
 }
 

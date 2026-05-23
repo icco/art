@@ -25,7 +25,7 @@ type Planner struct {
 }
 
 func (p *Planner) Run(ctx context.Context) error {
-	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: p.Cfg.Vertex.Model}
+	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: config.VertexModel}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
 	}
