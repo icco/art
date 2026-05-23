@@ -10,7 +10,6 @@ import (
 	"github.com/icco/art/lib/logging"
 )
 
-// Scheduler runs hourly sync + replan jobs.
 type Scheduler struct {
 	Sync    *calendar.Runner
 	Planner *agent.Planner
@@ -24,8 +23,7 @@ func New(sync *calendar.Runner, planner *agent.Planner) *Scheduler {
 	return &Scheduler{Sync: sync, Planner: planner, stop: make(chan struct{})}
 }
 
-// Start runs both jobs immediately, then every hour until ctx is cancelled
-// or Stop is called.
+// Start runs sync + planner once, then hourly until ctx is cancelled.
 func (s *Scheduler) Start(ctx context.Context) {
 	s.tick = time.NewTicker(time.Hour)
 	s.wg.Add(1)

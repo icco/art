@@ -44,8 +44,7 @@ func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, out)
 }
 
-// WorkingHoursReplace replaces the entire working_hours table with the
-// provided list in a single transaction.
+// WorkingHoursReplace atomically replaces the entire table.
 func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 	var reqs []workingHourReq
 	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {

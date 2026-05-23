@@ -11,8 +11,6 @@ import (
 
 const ArtManagedKey = "art_managed"
 
-// Client is a Google Calendar service for one account, paired with the
-// account row so callers know whose calendars they're touching.
 type Client struct {
 	Account models.Account
 	Service *calendar.Service

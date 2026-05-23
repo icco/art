@@ -9,7 +9,7 @@ import (
 	"io"
 )
 
-// Sealer encrypts/decrypts small secrets (refresh tokens) at rest with AES-256-GCM.
+// Sealer wraps refresh tokens with AES-256-GCM before they hit Postgres.
 type Sealer struct {
 	gcm cipher.AEAD
 }

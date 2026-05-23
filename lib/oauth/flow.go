@@ -17,8 +17,6 @@ import (
 	"google.golang.org/api/option"
 )
 
-// Scopes requested per account: full calendar (read + write) plus identity for
-// confirming which account the user consented as.
 var Scopes = []string{
 	calendar.CalendarScope,
 	"openid",
@@ -26,7 +24,6 @@ var Scopes = []string{
 	"https://www.googleapis.com/auth/userinfo.profile",
 }
 
-// Flow orchestrates the per-account OAuth dance.
 type Flow struct {
 	OAuth   *oauth2.Config
 	Store   *Store
@@ -51,7 +48,6 @@ func NewFlow(clientID, clientSecret, redirectURL string, store *Store) *Flow {
 	}
 }
 
-// StartURL returns the consent URL for the given account.
 func (f *Flow) StartURL(account string) (string, error) {
 	kind := models.AccountKind(account)
 	if !kind.Valid() {
@@ -68,8 +64,6 @@ func (f *Flow) StartURL(account string) (string, error) {
 	), nil
 }
 
-// Complete exchanges the code for tokens, fetches identity + primary calendar,
-// and persists. Returns the account kind and the user's email.
 func (f *Flow) Complete(ctx context.Context, state, code string) (string, string, error) {
 	raw, ok := f.pending.LoadAndDelete(state)
 	if !ok {
@@ -103,7 +97,6 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 	return string(p.kind), email, nil
 }
 
-// TokenSource returns a refreshing token source for the stored account.
 func (f *Flow) TokenSource(ctx context.Context, kind models.AccountKind) (oauth2.TokenSource, models.Account, error) {
 	tok, acct, err := f.Store.Load(ctx, kind)
 	if err != nil {

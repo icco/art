@@ -1,4 +1,4 @@
-// Package models defines the GORM schema for Art's persisted state.
+// Package models defines the GORM schema. AutoMigrate creates the tables.
 package models
 
 import (
@@ -9,8 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// String-typed enum-like values. Validated in Go because gorm.AutoMigrate
-// doesn't manage Postgres ENUM types well; CHECK constraints are added below.
+// Enum-like string types. Postgres ENUMs are avoided because AutoMigrate
+// doesn't manage them well; CHECK constraints in the tags enforce the values.
 type (
 	AccountKind    string
 	SlotKind       string
@@ -48,15 +48,13 @@ func (a AccountKind) Valid() bool { return a == AccountPersonal || a == AccountW
 func (s SlotKind) Valid() bool    { return s == SlotWork || s == SlotPersonal }
 func (s SourceKind) Valid() bool  { return s == SourceProject || s == SourceHabit }
 
-// Base embeds a UUID primary key + timestamps so handlers don't have to repeat the boilerplate.
 type Base struct {
 	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// BeforeCreate generates a UUID for new rows. Required because we don't rely on
-// Postgres-side gen_random_uuid() — keeps the schema portable.
+// BeforeCreate fills the UUID in Go so we don't need a Postgres extension.
 func (b *Base) BeforeCreate(_ *gorm.DB) error {
 	if b.ID == "" {
 		b.ID = uuid.NewString()
@@ -92,7 +90,7 @@ type Project struct {
 	Status         ProjectStatus `gorm:"type:varchar(16);not null;default:'active';index;check:status IN ('active','paused','done')" json:"status"`
 }
 
-// Cadence is stored as JSONB on Habit.
+// Cadence is the JSONB payload on Habit.Cadence.
 type Cadence struct {
 	Type             string   `json:"type"`
 	Count            int      `json:"count"`
@@ -159,7 +157,7 @@ type AgentRun struct {
 	Error     string         `gorm:"type:text;not null;default:''" json:"error"`
 }
 
-// All returns the schema in the order AutoMigrate should walk.
+// All returns the models in AutoMigrate order.
 func All() []any {
 	return []any{
 		&Account{},
