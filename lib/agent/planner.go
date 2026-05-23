@@ -14,10 +14,9 @@ import (
 	"gorm.io/gorm"
 )
 
-const PlanningWindow = 7 * 24 * time.Hour
-
-// Planner schedules focus blocks deterministically; ADK-driven mode can
-// later wrap the same primitives as tools.
+// Planner schedules focus blocks for the *current calendar week* only and
+// never inside the in-progress hour. ADK orchestration wraps the same
+// primitives as tools.
 type Planner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB
@@ -41,11 +40,16 @@ func (p *Planner) Run(ctx context.Context) error {
 
 func (p *Planner) plan(ctx context.Context, summary map[string]any) error {
 	now := time.Now().UTC()
-	end := now.Add(PlanningWindow)
-	if err := p.planProjects(ctx, now, end, summary); err != nil {
+	from := PlanningStart(now, p.Cfg.Timezone)
+	_, weekEnd := WeekWindow(now, p.Cfg.Timezone)
+	if !from.Before(weekEnd) {
+		// Already past the end of the current week — wait for next Monday.
+		return nil
+	}
+	if err := p.planProjects(ctx, from, weekEnd, summary); err != nil {
 		appendErr(summary, "projects: "+err.Error())
 	}
-	if err := p.planHabits(ctx, now, summary); err != nil {
+	if err := p.planHabits(ctx, from, weekEnd, summary); err != nil {
 		appendErr(summary, "habits: "+err.Error())
 	}
 	return nil
@@ -74,9 +78,13 @@ func (p *Planner) planProjects(ctx context.Context, from, to time.Time, summary 
 			continue
 		}
 
+		// Stay inside the current week even when the project deadline is further out.
 		windowEnd := to
 		if pj.Deadline != nil && pj.Deadline.Before(windowEnd) {
 			windowEnd = *pj.Deadline
+		}
+		if !from.Before(windowEnd) {
+			continue
 		}
 
 		for remaining > 0 {
@@ -108,14 +116,13 @@ func (p *Planner) planProjects(ctx context.Context, from, to time.Time, summary 
 	return nil
 }
 
-func (p *Planner) planHabits(ctx context.Context, from time.Time, summary map[string]any) error {
+func (p *Planner) planHabits(ctx context.Context, from, weekEnd time.Time, summary map[string]any) error {
 	var habits []models.Habit
 	if err := p.DB.WithContext(ctx).Where("active = ?", true).Find(&habits).Error; err != nil {
 		return err
 	}
 
-	weekStart := startOfWeek(from, p.Cfg.Timezone)
-	weekEnd := weekStart.Add(7 * 24 * time.Hour)
+	weekStart, _ := WeekWindow(from, p.Cfg.Timezone)
 
 	for _, h := range habits {
 		var cad models.Cadence
@@ -148,7 +155,7 @@ func (p *Planner) planHabits(ctx context.Context, from time.Time, summary map[st
 		}
 
 		for range need {
-			slots, err := FindFreeSlots(ctx, p.DB, p.Cfg.Timezone, acct, h.Kind, h.BlockDurationMinutes, maxTime(from, weekStart), weekEnd, 1)
+			slots, err := FindFreeSlots(ctx, p.DB, p.Cfg.Timezone, acct, h.Kind, h.BlockDurationMinutes, from, weekEnd, 1)
 			if err != nil {
 				appendErr(summary, fmt.Sprintf("habit %s: find slots: %v", h.ID, err))
 				break
