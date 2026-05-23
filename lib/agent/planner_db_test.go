@@ -20,7 +20,7 @@ func newPlanner(t *testing.T) *agent.Planner {
 	tz, _ := time.LoadLocation("America/Los_Angeles")
 	cfg := &config.Config{
 		Timezone: tz,
-		Vertex:   config.VertexConfig{Model: "test-model"},
+		Vertex:   config.VertexConfig{},
 	}
 	flow := oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: db})
 	return &agent.Planner{Cfg: cfg, DB: db, OAuth: flow}

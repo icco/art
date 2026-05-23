@@ -29,10 +29,13 @@ type OAuthConfig struct {
 	RedirectURL  string
 }
 
+// VertexModel is hardcoded to the latest GA Gemini model on Vertex AI.
+// Update here when Google ships a newer GA release.
+const VertexModel = "gemini-3.1-pro"
+
 type VertexConfig struct {
 	ProjectID string
 	Location  string
-	Model     string
 }
 
 func Load() (*Config, error) {
@@ -50,7 +53,6 @@ func Load() (*Config, error) {
 		Vertex: VertexConfig{
 			ProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 			Location:  envOr("VERTEX_LOCATION", "us-central1"),
-			Model:     envOr("VERTEX_MODEL", "gemini-2.5-pro"),
 		},
 	}
 
