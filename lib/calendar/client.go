@@ -9,7 +9,10 @@ import (
 	"google.golang.org/api/option"
 )
 
-const ArtManagedKey = "art_managed"
+const (
+	ArtManagedKey  = "art_managed"
+	ArtManagedTrue = "true"
+)
 
 type Client struct {
 	Account models.Account

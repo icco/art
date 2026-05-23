@@ -159,7 +159,7 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 
 	artManaged := ev.ExtendedProperties != nil &&
 		ev.ExtendedProperties.Private != nil &&
-		ev.ExtendedProperties.Private[ArtManagedKey] == "true"
+		ev.ExtendedProperties.Private[ArtManagedKey] == ArtManagedTrue
 
 	eventType := ev.EventType
 	if eventType == "" {

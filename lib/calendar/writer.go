@@ -35,7 +35,7 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 		End:         &calendar.EventDateTime{DateTime: fb.End.UTC().Format(time.RFC3339)},
 		ExtendedProperties: &calendar.EventExtendedProperties{
 			Private: map[string]string{
-				ArtManagedKey:    "true",
+				ArtManagedKey:    ArtManagedTrue,
 				"art_source":     string(fb.Source),
 				"art_source_id":  fb.SourceID,
 				"art_created_at": time.Now().UTC().Format(time.RFC3339),
@@ -57,7 +57,7 @@ func (c *Client) DeleteManaged(ctx context.Context, calendarID, eventID string) 
 	}
 	if ev.ExtendedProperties == nil ||
 		ev.ExtendedProperties.Private == nil ||
-		ev.ExtendedProperties.Private[ArtManagedKey] != "true" {
+		ev.ExtendedProperties.Private[ArtManagedKey] != ArtManagedTrue {
 		return fmt.Errorf("calendar: refusing to delete non-Art event %q", eventID)
 	}
 	return c.Service.Events.Delete(calendarID, eventID).Context(ctx).Do()
