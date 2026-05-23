@@ -142,8 +142,8 @@ type listStateResult struct {
 }
 
 type findFreeSlotsArgs struct {
-	AccountKind string `json:"account_kind" jsonschema:"description=personal|work"`
-	SlotKind    string `json:"slot_kind" jsonschema:"description=personal|work"`
+	AccountKind string `json:"account_kind" jsonschema:"personal or work"`
+	SlotKind    string `json:"slot_kind"    jsonschema:"personal or work"`
 	DurationMin int    `json:"duration_min"`
 	MaxResults  int    `json:"max_results"`
 }
@@ -158,10 +158,10 @@ type findFreeSlotsResult struct {
 }
 
 type commitFocusBlockArgs struct {
-	Source   string `json:"source" jsonschema:"description=project|habit"`
+	Source   string `json:"source"    jsonschema:"project or habit"`
 	SourceID string `json:"source_id"`
-	StartISO string `json:"start" jsonschema:"description=RFC3339 start time in UTC"`
-	EndISO   string `json:"end" jsonschema:"description=RFC3339 end time in UTC"`
+	StartISO string `json:"start"     jsonschema:"RFC3339 start time in UTC"`
+	EndISO   string `json:"end"       jsonschema:"RFC3339 end time in UTC"`
 }
 
 type commitFocusBlockResult struct {
