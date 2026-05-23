@@ -6,15 +6,16 @@ services:
       POSTGRES_PASSWORD: art
       POSTGRES_DB: art
     ports:
-      - "5432:5432"
+      - 5432:5432
     volumes:
       - art_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U art -d art"]
+      test:
+        - CMD-SHELL
+        - pg_isready -U art -d art
       interval: 5s
       timeout: 3s
       retries: 10
-
   server:
     build: .
     depends_on:
@@ -22,23 +23,22 @@ services:
         condition: service_healthy
     environment:
       PORT: "8080"
-      DATABASE_URL: "postgres://art:art@db:5432/art?sslmode=disable"
-      OWNER_EMAILS: "${OWNER_EMAILS}"
-      GOOGLE_OAUTH_CLIENT_ID: "${GOOGLE_OAUTH_CLIENT_ID}"
-      GOOGLE_OAUTH_CLIENT_SECRET: "${GOOGLE_OAUTH_CLIENT_SECRET}"
-      GOOGLE_OAUTH_REDIRECT_URL: "${GOOGLE_OAUTH_REDIRECT_URL:-http://localhost:8080/oauth/callback}"
-      GOOGLE_APPLICATION_CREDENTIALS: "/secrets/vertex-sa.json"
-      VERTEX_PROJECT_ID: "${VERTEX_PROJECT_ID}"
-      VERTEX_LOCATION: "${VERTEX_LOCATION:-us-central1}"
-      VERTEX_MODEL: "${VERTEX_MODEL:-gemini-2.5-pro}"
-      TOKEN_ENCRYPTION_KEY: "${TOKEN_ENCRYPTION_KEY}"
-      ART_TIMEZONE: "${ART_TIMEZONE:-America/Los_Angeles}"
-      OIDC_AUDIENCE: "${OIDC_AUDIENCE}"
-      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      DATABASE_URL: postgres://art:art@db:5432/art?sslmode=disable
+      OWNER_EMAILS: ${OWNER_EMAILS}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET}
+      GOOGLE_OAUTH_REDIRECT_URL: ${GOOGLE_OAUTH_REDIRECT_URL:-http://localhost:8080/oauth/callback}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/vertex-sa.json
+      VERTEX_PROJECT_ID: ${VERTEX_PROJECT_ID}
+      VERTEX_LOCATION: ${VERTEX_LOCATION:-us-central1}
+      VERTEX_MODEL: ${VERTEX_MODEL:-gemini-2.5-pro}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      ART_TIMEZONE: ${ART_TIMEZONE:-America/Los_Angeles}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
-      - "8080:8080"
+      - 8080:8080
     volumes:
       - ${VERTEX_SA_PATH:-./vertex-sa.json}:/secrets/vertex-sa.json:ro
-
 volumes:
   art_pgdata:
