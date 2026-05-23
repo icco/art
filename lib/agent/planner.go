@@ -34,7 +34,7 @@ func (p *Planner) Run(ctx context.Context) error {
 		"habits_scheduled":   0,
 		"errors":             []string{},
 	}
-	runErr := p.plan(ctx, summary)
+	runErr := p.llmPlan(ctx, summary)
 	return p.finish(ctx, run.ID, summary, runErr)
 }
 
