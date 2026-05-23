@@ -34,5 +34,6 @@ vertex-sa.json
 bin/
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+.claude/
