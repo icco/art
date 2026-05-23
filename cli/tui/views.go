@@ -91,7 +91,7 @@ func (a *App) renderHabits() string {
 func (a *App) renderForm() string {
 	var b strings.Builder
 	title := "New project"
-	if a.form.kind == "habit" {
+	if a.form.kind == formKindHabit {
 		title = "New habit"
 	}
 	fmt.Fprintf(&b, "%s — Tab/Enter to submit, Esc to cancel\n\n", title)
