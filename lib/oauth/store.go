@@ -12,18 +12,17 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Store persists OAuth refresh tokens (encrypted) keyed by account kind.
 type Store struct {
 	DB     *gorm.DB
 	Sealer *Sealer
 }
 
-// Save inserts or updates the account row.
 func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primaryCal string, tok *oauth2.Token) error {
 	if tok.RefreshToken == "" {
 		return errors.New("oauth: refresh token missing — revoke and retry with prompt=consent")
 	}
-	payload, err := json.Marshal(tok)
+	payload, err := json.Marshal(tok) // #nosec G117 -- encrypted by Seal before persistence
+
 	if err != nil {
 		return err
 	}
@@ -47,8 +46,6 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 		Create(&a).Error
 }
 
-// Load returns the token + account for kind. Returns gorm.ErrRecordNotFound
-// when the account hasn't been linked yet.
 func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Token, models.Account, error) {
 	var a models.Account
 	if err := s.DB.WithContext(ctx).Where("kind = ?", kind).First(&a).Error; err != nil {
@@ -65,7 +62,6 @@ func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Toke
 	return &tok, a, nil
 }
 
-// All returns every persisted account in stable order.
 func (s *Store) All(ctx context.Context) ([]models.Account, error) {
 	var out []models.Account
 	err := s.DB.WithContext(ctx).Order("kind").Find(&out).Error

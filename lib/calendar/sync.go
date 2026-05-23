@@ -20,13 +20,11 @@ const (
 	FutureWindow  = 60 * 24 * time.Hour
 )
 
-// Syncer keeps the events table aligned with every calendar on one account.
 type Syncer struct {
 	Client *Client
 	DB     *gorm.DB
 }
 
-// Run walks every calendar on the account's CalendarList and syncs each.
 func (s *Syncer) Run(ctx context.Context) error {
 	list, err := s.Client.Service.CalendarList.List().Context(ctx).Do()
 	if err != nil {
@@ -69,7 +67,7 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 		if err != nil {
 			var gerr *googleapi.Error
 			if errors.As(err, &gerr) && gerr.Code == 410 {
-				// Sync token expired — drop state and restart with a full sync.
+				// 410 = sync token expired; drop state and full-resync.
 				if delErr := s.DB.WithContext(ctx).Where(
 					"account_kind = ? AND calendar_id = ?",
 					string(s.Client.Account.Kind), calendarID,
@@ -161,7 +159,7 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 
 	artManaged := ev.ExtendedProperties != nil &&
 		ev.ExtendedProperties.Private != nil &&
-		ev.ExtendedProperties.Private[ArtManagedKey] == "true"
+		ev.ExtendedProperties.Private[ArtManagedKey] == ArtManagedTrue
 
 	eventType := ev.EventType
 	if eventType == "" {

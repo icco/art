@@ -84,7 +84,7 @@ func (a *App) submitForm() tea.Cmd {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		switch a.form.kind {
-		case "project":
+		case formKindProject:
 			p, err := parseProjectForm(a.form.fields)
 			if err != nil {
 				return errMsg{err}
@@ -94,7 +94,7 @@ func (a *App) submitForm() tea.Cmd {
 			}
 			a.screen = screenProjects
 			return statusMsg("project created")
-		case "habit":
+		case formKindHabit:
 			h, err := parseHabitForm(a.form.fields)
 			if err != nil {
 				return errMsg{err}

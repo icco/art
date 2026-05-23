@@ -9,21 +9,15 @@ import (
 	"gorm.io/gorm"
 )
 
-// Slot is a candidate time range allowed by working hours and free of
-// existing events on the chosen account.
 type Slot struct {
 	AccountKind models.AccountKind
 	Start       time.Time
 	End         time.Time
 }
 
-// FindFreeSlots returns candidate slots of exactly durationMin minutes inside
-// [windowStart, windowEnd) where:
-//   - The slot is inside a working_hours window for slotKind (in tz).
-//   - No existing event on the account overlaps the slot.
-//
-// Candidates advance in 15-minute steps; the next candidate starts at the
-// previous slot's end (no near-duplicates).
+// FindFreeSlots returns up to `cap` non-overlapping durationMin-long slots
+// inside [windowStart, windowEnd) that fall within a working_hours window
+// for slotKind (tz-interpreted) and don't clash with any event on the account.
 func FindFreeSlots(
 	ctx context.Context,
 	db *gorm.DB,

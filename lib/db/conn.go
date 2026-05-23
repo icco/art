@@ -10,8 +10,7 @@ import (
 	"moul.io/zapgorm2"
 )
 
-// Open returns a GORM DB connected to dsn with zap-backed query logging,
-// and runs AutoMigrate so the schema matches the models.
+// Open connects to dsn, wires zap logging, and runs AutoMigrate.
 func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	cfg := &gorm.Config{Logger: zapgorm2.New(log)}
 	db, err := gorm.Open(postgres.Open(dsn), cfg)

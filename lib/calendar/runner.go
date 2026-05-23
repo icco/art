@@ -9,16 +9,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// Runner runs Sync.Run across every persisted account. Implements
-// handlers.SyncService.
 type Runner struct {
 	DB    *gorm.DB
 	OAuth *oauth.Flow
 }
 
-// RunAll iterates known account kinds; missing/unlinked accounts are skipped
-// silently. Per-account errors are returned in the map; a non-nil error means
-// something failed before we got to that point.
+// RunAll skips unlinked accounts silently and returns per-account errors in the map.
 func (r *Runner) RunAll(ctx context.Context) (map[string]string, error) {
 	results := map[string]string{}
 	for _, kind := range []models.AccountKind{models.AccountPersonal, models.AccountWork} {

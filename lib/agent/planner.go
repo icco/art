@@ -14,19 +14,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// PlanningWindow is how far ahead each replan looks.
 const PlanningWindow = 7 * 24 * time.Hour
 
-// Planner holds the dependencies needed to run an agent planning cycle.
-// Today's implementation is deterministic Go; the structure leaves room for
-// an LLM-orchestrated mode (ADK + Vertex) that wraps the same primitives.
+// Planner schedules focus blocks deterministically; ADK-driven mode can
+// later wrap the same primitives as tools.
 type Planner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB
 	OAuth *oauth.Flow
 }
 
-// Run executes one planning cycle and records an agent_runs row for observability.
 func (p *Planner) Run(ctx context.Context) error {
 	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: p.Cfg.Vertex.Model}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
@@ -270,8 +267,6 @@ func maxTime(a, b time.Time) time.Time {
 	}
 	return b
 }
-
-// (cmp.Or-style time.Max isn't in stdlib yet; the helper above stays.)
 
 func appendErr(summary map[string]any, s string) {
 	errs, _ := summary["errors"].([]string)

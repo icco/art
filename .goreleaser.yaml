@@ -1,0 +1,61 @@
+version: 2
+project_name: art
+builds:
+  - id: art
+    main: ./cmd/art
+    binary: art
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+    env:
+      - CGO_ENABLED=0
+archives:
+  - id: default
+    files:
+      - README.md
+checksum:
+  name_template: checksums.txt
+snapshot:
+  version_template: '{{ .Tag }}-next'
+changelog:
+  use: git
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^feat:'
+      order: 0
+    - title: Bug Fixes
+      regexp: '^fix:'
+      order: 1
+    - title: Other Changes
+      order: 999
+homebrew_casks:
+  - name: art
+    directory: Casks
+    repository:
+      owner: icco
+      name: homebrew-tap
+    homepage: https://github.com/icco/art
+    description: Personal scheduling agent — TUI for the art server
+    binaries:
+      - art
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/art"]
+          end
+release:
+  github:
+    owner: icco
+    name: art
+  mode: replace
+  footer: |
+    ---
+    **Full Changelog**: https://github.com/icco/art/compare/{{ .PreviousTag }}...{{ .Tag }}

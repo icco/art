@@ -53,7 +53,7 @@ jobs:
         with:
           commit_message: 'style: format YAML and JSON with yq'
           # The default GITHUB_TOKEN cannot edit files under .github/workflows.
-          file_pattern: '*.yml *.yaml *.json :!.github/workflows/*'
+          file_pattern: '*.yml *.yaml :!.github/workflows/*'
           commit_author: GitHub Actions <actions@github.com>
           commit_user_name: github-actions[bot]
           commit_user_email: github-actions[bot]@users.noreply.github.com

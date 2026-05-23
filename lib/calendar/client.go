@@ -9,10 +9,11 @@ import (
 	"google.golang.org/api/option"
 )
 
-const ArtManagedKey = "art_managed"
+const (
+	ArtManagedKey  = "art_managed"
+	ArtManagedTrue = "true"
+)
 
-// Client is a Google Calendar service for one account, paired with the
-// account row so callers know whose calendars they're touching.
 type Client struct {
 	Account models.Account
 	Service *calendar.Service

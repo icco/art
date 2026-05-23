@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,7 +23,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
-		os.Stderr.WriteString("fatal: " + err.Error() + "\n")
+		fmt.Fprintln(os.Stderr, "fatal:", err)
 		os.Exit(1)
 	}
 }

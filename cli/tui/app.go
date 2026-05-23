@@ -18,6 +18,11 @@ const (
 	screenAddHabit
 )
 
+const (
+	formKindProject = "project"
+	formKindHabit   = "habit"
+)
+
 type App struct {
 	cfg    Config
 	client *Client
@@ -42,7 +47,7 @@ type App struct {
 type formState struct {
 	fields []formField
 	active int
-	kind   string // "project" or "habit"
+	kind   string // formKindProject or formKindHabit
 }
 
 type formField struct {
@@ -132,7 +137,7 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case screenProjects:
 			a.screen = screenAddProject
 			a.form = formState{
-				kind: "project",
+				kind: formKindProject,
 				fields: []formField{
 					{label: "name"},
 					{label: "kind (work|personal)", value: "work"},
@@ -143,7 +148,7 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case screenHabits:
 			a.screen = screenAddHabit
 			a.form = formState{
-				kind: "habit",
+				kind: formKindHabit,
 				fields: []formField{
 					{label: "name"},
 					{label: "kind (work|personal)", value: "personal"},
@@ -176,7 +181,7 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (a *App) handleFormKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyEsc:
-		if a.form.kind == "project" {
+		if a.form.kind == formKindProject {
 			a.screen = screenProjects
 		} else {
 			a.screen = screenHabits

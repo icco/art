@@ -27,28 +27,27 @@ func NewClient(cfg Config) *Client {
 	return &Client{cfg: cfg, hc: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// idToken returns a (cached) Google ID token from `gcloud`, refreshing when
-// the cache window is near expiry.
 func (c *Client) idToken(ctx context.Context) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.token != "" && time.Now().Before(c.tokenExp.Add(-30*time.Second)) {
 		return c.token, nil
 	}
+	// #nosec G204 -- audience comes from server config, not user input.
 	cmd := exec.CommandContext(ctx, "gcloud", "auth", "print-identity-token",
 		"--audiences="+c.cfg.Audience)
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("gcloud auth print-identity-token failed: %v: %s", err, strings.TrimSpace(errBuf.String()))
+		return "", fmt.Errorf("gcloud auth print-identity-token failed: %w: %s", err, strings.TrimSpace(errBuf.String()))
 	}
 	tok := strings.TrimSpace(out.String())
 	if tok == "" {
 		return "", errors.New("gcloud returned an empty token")
 	}
 	c.token = tok
-	c.tokenExp = time.Now().Add(55 * time.Minute) // Google ID tokens last 1h
+	c.tokenExp = time.Now().Add(55 * time.Minute)
 	return tok, nil
 }
 
@@ -78,7 +77,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(raw)))
@@ -88,8 +87,6 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	}
 	return nil
 }
-
-// Wire types match what the server sends.
 
 type Project struct {
 	ID          string     `json:"id"`

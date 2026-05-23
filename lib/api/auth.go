@@ -11,13 +11,11 @@ import (
 
 type idCtxKey struct{}
 
-// Identity is the subject extracted from a verified ID token.
 type Identity struct {
 	Email string
 }
 
-// OIDCMiddleware verifies an inbound Google ID token and rejects requests whose
-// email is not on the OWNER_EMAILS allowlist.
+// OIDCMiddleware verifies the Google ID token and gates on OWNER_EMAILS.
 func OIDCMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
