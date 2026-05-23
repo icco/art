@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -8,31 +9,30 @@ import (
 	"gorm.io/gorm"
 )
 
-// Handlers bundles every HTTP handler with shared dependencies. Phase-1
-// commits leave Planner/OAuth/Sync nil so the scaffold can build before they
-// land in subsequent commits; the corresponding routes return 501 until then.
+// Handlers bundles every HTTP handler with shared dependencies.
 type Handlers struct {
 	Cfg     *config.Config
 	DB      *gorm.DB
-	OAuth   OAuthService   // set by main once the OAuth flow is wired
-	Sync    SyncService    // set by main once calendar sync is wired
-	Planner PlannerService // set by main once the planner is wired
+	OAuth   OAuthService
+	Sync    SyncService
+	Planner PlannerService
 }
 
-// Service interfaces decouple the handler package from concrete implementations
-// added in later commits.
-
+// OAuthService is the surface used by the OAuth handlers, decoupled from the
+// concrete oauth package so handlers don't import it directly.
 type OAuthService interface {
 	StartURL(account string) (string, error)
-	Complete(ctx interface{ Done() <-chan struct{} }, state, code string) (account string, email string, err error)
+	Complete(ctx context.Context, state, code string) (account, email string, err error)
 }
 
+// SyncService kicks off a sync across every linked account.
 type SyncService interface {
-	RunAll(ctx interface{ Done() <-chan struct{} }) (perAccount map[string]string, err error)
+	RunAll(ctx context.Context) (perAccountErrors map[string]string, err error)
 }
 
+// PlannerService runs one planning cycle.
 type PlannerService interface {
-	Run(ctx interface{ Done() <-chan struct{} }) error
+	Run(ctx context.Context) error
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

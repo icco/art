@@ -11,9 +11,11 @@ import (
 
 	"github.com/icco/art/lib/api"
 	"github.com/icco/art/lib/api/handlers"
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/db"
 	"github.com/icco/art/lib/logging"
+	"github.com/icco/art/lib/oauth"
 )
 
 func main() {
@@ -43,7 +45,20 @@ func run() error {
 		return err
 	}
 
-	h := &handlers.Handlers{Cfg: cfg, DB: gdb}
+	sealer, err := oauth.NewSealer(cfg.TokenEncKey)
+	if err != nil {
+		return err
+	}
+	oauthStore := &oauth.Store{DB: gdb, Sealer: sealer}
+	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
+	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow}
+
+	h := &handlers.Handlers{
+		Cfg:   cfg,
+		DB:    gdb,
+		OAuth: oauthFlow,
+		Sync:  syncRunner,
+	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h})
 
 	srv := &http.Server{
