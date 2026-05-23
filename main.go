@@ -9,10 +9,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/icco/art/lib/agent"
 	"github.com/icco/art/lib/api"
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/cron"
 	"github.com/icco/art/lib/db"
 	"github.com/icco/art/lib/logging"
 	"github.com/icco/art/lib/oauth"
@@ -51,15 +53,22 @@ func run() error {
 	}
 	oauthStore := &oauth.Store{DB: gdb, Sealer: sealer}
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
+
 	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow}
+	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
 	h := &handlers.Handlers{
-		Cfg:   cfg,
-		DB:    gdb,
-		OAuth: oauthFlow,
-		Sync:  syncRunner,
+		Cfg:     cfg,
+		DB:      gdb,
+		OAuth:   oauthFlow,
+		Sync:    syncRunner,
+		Planner: planner,
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h})
+
+	scheduler := cron.New(syncRunner, planner)
+	scheduler.Start(ctx)
+	defer scheduler.Stop()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

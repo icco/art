@@ -1,0 +1,124 @@
+package agent
+
+import (
+	"context"
+	"sort"
+	"time"
+
+	"github.com/icco/art/lib/models"
+	"gorm.io/gorm"
+)
+
+// Slot is a candidate time range allowed by working hours and free of
+// existing events on the chosen account.
+type Slot struct {
+	AccountKind models.AccountKind
+	Start       time.Time
+	End         time.Time
+}
+
+// FindFreeSlots returns candidate slots of exactly durationMin minutes inside
+// [windowStart, windowEnd) where:
+//   - The slot is inside a working_hours window for slotKind (in tz).
+//   - No existing event on the account overlaps the slot.
+//
+// Candidates advance in 15-minute steps; the next candidate starts at the
+// previous slot's end (no near-duplicates).
+func FindFreeSlots(
+	ctx context.Context,
+	db *gorm.DB,
+	tz *time.Location,
+	accountKind models.AccountKind,
+	slotKind models.SlotKind,
+	durationMin int,
+	windowStart, windowEnd time.Time,
+	cap int,
+) ([]Slot, error) {
+	if durationMin <= 0 {
+		return nil, nil
+	}
+	duration := time.Duration(durationMin) * time.Minute
+
+	var hours []models.WorkingHour
+	if err := db.WithContext(ctx).Where("slot_kind = ?", slotKind).Find(&hours).Error; err != nil {
+		return nil, err
+	}
+	if len(hours) == 0 {
+		return nil, nil
+	}
+
+	busy, err := loadBusy(ctx, db, accountKind, windowStart, windowEnd.Add(duration))
+	if err != nil {
+		return nil, err
+	}
+
+	const step = 15 * time.Minute
+	var out []Slot
+	cursor := windowStart.Truncate(step)
+	if cursor.Before(windowStart) {
+		cursor = cursor.Add(step)
+	}
+	for !cursor.Add(duration).After(windowEnd) {
+		end := cursor.Add(duration)
+		if withinWorkingHours(cursor, end, hours, tz) && !overlapsAny(cursor, end, busy) {
+			out = append(out, Slot{AccountKind: accountKind, Start: cursor, End: end})
+			if cap > 0 && len(out) >= cap {
+				return out, nil
+			}
+			cursor = end
+			continue
+		}
+		cursor = cursor.Add(step)
+	}
+	return out, nil
+}
+
+type busyRange struct {
+	start, end time.Time
+}
+
+func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time) ([]busyRange, error) {
+	var events []models.Event
+	if err := db.WithContext(ctx).
+		Where("account_kind = ? AND status <> 'cancelled' AND all_day = false AND end_time > ? AND start_time < ?",
+			kind, from, to).
+		Order("start_time").
+		Find(&events).Error; err != nil {
+		return nil, err
+	}
+	out := make([]busyRange, len(events))
+	for i, e := range events {
+		out[i] = busyRange{start: e.StartTime, end: e.EndTime}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].start.Before(out[j].start) })
+	return out, nil
+}
+
+func withinWorkingHours(start, end time.Time, hours []models.WorkingHour, tz *time.Location) bool {
+	s := start.In(tz)
+	e := end.In(tz)
+	if s.YearDay() != e.YearDay() || s.Year() != e.Year() {
+		return false // don't straddle midnight
+	}
+	day := int(s.Weekday())
+	startMin := s.Hour()*60 + s.Minute()
+	endMin := e.Hour()*60 + e.Minute()
+	if endMin == 0 {
+		endMin = 1440
+	}
+	for _, h := range hours {
+		if h.DayOfWeek == day && startMin >= h.StartMinute && endMin <= h.EndMinute {
+			return true
+		}
+	}
+	return false
+}
+
+func overlapsAny(start, end time.Time, busy []busyRange) bool {
+	for _, b := range busy {
+		if b.end.After(start) && b.start.Before(end) {
+			return true
+		}
+	}
+	return false
+}

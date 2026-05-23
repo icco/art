@@ -1,0 +1,66 @@
+package cron
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/icco/art/lib/agent"
+	"github.com/icco/art/lib/calendar"
+	"github.com/icco/art/lib/logging"
+)
+
+// Scheduler runs hourly sync + replan jobs.
+type Scheduler struct {
+	Sync    *calendar.Runner
+	Planner *agent.Planner
+
+	tick *time.Ticker
+	stop chan struct{}
+	wg   sync.WaitGroup
+}
+
+func New(sync *calendar.Runner, planner *agent.Planner) *Scheduler {
+	return &Scheduler{Sync: sync, Planner: planner, stop: make(chan struct{})}
+}
+
+// Start runs both jobs immediately, then every hour until ctx is cancelled
+// or Stop is called.
+func (s *Scheduler) Start(ctx context.Context) {
+	s.tick = time.NewTicker(time.Hour)
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runOnce(ctx)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-s.stop:
+				return
+			case <-s.tick.C:
+				s.runOnce(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Scheduler) Stop() {
+	if s.tick != nil {
+		s.tick.Stop()
+	}
+	close(s.stop)
+	s.wg.Wait()
+}
+
+func (s *Scheduler) runOnce(ctx context.Context) {
+	log := logging.From(ctx)
+	if errs, err := s.Sync.RunAll(ctx); err != nil {
+		log.Errorw("sync failed", "err", err)
+	} else if len(errs) > 0 {
+		log.Warnw("sync had per-account errors", "errors", errs)
+	}
+	if err := s.Planner.Run(ctx); err != nil {
+		log.Errorw("planner failed", "err", err)
+	}
+}
