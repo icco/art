@@ -15,7 +15,6 @@ type Config struct {
 	DatabaseURL    string
 	OwnerEmails    []string
 	OIDCAudience   string
-	LogLevel       string
 	Timezone       *time.Location
 	TokenEncKey    []byte
 	OAuth          OAuthConfig
@@ -43,7 +42,6 @@ func Load() (*Config, error) {
 		Port:           envOr("PORT", "8080"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
 		OIDCAudience:   os.Getenv("OIDC_AUDIENCE"),
-		LogLevel:       envOr("LOG_LEVEL", "info"),
 		CredentialsEnv: os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"),
 		OAuth: OAuthConfig{
 			ClientID:     os.Getenv("GOOGLE_OAUTH_CLIENT_ID"),

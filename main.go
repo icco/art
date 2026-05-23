@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,25 +18,26 @@ import (
 	"github.com/icco/art/lib/db"
 	"github.com/icco/art/lib/logging"
 	"github.com/icco/art/lib/oauth"
+	"go.uber.org/zap"
 )
 
 func main() {
-	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "fatal:", err)
-		os.Exit(1)
+	log, err := logging.New()
+	if err != nil {
+		panic(err) // logger setup can't itself log; nothing else to do
+	}
+	defer logging.Sync(log)
+
+	if err := run(log); err != nil {
+		log.Fatalw("fatal", "err", err)
 	}
 }
 
-func run() error {
+func run(log *zap.SugaredLogger) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
 	}
-	log, err := logging.New(cfg.LogLevel)
-	if err != nil {
-		return err
-	}
-	defer logging.Sync(log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
