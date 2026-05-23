@@ -83,13 +83,13 @@ type WorkingHour struct {
 
 type Project struct {
 	Base
-	Name           string         `gorm:"type:varchar(255);not null" json:"name"`
-	Description    string         `gorm:"type:text;not null;default:''" json:"description"`
-	Kind           SlotKind       `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
-	TargetHours    float64        `gorm:"type:numeric(6,2);not null" json:"target_hours"`
-	ScheduledHours float64        `gorm:"type:numeric(6,2);not null;default:0" json:"scheduled_hours"`
-	Deadline       *time.Time     `json:"deadline,omitempty"`
-	Status         ProjectStatus  `gorm:"type:varchar(16);not null;default:'active';index;check:status IN ('active','paused','done')" json:"status"`
+	Name           string        `gorm:"type:varchar(255);not null" json:"name"`
+	Description    string        `gorm:"type:text;not null;default:''" json:"description"`
+	Kind           SlotKind      `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
+	TargetHours    float64       `gorm:"type:numeric(6,2);not null" json:"target_hours"`
+	ScheduledHours float64       `gorm:"type:numeric(6,2);not null;default:0" json:"scheduled_hours"`
+	Deadline       *time.Time    `json:"deadline,omitempty"`
+	Status         ProjectStatus `gorm:"type:varchar(16);not null;default:'active';index;check:status IN ('active','paused','done')" json:"status"`
 }
 
 // Cadence is stored as JSONB on Habit.

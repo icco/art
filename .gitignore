@@ -27,6 +27,12 @@ go.work.sum
 # env file
 .env
 
+# Vertex service-account JSON
+vertex-sa.json
+
+# Build output
+bin/
+
 # Editor/IDE
 # .idea/
 # .vscode/
