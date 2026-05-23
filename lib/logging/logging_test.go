@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewAndSync(t *testing.T) {
-	l, err := New("info")
+	l, err := New()
 	if err != nil || l == nil {
 		t.Fatalf("New: %v", err)
 	}
@@ -14,7 +14,7 @@ func TestNewAndSync(t *testing.T) {
 }
 
 func TestInjectFrom(t *testing.T) {
-	l, _ := New("info")
+	l, _ := New()
 	ctx := Inject(context.Background(), l)
 	got := From(ctx)
 	if got != l {

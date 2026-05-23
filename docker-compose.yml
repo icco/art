@@ -34,7 +34,6 @@ services:
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       ART_TIMEZONE: ${ART_TIMEZONE:-America/Los_Angeles}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE}
-      LOG_LEVEL: ${LOG_LEVEL:-info}
     ports:
       - 8080:8080
     volumes:
