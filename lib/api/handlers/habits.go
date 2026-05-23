@@ -39,16 +39,16 @@ func (req habitReq) validate(create bool) error {
 func (h *Handlers) HabitsList(w http.ResponseWriter, r *http.Request) {
 	var out []models.Habit
 	if err := h.DB.WithContext(r.Context()).Order("created_at DESC").Find(&out).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, r, http.StatusOK, out)
 }
 
 func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 	var req habitReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.Kind == "" {
@@ -59,12 +59,12 @@ func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 		req.Active = &t
 	}
 	if err := req.validate(true); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	cad, err := json.Marshal(req.Cadence)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	hb := models.Habit{
@@ -76,31 +76,31 @@ func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 		Active:               *req.Active,
 	}
 	if err := h.DB.WithContext(r.Context()).Create(&hb).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusCreated, hb)
+	writeJSON(w, r, http.StatusCreated, hb)
 }
 
 func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req habitReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := req.validate(false); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var hb models.Habit
 	if err := h.DB.WithContext(r.Context()).First(&hb, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			writeError(w, http.StatusNotFound, "habit not found")
+			writeError(w, r, http.StatusNotFound, "habit not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 	updates := map[string]any{}
@@ -119,7 +119,7 @@ func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 	if req.Cadence != nil {
 		cad, err := json.Marshal(req.Cadence)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, err.Error())
 			return
 		}
 		updates["cadence"] = datatypes.JSON(cad)
@@ -129,22 +129,22 @@ func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(updates) > 0 {
 		if err := h.DB.WithContext(r.Context()).Model(&hb).Updates(updates).Error; err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, hb)
+	writeJSON(w, r, http.StatusOK, hb)
 }
 
 func (h *Handlers) HabitsDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res := h.DB.WithContext(r.Context()).Delete(&models.Habit{}, "id = ?", id)
 	if res.Error != nil {
-		writeError(w, http.StatusInternalServerError, res.Error.Error())
+		writeError(w, r, http.StatusInternalServerError, res.Error.Error())
 		return
 	}
 	if res.RowsAffected == 0 {
-		writeError(w, http.StatusNotFound, "habit not found")
+		writeError(w, r, http.StatusNotFound, "habit not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

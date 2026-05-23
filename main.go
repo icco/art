@@ -36,7 +36,7 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	defer log.Sync()
+	defer logging.Sync(log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

@@ -38,10 +38,10 @@ func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.WithContext(r.Context()).
 		Order("slot_kind, day_of_week, start_minute").
 		Find(&out).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, r, http.StatusOK, out)
 }
 
 // WorkingHoursReplace replaces the entire working_hours table with the
@@ -49,12 +49,12 @@ func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 	var reqs []workingHourReq
 	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
 	for i, req := range reqs {
 		if err := req.validate(); err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("row %d: %v", i, err))
+			writeError(w, r, http.StatusBadRequest, fmt.Sprintf("row %d: %v", i, err))
 			return
 		}
 	}
@@ -77,7 +77,7 @@ func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 	h.WorkingHoursList(w, r)

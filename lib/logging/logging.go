@@ -1,26 +1,26 @@
+// Package logging wraps icco/gutil/logging with context Inject/From helpers
+// so handlers and background jobs can pass the logger through context.Context.
 package logging
 
 import (
 	"context"
 
+	gutil "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
 )
 
 type ctxKey struct{}
 
-// New returns a zap logger configured by level. Sugared logger is returned for
-// convenience; the underlying *zap.Logger is on the .Desugar() of the result.
-func New(level string) (*zap.SugaredLogger, error) {
-	cfg := zap.NewProductionConfig()
-	if err := cfg.Level.UnmarshalText([]byte(level)); err != nil {
-		cfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
-	}
-	l, err := cfg.Build()
-	if err != nil {
-		return nil, err
-	}
-	return l.Sugar(), nil
+// New constructs the service logger via gutil. The level argument is
+// preserved for compatibility but gutil configures debug-level production
+// logging unconditionally; pass any string.
+func New(_ string) (*zap.SugaredLogger, error) {
+	return gutil.NewLogger("art")
 }
+
+// Sync flushes the logger at shutdown. Wraps gutil's Sync so callers don't
+// have to import gutil directly for this one call.
+func Sync(l *zap.SugaredLogger) { gutil.Sync(l) }
 
 func Inject(ctx context.Context, l *zap.SugaredLogger) context.Context {
 	return context.WithValue(ctx, ctxKey{}, l)

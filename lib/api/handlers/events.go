@@ -16,17 +16,17 @@ func (h *Handlers) EventsList(w http.ResponseWriter, r *http.Request) {
 		Where("start_time >= ? AND start_time < ?", from, to)
 	if kind := r.URL.Query().Get("kind"); kind != "" {
 		if !models.AccountKind(kind).Valid() {
-			writeError(w, http.StatusBadRequest, "kind must be 'personal' or 'work'")
+			writeError(w, r, http.StatusBadRequest, "kind must be 'personal' or 'work'")
 			return
 		}
 		q = q.Where("account_kind = ?", kind)
 	}
 	var out []models.Event
 	if err := q.Order("start_time ASC").Limit(2000).Find(&out).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, r, http.StatusOK, out)
 }
 
 func parseWindow(w http.ResponseWriter, r *http.Request) (time.Time, time.Time, bool) {
@@ -37,7 +37,7 @@ func parseWindow(w http.ResponseWriter, r *http.Request) (time.Time, time.Time, 
 	if v := q.Get("from"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "from must be RFC3339")
+			writeError(w, r, http.StatusBadRequest, "from must be RFC3339")
 			return time.Time{}, time.Time{}, false
 		}
 		from = t
@@ -45,7 +45,7 @@ func parseWindow(w http.ResponseWriter, r *http.Request) (time.Time, time.Time, 
 	if v := q.Get("to"); v != "" {
 		t, err := time.Parse(time.RFC3339, v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "to must be RFC3339")
+			writeError(w, r, http.StatusBadRequest, "to must be RFC3339")
 			return time.Time{}, time.Time{}, false
 		}
 		to = t

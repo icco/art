@@ -5,7 +5,7 @@ import "net/http"
 func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
 	results, err := h.Sync.RunAll(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 	body := map[string]any{"ok": true}
@@ -13,5 +13,5 @@ func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
 		body["errors"] = results
 		body["ok"] = false
 	}
-	writeJSON(w, http.StatusOK, body)
+	writeJSON(w, r, http.StatusOK, body)
 }

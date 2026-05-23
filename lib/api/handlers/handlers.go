@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/logging"
+	gutilrender "github.com/icco/gutil/render"
 	"gorm.io/gorm"
 )
 
@@ -35,12 +36,12 @@ type PlannerService interface {
 	Run(ctx context.Context) error
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body)
+// writeJSON delegates to icco/gutil/render so encode errors are logged
+// through the same logger the rest of the server uses.
+func writeJSON(w http.ResponseWriter, r *http.Request, status int, body any) {
+	gutilrender.JSON(logging.From(r.Context()), w, status, body)
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
+func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) {
+	writeJSON(w, r, status, map[string]string{"error": msg})
 }
