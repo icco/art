@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/config"
-	"github.com/icco/art/lib/logging"
+	gutillog "github.com/icco/gutil/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
@@ -23,10 +23,10 @@ type Deps struct {
 
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
-	r.Use(middleware.RequestID)
-	r.Use(middleware.Recoverer)
+	// gutillog.Middleware bundles RealIP, RequestID, per-request logger
+	// injection, access logging, and Recoverer.
+	r.Use(gutillog.Middleware(d.Log.Desugar()))
 	r.Use(middleware.Timeout(60 * time.Second))
-	r.Use(injectLogger(d.Log))
 
 	r.Get("/", handlers.Health)
 	r.Get("/healthz", handlers.Health)
@@ -60,14 +60,4 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	return r
-}
-
-// injectLogger puts the process logger on each request's context so handlers
-// (and writeServerError in particular) can log via logging.From.
-func injectLogger(log *zap.SugaredLogger) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r.WithContext(logging.Inject(r.Context(), log)))
-		})
-	}
 }
