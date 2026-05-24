@@ -53,6 +53,7 @@ func (f *Flow) StartURL(account string) (string, error) {
 	if !kind.Valid() {
 		return "", fmt.Errorf("oauth: unknown account kind %q", account)
 	}
+	f.gcExpired(time.Now())
 	state, err := randState()
 	if err != nil {
 		return "", err
@@ -62,6 +63,17 @@ func (f *Flow) StartURL(account string) (string, error) {
 		oauth2.AccessTypeOffline,
 		oauth2.ApprovalForce, // ensures Google returns a refresh_token every time
 	), nil
+}
+
+// gcExpired drops pending states whose 10-minute window has passed.
+// Called from StartURL so the map can't grow unbounded under repeated calls.
+func (f *Flow) gcExpired(now time.Time) {
+	f.pending.Range(func(k, v any) bool {
+		if p, ok := v.(pendingState); ok && now.After(p.expiresAt) {
+			f.pending.Delete(k)
+		}
+		return true
+	})
 }
 
 func (f *Flow) Complete(ctx context.Context, state, code string) (string, string, error) {

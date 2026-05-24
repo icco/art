@@ -1,9 +1,7 @@
 FROM golang:1.26-alpine AS builder
 
 ENV GOPROXY="https://proxy.golang.org"
-ENV CGO_ENABLED=1
-
-RUN apk add --no-cache gcc musl-dev
+ENV CGO_ENABLED=0
 
 WORKDIR /src
 

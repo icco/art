@@ -16,7 +16,7 @@ func (h *Handlers) SessionsList(w http.ResponseWriter, r *http.Request) {
 		Where("scheduled_start >= ? AND scheduled_start < ?", from, to).
 		Order("scheduled_start ASC").
 		Find(&out).Error; err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "sessions list", err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, out)

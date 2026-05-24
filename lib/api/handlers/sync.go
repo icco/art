@@ -5,7 +5,7 @@ import "net/http"
 func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
 	results, err := h.Sync.RunAll(r.Context())
 	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "sync run", err)
 		return
 	}
 	body := map[string]any{"ok": true}

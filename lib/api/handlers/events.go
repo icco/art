@@ -23,7 +23,7 @@ func (h *Handlers) EventsList(w http.ResponseWriter, r *http.Request) {
 	}
 	var out []models.Event
 	if err := q.Order("start_time ASC").Limit(2000).Find(&out).Error; err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "events list", err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, out)

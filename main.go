@@ -65,7 +65,7 @@ func run(log *zap.SugaredLogger) error {
 		Sync:    syncRunner,
 		Planner: planner,
 	}
-	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h})
+	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 
 	scheduler := cron.New(syncRunner, planner)
 	scheduler.Start(ctx)

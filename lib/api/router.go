@@ -8,7 +8,9 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -16,6 +18,7 @@ type Deps struct {
 	Cfg *config.Config
 	DB  *gorm.DB
 	H   *handlers.Handlers
+	Log *zap.SugaredLogger
 }
 
 func NewRouter(d Deps) http.Handler {
@@ -23,19 +26,19 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+	r.Use(injectLogger(d.Log))
 
 	r.Get("/", handlers.Health)
 	r.Get("/healthz", handlers.Health)
 	r.Handle("/metrics", promhttp.Handler())
 
-	r.Route("/oauth", func(r chi.Router) {
-		r.Post("/start", d.H.OAuthStart)
-		r.Get("/callback", d.H.OAuthCallback)
-	})
+	// /oauth/callback must stay public — Google redirects here.
+	r.Get("/oauth/callback", d.H.OAuthCallback)
 
 	r.Group(func(r chi.Router) {
 		r.Use(OIDCMiddleware(d.Cfg))
 
+		r.Post("/oauth/start", d.H.OAuthStart)
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", d.H.ProjectsList)
 			r.Post("/", d.H.ProjectsCreate)
@@ -57,4 +60,14 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	return r
+}
+
+// injectLogger puts the process logger on each request's context so handlers
+// (and writeServerError in particular) can log via logging.From.
+func injectLogger(log *zap.SugaredLogger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(logging.Inject(r.Context(), log)))
+		})
+	}
 }

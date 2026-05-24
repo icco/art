@@ -10,6 +10,10 @@ import (
 	"github.com/icco/art/lib/logging"
 )
 
+// runOnceTimeout caps each sync+plan iteration so a hung Google or Vertex
+// call can't block subsequent ticks indefinitely.
+const runOnceTimeout = 30 * time.Minute
+
 type Scheduler struct {
 	Sync    *calendar.Runner
 	Planner *agent.Planner
@@ -53,12 +57,14 @@ func (s *Scheduler) Stop() {
 
 func (s *Scheduler) runOnce(ctx context.Context) {
 	log := logging.From(ctx)
-	if errs, err := s.Sync.RunAll(ctx); err != nil {
+	tickCtx, cancel := context.WithTimeout(ctx, runOnceTimeout)
+	defer cancel()
+	if errs, err := s.Sync.RunAll(tickCtx); err != nil {
 		log.Errorw("sync failed", "err", err)
 	} else if len(errs) > 0 {
 		log.Warnw("sync had per-account errors", "errors", errs)
 	}
-	if err := s.Planner.Run(ctx); err != nil {
+	if err := s.Planner.Run(tickCtx); err != nil {
 		log.Errorw("planner failed", "err", err)
 	}
 }
