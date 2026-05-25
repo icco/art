@@ -30,8 +30,7 @@ var systemInstruction string
 // the DB, write to the agent's calendar, and append per-item errors / counts
 // to the summary that gets persisted on the agent_runs row.
 //
-// ctx carries the parent invocation context so DB and Google API calls
-// inside tools cancel on shutdown. tool.Context does not expose one.
+// ctx is the parent context; tool.Context does not carry one.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context

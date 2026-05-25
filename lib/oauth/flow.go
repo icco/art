@@ -65,8 +65,8 @@ func (f *Flow) StartURL(account string) (string, error) {
 	), nil
 }
 
-// gcExpired drops pending states whose 10-minute window has passed.
-// Called from StartURL so the map can't grow unbounded under repeated calls.
+// gcExpired keeps the in-memory state map from growing unbounded when
+// callers start flows they never complete.
 func (f *Flow) gcExpired(now time.Time) {
 	f.pending.Range(func(k, v any) bool {
 		if p, ok := v.(pendingState); ok && now.After(p.expiresAt) {

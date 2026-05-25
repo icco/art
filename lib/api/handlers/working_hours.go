@@ -86,9 +86,7 @@ func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 	h.WorkingHoursList(w, r)
 }
 
-// validateNoOverlap rejects two windows on the same (slot_kind, day_of_week)
-// whose minute ranges intersect — the unique index only catches identical
-// starts.
+// The unique index only catches identical starts, not overlapping ranges.
 func validateNoOverlap(reqs []workingHourReq) error {
 	type bucket struct {
 		slot string

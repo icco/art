@@ -23,8 +23,6 @@ type Deps struct {
 
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
-	// gutillog.Middleware bundles RealIP, RequestID, per-request logger
-	// injection, access logging, and Recoverer.
 	r.Use(gutillog.Middleware(d.Log.Desugar()))
 	r.Use(middleware.Timeout(60 * time.Second))
 

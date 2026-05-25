@@ -10,8 +10,7 @@ import (
 	"github.com/icco/art/lib/logging"
 )
 
-// runOnceTimeout caps each sync+plan iteration so a hung Google or Vertex
-// call can't block subsequent ticks indefinitely.
+// A hung Google/Vertex call must not block the next hourly tick.
 const runOnceTimeout = 30 * time.Minute
 
 type Scheduler struct {

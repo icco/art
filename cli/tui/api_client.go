@@ -56,9 +56,8 @@ func (c *Client) idToken(ctx context.Context) (string, error) {
 	return tok, nil
 }
 
-// jwtExp returns the "exp" claim from an unverified JWT. We trust the token
-// because it came from local gcloud, but we still need the expiry to decide
-// when to refresh.
+// The token comes from local gcloud so we trust it without verifying;
+// we only need exp to decide when to refresh.
 func jwtExp(tok string) (time.Time, error) {
 	parts := strings.Split(tok, ".")
 	if len(parts) != 3 {
