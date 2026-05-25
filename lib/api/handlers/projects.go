@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -41,9 +40,15 @@ func (p projectReq) validate(create bool) error {
 }
 
 func (h *Handlers) ProjectsList(w http.ResponseWriter, r *http.Request) {
+	limit, offset, ok := parsePagination(w, r)
+	if !ok {
+		return
+	}
 	var out []models.Project
-	if err := h.DB.WithContext(r.Context()).Order("created_at DESC").Find(&out).Error; err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+	if err := h.DB.WithContext(r.Context()).
+		Order("created_at DESC").Limit(limit).Offset(offset).
+		Find(&out).Error; err != nil {
+		writeServerError(w, r, "projects list", err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, out)
@@ -51,7 +56,7 @@ func (h *Handlers) ProjectsList(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 	var req projectReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -74,7 +79,7 @@ func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 		Status:      models.ProjectStatus(req.Status),
 	}
 	if err := h.DB.WithContext(r.Context()).Create(&p).Error; err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "projects create", err)
 		return
 	}
 	writeJSON(w, r, http.StatusCreated, p)
@@ -83,7 +88,7 @@ func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req projectReq
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -98,7 +103,7 @@ func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusNotFound, "project not found")
 			return
 		}
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "projects update lookup", err)
 		return
 	}
 	updates := map[string]any{}
@@ -122,7 +127,7 @@ func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(updates) > 0 {
 		if err := h.DB.WithContext(r.Context()).Model(&p).Updates(updates).Error; err != nil {
-			writeError(w, r, http.StatusInternalServerError, err.Error())
+			writeServerError(w, r, "projects update", err)
 			return
 		}
 	}
@@ -133,7 +138,7 @@ func (h *Handlers) ProjectsDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res := h.DB.WithContext(r.Context()).Delete(&models.Project{}, "id = ?", id)
 	if res.Error != nil {
-		writeError(w, r, http.StatusInternalServerError, res.Error.Error())
+		writeServerError(w, r, "projects delete", res.Error)
 		return
 	}
 	if res.RowsAffected == 0 {

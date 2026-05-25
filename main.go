@@ -16,17 +16,17 @@ import (
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/cron"
 	"github.com/icco/art/lib/db"
-	"github.com/icco/art/lib/logging"
 	"github.com/icco/art/lib/oauth"
+	gutillog "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
 )
 
 func main() {
-	log, err := logging.New()
+	log, err := gutillog.NewLogger("art")
 	if err != nil {
 		panic(err) // logger setup can't itself log; nothing else to do
 	}
-	defer logging.Sync(log)
+	defer gutillog.Sync(log)
 
 	if err := run(log); err != nil {
 		log.Fatalw("fatal", "err", err)
@@ -41,7 +41,7 @@ func run(log *zap.SugaredLogger) error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	ctx = logging.Inject(ctx, log)
+	ctx = gutillog.NewContext(ctx, log)
 
 	gdb, err := db.Open(cfg.DatabaseURL, log.Desugar())
 	if err != nil {
@@ -65,7 +65,7 @@ func run(log *zap.SugaredLogger) error {
 		Sync:    syncRunner,
 		Planner: planner,
 	}
-	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h})
+	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 
 	scheduler := cron.New(syncRunner, planner)
 	scheduler.Start(ctx)

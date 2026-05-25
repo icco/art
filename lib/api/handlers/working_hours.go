@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/icco/art/lib/models"
 	"gorm.io/gorm"
@@ -38,7 +38,7 @@ func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.WithContext(r.Context()).
 		Order("slot_kind, day_of_week, start_minute").
 		Find(&out).Error; err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "working_hours list", err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, out)
@@ -47,7 +47,7 @@ func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 // WorkingHoursReplace atomically replaces the entire table.
 func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 	var reqs []workingHourReq
-	if err := json.NewDecoder(r.Body).Decode(&reqs); err != nil {
+	if err := decodeJSON(r, &reqs); err != nil {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -56,6 +56,10 @@ func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusBadRequest, fmt.Sprintf("row %d: %v", i, err))
 			return
 		}
+	}
+	if err := validateNoOverlap(reqs); err != nil {
+		writeError(w, r, http.StatusBadRequest, err.Error())
+		return
 	}
 
 	err := h.DB.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
@@ -76,8 +80,33 @@ func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 		return nil
 	})
 	if err != nil {
-		writeError(w, r, http.StatusInternalServerError, err.Error())
+		writeServerError(w, r, "working_hours replace", err)
 		return
 	}
 	h.WorkingHoursList(w, r)
+}
+
+// The unique index only catches identical starts, not overlapping ranges.
+func validateNoOverlap(reqs []workingHourReq) error {
+	type bucket struct {
+		slot string
+		day  int
+	}
+	groups := map[bucket][]workingHourReq{}
+	for _, r := range reqs {
+		b := bucket{slot: r.SlotKind, day: r.DayOfWeek}
+		groups[b] = append(groups[b], r)
+	}
+	for b, rs := range groups {
+		sort.Slice(rs, func(i, j int) bool { return rs[i].StartMinute < rs[j].StartMinute })
+		for i := 1; i < len(rs); i++ {
+			if rs[i].StartMinute < rs[i-1].EndMinute {
+				return fmt.Errorf("overlapping windows for %s day %d: [%d-%d] and [%d-%d]",
+					b.slot, b.day,
+					rs[i-1].StartMinute, rs[i-1].EndMinute,
+					rs[i].StartMinute, rs[i].EndMinute)
+			}
+		}
+	}
+	return nil
 }

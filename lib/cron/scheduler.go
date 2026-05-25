@@ -7,8 +7,11 @@ import (
 
 	"github.com/icco/art/lib/agent"
 	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/logging"
+	gutillog "github.com/icco/gutil/logging"
 )
+
+// A hung Google/Vertex call must not block the next hourly tick.
+const runOnceTimeout = 30 * time.Minute
 
 type Scheduler struct {
 	Sync    *calendar.Runner
@@ -52,13 +55,15 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) runOnce(ctx context.Context) {
-	log := logging.From(ctx)
-	if errs, err := s.Sync.RunAll(ctx); err != nil {
+	log := gutillog.FromContext(ctx)
+	tickCtx, cancel := context.WithTimeout(ctx, runOnceTimeout)
+	defer cancel()
+	if errs, err := s.Sync.RunAll(tickCtx); err != nil {
 		log.Errorw("sync failed", "err", err)
 	} else if len(errs) > 0 {
 		log.Warnw("sync had per-account errors", "errors", errs)
 	}
-	if err := s.Planner.Run(ctx); err != nil {
+	if err := s.Planner.Run(tickCtx); err != nil {
 		log.Errorw("planner failed", "err", err)
 	}
 }

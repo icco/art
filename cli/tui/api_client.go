@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,9 +47,36 @@ func (c *Client) idToken(ctx context.Context) (string, error) {
 	if tok == "" {
 		return "", errors.New("gcloud returned an empty token")
 	}
+	exp, err := jwtExp(tok)
+	if err != nil {
+		return "", fmt.Errorf("parse id token: %w", err)
+	}
 	c.token = tok
-	c.tokenExp = time.Now().Add(55 * time.Minute)
+	c.tokenExp = exp
 	return tok, nil
+}
+
+// The token comes from local gcloud so we trust it without verifying;
+// we only need exp to decide when to refresh.
+func jwtExp(tok string) (time.Time, error) {
+	parts := strings.Split(tok, ".")
+	if len(parts) != 3 {
+		return time.Time{}, errors.New("not a JWT")
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return time.Time{}, err
+	}
+	var claims struct {
+		Exp int64 `json:"exp"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return time.Time{}, err
+	}
+	if claims.Exp == 0 {
+		return time.Time{}, errors.New("exp claim missing")
+	}
+	return time.Unix(claims.Exp, 0), nil
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
@@ -134,7 +162,7 @@ type AgentRun struct {
 
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
-	return out, c.do(ctx, "GET", "/projects", nil, &out)
+	return out, c.do(ctx, "GET", "/projects?limit=500", nil, &out)
 }
 
 func (c *Client) CreateProject(ctx context.Context, p Project) (Project, error) {
@@ -148,7 +176,7 @@ func (c *Client) DeleteProject(ctx context.Context, id string) error {
 
 func (c *Client) ListHabits(ctx context.Context) ([]Habit, error) {
 	var out []Habit
-	return out, c.do(ctx, "GET", "/habits", nil, &out)
+	return out, c.do(ctx, "GET", "/habits?limit=500", nil, &out)
 }
 
 func (c *Client) CreateHabit(ctx context.Context, h Habit) (Habit, error) {

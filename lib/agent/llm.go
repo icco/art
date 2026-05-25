@@ -29,14 +29,17 @@ var systemInstruction string
 // surrounding Planner code. Tools close over a *llmCycle so they can read
 // the DB, write to the agent's calendar, and append per-item errors / counts
 // to the summary that gets persisted on the agent_runs row.
+//
+// ctx is the parent context; tool.Context does not carry one.
 type llmCycle struct {
 	p       *Planner
+	ctx     context.Context
 	summary map[string]any
 	clients map[models.AccountKind]*calendar.Client
 }
 
 func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
-	cycle := &llmCycle{p: p, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
+	cycle := &llmCycle{p: p, ctx: ctx, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
 
 	model, err := gemini.NewModel(ctx, config.VertexModel, &genai.ClientConfig{
 		Project:  p.Cfg.Vertex.ProjectID,
@@ -206,7 +209,7 @@ func (c *llmCycle) tools() ([]tool.Tool, error) {
 }
 
 func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, error) {
-	ctx := context.Background()
+	ctx := c.ctx
 	var out listStateResult
 
 	var projects []models.Project
@@ -270,7 +273,7 @@ func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, 
 }
 
 func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFreeSlotsResult, error) {
-	ctx := context.Background()
+	ctx := c.ctx
 	if !models.AccountKind(args.AccountKind).Valid() {
 		return findFreeSlotsResult{}, fmt.Errorf("account_kind must be 'personal' or 'work'")
 	}
@@ -300,7 +303,7 @@ func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFr
 }
 
 func (c *llmCycle) commitFocusBlock(_ tool.Context, args commitFocusBlockArgs) (commitFocusBlockResult, error) {
-	ctx := context.Background()
+	ctx := c.ctx
 	source := models.SourceKind(args.Source)
 	if !source.Valid() {
 		return commitFocusBlockResult{}, fmt.Errorf("source must be 'project' or 'habit'")
