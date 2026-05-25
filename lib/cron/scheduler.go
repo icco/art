@@ -7,7 +7,7 @@ import (
 
 	"github.com/icco/art/lib/agent"
 	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/logging"
+	gutillog "github.com/icco/gutil/logging"
 )
 
 // A hung Google/Vertex call must not block the next hourly tick.
@@ -55,7 +55,7 @@ func (s *Scheduler) Stop() {
 }
 
 func (s *Scheduler) runOnce(ctx context.Context) {
-	log := logging.From(ctx)
+	log := gutillog.FromContext(ctx)
 	tickCtx, cancel := context.WithTimeout(ctx, runOnceTimeout)
 	defer cancel()
 	if errs, err := s.Sync.RunAll(tickCtx); err != nil {

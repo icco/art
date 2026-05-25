@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/icco/art/lib/config"
-	"github.com/icco/art/lib/logging"
+	gutillog "github.com/icco/gutil/logging"
 	gutilrender "github.com/icco/gutil/render"
 	"gorm.io/gorm"
 )
@@ -38,7 +38,7 @@ type (
 )
 
 func writeJSON(w http.ResponseWriter, r *http.Request, status int, body any) {
-	gutilrender.JSON(logging.From(r.Context()), w, status, body)
+	gutilrender.JSON(gutillog.FromContext(r.Context()), w, status, body)
 }
 
 func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) {
@@ -48,7 +48,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) 
 // writeServerError keeps DB column names and constraint identifiers out of
 // the response while still recording them server-side.
 func writeServerError(w http.ResponseWriter, r *http.Request, op string, err error) {
-	logging.From(r.Context()).Errorw(op, "err", err)
+	gutillog.FromContext(r.Context()).Errorw(op, "err", err)
 	writeError(w, r, http.StatusInternalServerError, "internal error")
 }
 
