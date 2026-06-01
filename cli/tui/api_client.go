@@ -1,3 +1,4 @@
+// Package tui implements the art terminal UI client.
 package tui
 
 import (
@@ -15,6 +16,7 @@ import (
 	"time"
 )
 
+// Client is an authenticated HTTP client for the art API.
 type Client struct {
 	cfg Config
 	hc  *http.Client
@@ -24,6 +26,7 @@ type Client struct {
 	tokenExp time.Time
 }
 
+// NewClient returns a Client configured to talk to the API endpoint in cfg.
 func NewClient(cfg Config) *Client {
 	return &Client{cfg: cfg, hc: &http.Client{Timeout: 30 * time.Second}}
 }
@@ -116,6 +119,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	return nil
 }
 
+// Project mirrors the API project resource.
 type Project struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
@@ -126,6 +130,7 @@ type Project struct {
 	Status      string     `json:"status"`
 }
 
+// Habit mirrors the API habit resource.
 type Habit struct {
 	ID                   string  `json:"id"`
 	Name                 string  `json:"name"`
@@ -136,12 +141,14 @@ type Habit struct {
 	Active               bool    `json:"active"`
 }
 
+// Cadence describes how often a habit should occur.
 type Cadence struct {
 	Type             string   `json:"type"`
 	Count            int      `json:"count"`
 	PreferredWindows []string `json:"preferred_windows,omitempty"`
 }
 
+// Event mirrors the API calendar event resource.
 type Event struct {
 	ID           string    `json:"id"`
 	AccountKind  string    `json:"account_kind"`
@@ -153,6 +160,7 @@ type Event struct {
 	IsArtManaged bool      `json:"is_art_managed"`
 }
 
+// AgentRun summarises a planner or sync run reported by the API.
 type AgentRun struct {
 	ID      string          `json:"id"`
 	Status  string          `json:"status"`
@@ -160,45 +168,54 @@ type AgentRun struct {
 	Error   string          `json:"error"`
 }
 
+// ListProjects returns all projects visible to the caller.
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
 	return out, c.do(ctx, "GET", "/projects?limit=500", nil, &out)
 }
 
+// CreateProject creates a new project from p.
 func (c *Client) CreateProject(ctx context.Context, p Project) (Project, error) {
 	var out Project
 	return out, c.do(ctx, "POST", "/projects", p, &out)
 }
 
+// DeleteProject removes the project with the given id.
 func (c *Client) DeleteProject(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/projects/"+id, nil, nil)
 }
 
+// ListHabits returns all habits visible to the caller.
 func (c *Client) ListHabits(ctx context.Context) ([]Habit, error) {
 	var out []Habit
 	return out, c.do(ctx, "GET", "/habits?limit=500", nil, &out)
 }
 
+// CreateHabit creates a new habit from h.
 func (c *Client) CreateHabit(ctx context.Context, h Habit) (Habit, error) {
 	var out Habit
 	return out, c.do(ctx, "POST", "/habits", h, &out)
 }
 
+// DeleteHabit removes the habit with the given id.
 func (c *Client) DeleteHabit(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/habits/"+id, nil, nil)
 }
 
+// ListEvents returns events between from and to (inclusive of from, exclusive of to).
 func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, error) {
 	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	var out []Event
 	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
 }
 
+// Replan triggers a planner run on the server and returns its result.
 func (c *Client) Replan(ctx context.Context) (AgentRun, error) {
 	var out AgentRun
 	return out, c.do(ctx, "POST", "/replan", nil, &out)
 }
 
+// Sync triggers a sync of upstream calendars on the server.
 func (c *Client) Sync(ctx context.Context) error {
 	return c.do(ctx, "POST", "/sync", nil, nil)
 }

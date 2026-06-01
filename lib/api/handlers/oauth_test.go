@@ -18,15 +18,15 @@ type fakeOAuth struct {
 	compErr  error
 }
 
-func (f *fakeOAuth) StartURL(account string) (string, error) { return f.url, f.startErr }
-func (f *fakeOAuth) Complete(ctx context.Context, state, code string) (string, string, error) {
+func (f *fakeOAuth) StartURL(_ string) (string, error) { return f.url, f.startErr }
+func (f *fakeOAuth) Complete(_ context.Context, _, _ string) (string, string, error) {
 	return f.account, f.email, f.compErr
 }
 
 func TestOAuthStart(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{url: "https://google/consent"}}
 	w := httptest.NewRecorder()
-	h.OAuthStart(w, httptest.NewRequest("POST", "/oauth/start?account=personal", nil))
+	h.OAuthStart(w, httptest.NewRequestWithContext(t.Context(), "POST", "/oauth/start?account=personal", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("code: %d", w.Code)
 	}
@@ -35,7 +35,7 @@ func TestOAuthStart(t *testing.T) {
 func TestOAuthStartMissingAccount(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{}}
 	w := httptest.NewRecorder()
-	h.OAuthStart(w, httptest.NewRequest("POST", "/oauth/start", nil))
+	h.OAuthStart(w, httptest.NewRequestWithContext(t.Context(), "POST", "/oauth/start", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code: %d", w.Code)
 	}
@@ -44,7 +44,7 @@ func TestOAuthStartMissingAccount(t *testing.T) {
 func TestOAuthStartErr(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{startErr: errors.New("nope")}}
 	w := httptest.NewRecorder()
-	h.OAuthStart(w, httptest.NewRequest("POST", "/oauth/start?account=personal", nil))
+	h.OAuthStart(w, httptest.NewRequestWithContext(t.Context(), "POST", "/oauth/start?account=personal", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code: %d", w.Code)
 	}
@@ -53,7 +53,7 @@ func TestOAuthStartErr(t *testing.T) {
 func TestOAuthCallback(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{account: "personal", email: "a@b.com"}}
 	w := httptest.NewRecorder()
-	h.OAuthCallback(w, httptest.NewRequest("GET", "/oauth/callback?state=s&code=c", nil))
+	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("code: %d", w.Code)
 	}
@@ -62,7 +62,7 @@ func TestOAuthCallback(t *testing.T) {
 func TestOAuthCallbackError(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{}}
 	w := httptest.NewRecorder()
-	h.OAuthCallback(w, httptest.NewRequest("GET", "/oauth/callback?error=denied", nil))
+	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?error=denied", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code: %d", w.Code)
 	}
@@ -71,7 +71,7 @@ func TestOAuthCallbackError(t *testing.T) {
 func TestOAuthCallbackCompleteErr(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{compErr: errors.New("bad")}}
 	w := httptest.NewRecorder()
-	h.OAuthCallback(w, httptest.NewRequest("GET", "/oauth/callback?state=s&code=c", nil))
+	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code: %d", w.Code)
 	}

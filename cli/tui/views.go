@@ -20,15 +20,15 @@ func (a *App) renderWeek() string {
 	for d := range 7 {
 		day := a.weekAnchor.AddDate(0, 0, d)
 		fmt.Fprintf(&b, "%s\n", day.Format("Mon Jan 2"))
-		any := false
+		hasEvents := false
 		for _, e := range a.events {
 			if !sameDay(e.StartTime.In(day.Location()), day) {
 				continue
 			}
-			any = true
+			hasEvents = true
 			fmt.Fprintf(&b, "  %s\n", renderEventLine(e))
 		}
-		if !any {
+		if !hasEvents {
 			b.WriteString("  (empty)\n")
 		}
 	}

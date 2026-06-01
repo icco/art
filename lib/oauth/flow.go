@@ -17,6 +17,7 @@ import (
 	"google.golang.org/api/option"
 )
 
+// Scopes is the set of Google OAuth scopes art requests at account linking.
 var Scopes = []string{
 	calendar.CalendarScope,
 	"openid",
@@ -24,6 +25,8 @@ var Scopes = []string{
 	"https://www.googleapis.com/auth/userinfo.profile",
 }
 
+// Flow runs the Google OAuth authorization code exchange and persists the
+// resulting refresh token via Store.
 type Flow struct {
 	OAuth   *oauth2.Config
 	Store   *Store
@@ -35,6 +38,7 @@ type pendingState struct {
 	expiresAt time.Time
 }
 
+// NewFlow returns a Flow configured to exchange Google OAuth codes.
 func NewFlow(clientID, clientSecret, redirectURL string, store *Store) *Flow {
 	return &Flow{
 		OAuth: &oauth2.Config{
@@ -48,6 +52,7 @@ func NewFlow(clientID, clientSecret, redirectURL string, store *Store) *Flow {
 	}
 }
 
+// StartURL returns the Google consent URL for linking the given account kind.
 func (f *Flow) StartURL(account string) (string, error) {
 	kind := models.AccountKind(account)
 	if !kind.Valid() {
@@ -76,6 +81,7 @@ func (f *Flow) gcExpired(now time.Time) {
 	})
 }
 
+// Complete exchanges code for a token, persists it, and returns (kind, email).
 func (f *Flow) Complete(ctx context.Context, state, code string) (string, string, error) {
 	raw, ok := f.pending.LoadAndDelete(state)
 	if !ok {
@@ -109,6 +115,7 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 	return string(p.kind), email, nil
 }
 
+// TokenSource returns a refreshing oauth2.TokenSource for the linked account.
 func (f *Flow) TokenSource(ctx context.Context, kind models.AccountKind) (oauth2.TokenSource, models.Account, error) {
 	tok, acct, err := f.Store.Load(ctx, kind)
 	if err != nil {

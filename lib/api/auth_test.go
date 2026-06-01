@@ -11,11 +11,11 @@ import (
 
 func TestOIDCMiddleware_NoBearer(t *testing.T) {
 	cfg := &config.Config{OIDCAudience: "x", OwnerEmails: []string{"a@b.com"}}
-	h := OIDCMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := OIDCMiddleware(cfg)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("handler should not run")
 	}))
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/", nil))
+	h.ServeHTTP(w, httptest.NewRequestWithContext(context.Background(), "GET", "/", nil))
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("no bearer: got %d", w.Code)
 	}
@@ -23,10 +23,10 @@ func TestOIDCMiddleware_NoBearer(t *testing.T) {
 
 func TestOIDCMiddleware_BadToken(t *testing.T) {
 	cfg := &config.Config{OIDCAudience: "x", OwnerEmails: []string{"a@b.com"}}
-	h := OIDCMiddleware(cfg)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	h := OIDCMiddleware(cfg)(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		t.Fatal("handler should not run")
 	}))
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequestWithContext(context.Background(), "GET", "/", nil)
 	req.Header.Set("Authorization", "Bearer not-a-real-token")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)

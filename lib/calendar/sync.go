@@ -15,16 +15,20 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// HistoryWindow is how far back a full sync walks; FutureWindow is the
+// matching forward bound for upcoming events.
 const (
 	HistoryWindow = 365 * 24 * time.Hour
 	FutureWindow  = 60 * 24 * time.Hour
 )
 
+// Syncer pulls events from a single calendar account into the database.
 type Syncer struct {
 	Client *Client
 	DB     *gorm.DB
 }
 
+// Run performs an incremental sync, falling back to a bounded full sync.
 func (s *Syncer) Run(ctx context.Context) error {
 	list, err := s.Client.Service.CalendarList.List().Context(ctx).Do()
 	if err != nil {

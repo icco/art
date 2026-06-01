@@ -6,6 +6,7 @@ import (
 	"github.com/icco/art/lib/models"
 )
 
+// SessionsList responds with the planner sessions in the requested window.
 func (h *Handlers) SessionsList(w http.ResponseWriter, r *http.Request) {
 	from, to, ok := parseWindow(w, r)
 	if !ok {

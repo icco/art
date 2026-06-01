@@ -9,6 +9,7 @@ import (
 	"google.golang.org/api/calendar/v3"
 )
 
+// FocusBlock describes an art-managed focus event to write to Google Calendar.
 type FocusBlock struct {
 	CalendarID  string
 	Start       time.Time
@@ -19,6 +20,7 @@ type FocusBlock struct {
 	SourceID    string
 }
 
+// CreateFocus inserts an art-managed event for the given FocusBlock.
 func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Event, error) {
 	if !fb.Source.Valid() {
 		return nil, fmt.Errorf("calendar: invalid source kind %q", fb.Source)

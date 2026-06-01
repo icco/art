@@ -280,15 +280,15 @@ func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFr
 	if !models.SlotKind(args.SlotKind).Valid() {
 		return findFreeSlotsResult{}, fmt.Errorf("slot_kind must be 'personal' or 'work'")
 	}
-	cap := args.MaxResults
-	if cap <= 0 {
-		cap = 5
+	maxResults := args.MaxResults
+	if maxResults <= 0 {
+		maxResults = 5
 	}
 	from := PlanningStart(time.Now(), c.p.Cfg.Timezone)
 	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
 	slots, err := FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone,
 		models.AccountKind(args.AccountKind), models.SlotKind(args.SlotKind),
-		args.DurationMin, from, weekEnd, cap)
+		args.DurationMin, from, weekEnd, maxResults)
 	if err != nil {
 		return findFreeSlotsResult{}, err
 	}

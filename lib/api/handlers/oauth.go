@@ -5,6 +5,7 @@ import (
 	"net/http"
 )
 
+// OAuthStart returns a Google consent URL for the requested account.
 func (h *Handlers) OAuthStart(w http.ResponseWriter, r *http.Request) {
 	account := r.URL.Query().Get("account")
 	if account == "" {
@@ -19,6 +20,7 @@ func (h *Handlers) OAuthStart(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, map[string]string{"url": url})
 }
 
+// OAuthCallback completes the OAuth flow and renders a small HTML page.
 func (h *Handlers) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if e := q.Get("error"); e != "" {

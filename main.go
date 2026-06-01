@@ -1,3 +1,4 @@
+// Command art-server is the API/cron entry point for the art service.
 package main
 
 import (

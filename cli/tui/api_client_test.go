@@ -54,7 +54,7 @@ func TestClientCreateProject(t *testing.T) {
 }
 
 func TestClientDeleteProject(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
@@ -116,7 +116,7 @@ func TestClientEventsReplanSync(t *testing.T) {
 }
 
 func TestClientErrorResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusBadRequest)
 	}))
 	defer server.Close()

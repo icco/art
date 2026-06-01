@@ -39,6 +39,7 @@ func (p projectReq) validate(create bool) error {
 	return nil
 }
 
+// ProjectsList responds with a paginated list of projects.
 func (h *Handlers) ProjectsList(w http.ResponseWriter, r *http.Request) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
@@ -54,6 +55,7 @@ func (h *Handlers) ProjectsList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, out)
 }
 
+// ProjectsCreate creates a new project from the request body.
 func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 	var req projectReq
 	if err := decodeJSON(r, &req); err != nil {
@@ -85,6 +87,7 @@ func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusCreated, p)
 }
 
+// ProjectsUpdate applies partial updates to the project identified by the URL.
 func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req projectReq
@@ -134,6 +137,7 @@ func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, p)
 }
 
+// ProjectsDelete deletes the project identified by the URL.
 func (h *Handlers) ProjectsDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res := h.DB.WithContext(r.Context()).Delete(&models.Project{}, "id = ?", id)

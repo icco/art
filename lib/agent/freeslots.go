@@ -1,3 +1,4 @@
+// Package agent implements the art planning and scheduling agents.
 package agent
 
 import (
@@ -9,13 +10,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// Slot is a candidate free interval on a particular account.
 type Slot struct {
 	AccountKind models.AccountKind
 	Start       time.Time
 	End         time.Time
 }
 
-// FindFreeSlots returns up to `cap` non-overlapping durationMin-long slots
+// FindFreeSlots returns up to maxSlots non-overlapping durationMin-long slots
 // inside [windowStart, windowEnd) that fall within a working_hours window
 // for slotKind (tz-interpreted) and don't clash with any event on the account.
 func FindFreeSlots(
@@ -26,7 +28,7 @@ func FindFreeSlots(
 	slotKind models.SlotKind,
 	durationMin int,
 	windowStart, windowEnd time.Time,
-	cap int,
+	maxSlots int,
 ) ([]Slot, error) {
 	if durationMin <= 0 {
 		return nil, nil
@@ -56,7 +58,7 @@ func FindFreeSlots(
 		end := cursor.Add(duration)
 		if withinWorkingHours(cursor, end, hours, tz) && !overlapsAny(cursor, end, busy) {
 			out = append(out, Slot{AccountKind: accountKind, Start: cursor, End: end})
-			if cap > 0 && len(out) >= cap {
+			if maxSlots > 0 && len(out) >= maxSlots {
 				return out, nil
 			}
 			cursor = end

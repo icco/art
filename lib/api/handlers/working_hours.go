@@ -33,6 +33,7 @@ func (req workingHourReq) validate() error {
 	return nil
 }
 
+// WorkingHoursList responds with all configured working-hours windows.
 func (h *Handlers) WorkingHoursList(w http.ResponseWriter, r *http.Request) {
 	var out []models.WorkingHour
 	if err := h.DB.WithContext(r.Context()).

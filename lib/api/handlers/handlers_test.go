@@ -38,7 +38,7 @@ func do(t *testing.T, h http.Handler, method, path string, body any) *httptest.R
 			t.Fatal(err)
 		}
 	}
-	req := httptest.NewRequest(method, path, &buf)
+	req := httptest.NewRequestWithContext(t.Context(), method, path, &buf)
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)

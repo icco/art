@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Deps bundles the dependencies needed to construct the API router.
 type Deps struct {
 	Cfg *config.Config
 	DB  *gorm.DB
@@ -21,6 +22,7 @@ type Deps struct {
 	Log *zap.SugaredLogger
 }
 
+// NewRouter returns the HTTP handler that serves the art API.
 func NewRouter(d Deps) http.Handler {
 	r := chi.NewRouter()
 	r.Use(gutillog.Middleware(d.Log.Desugar()))

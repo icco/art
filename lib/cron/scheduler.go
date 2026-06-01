@@ -1,3 +1,4 @@
+// Package cron runs art's periodic sync and planner work.
 package cron
 
 import (
@@ -13,6 +14,7 @@ import (
 // A hung Google/Vertex call must not block the next hourly tick.
 const runOnceTimeout = 30 * time.Minute
 
+// Scheduler ticks the calendar sync and planner on a fixed interval.
 type Scheduler struct {
 	Sync    *calendar.Runner
 	Planner *agent.Planner
@@ -22,6 +24,7 @@ type Scheduler struct {
 	wg   sync.WaitGroup
 }
 
+// New returns a Scheduler ready to be Start()ed.
 func New(sync *calendar.Runner, planner *agent.Planner) *Scheduler {
 	return &Scheduler{Sync: sync, Planner: planner, stop: make(chan struct{})}
 }
@@ -46,6 +49,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}()
 }
 
+// Stop halts the ticker and waits for any in-flight tick to return.
 func (s *Scheduler) Stop() {
 	if s.tick != nil {
 		s.tick.Stop()

@@ -6,6 +6,7 @@ import (
 	"github.com/icco/art/lib/models"
 )
 
+// ReplanRun triggers a planner run and returns the resulting AgentRun row.
 func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
 	if err := h.Planner.Run(r.Context()); err != nil {
 		writeServerError(w, r, "planner run", err)

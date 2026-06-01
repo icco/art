@@ -36,6 +36,7 @@ func (req habitReq) validate(create bool) error {
 	return nil
 }
 
+// HabitsList responds with a paginated list of habits.
 func (h *Handlers) HabitsList(w http.ResponseWriter, r *http.Request) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
@@ -51,6 +52,7 @@ func (h *Handlers) HabitsList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, out)
 }
 
+// HabitsCreate creates a new habit from the request body.
 func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 	var req habitReq
 	if err := decodeJSON(r, &req); err != nil {
@@ -88,6 +90,7 @@ func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusCreated, hb)
 }
 
+// HabitsUpdate applies partial updates to the habit identified by the URL.
 func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req habitReq
@@ -142,6 +145,7 @@ func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, hb)
 }
 
+// HabitsDelete deletes the habit identified by the URL.
 func (h *Handlers) HabitsDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	res := h.DB.WithContext(r.Context()).Delete(&models.Habit{}, "id = ?", id)
