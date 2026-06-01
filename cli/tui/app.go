@@ -23,6 +23,7 @@ const (
 	formKindHabit   = "habit"
 )
 
+// App is the top-level Bubble Tea model for the art TUI.
 type App struct {
 	cfg    Config
 	client *Client
@@ -55,6 +56,7 @@ type formField struct {
 	value string
 }
 
+// NewApp returns a new TUI App configured against the given API endpoint.
 func NewApp(cfg Config) *App {
 	return &App{
 		cfg:        cfg,
@@ -65,10 +67,12 @@ func NewApp(cfg Config) *App {
 	}
 }
 
+// Init implements tea.Model; it kicks off initial data loads.
 func (a *App) Init() tea.Cmd {
 	return tea.Batch(a.loadWeek(), a.loadProjects(), a.loadHabits())
 }
 
+// Update implements tea.Model.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -213,6 +217,7 @@ func (a *App) handleFormKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+// View implements tea.Model.
 func (a *App) View() string {
 	header := a.renderHeader()
 	body := ""

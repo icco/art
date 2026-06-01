@@ -1,3 +1,4 @@
+// Package handlers implements the HTTP handlers exposed by the art API.
 package handlers
 
 import (
@@ -7,6 +8,7 @@ import (
 	"github.com/icco/art/lib/models"
 )
 
+// EventsList responds with calendar events in the requested time window.
 func (h *Handlers) EventsList(w http.ResponseWriter, r *http.Request) {
 	from, to, ok := parseWindow(w, r)
 	if !ok {

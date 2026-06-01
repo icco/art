@@ -2,6 +2,7 @@ package handlers
 
 import "net/http"
 
+// SyncRun runs all configured upstream syncs and reports their results.
 func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
 	results, err := h.Sync.RunAll(r.Context())
 	if err != nil {

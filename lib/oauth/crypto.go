@@ -1,3 +1,4 @@
+// Package oauth handles Google OAuth flows, token storage, and at-rest sealing.
 package oauth
 
 import (
@@ -14,6 +15,7 @@ type Sealer struct {
 	gcm cipher.AEAD
 }
 
+// NewSealer returns a Sealer initialised with the given 32-byte AES-256 key.
 func NewSealer(key []byte) (*Sealer, error) {
 	if len(key) != 32 {
 		return nil, errors.New("oauth: key must be 32 bytes")
@@ -29,6 +31,7 @@ func NewSealer(key []byte) (*Sealer, error) {
 	return &Sealer{gcm: gcm}, nil
 }
 
+// Seal encrypts plaintext with a fresh random nonce prepended to the output.
 func (s *Sealer) Seal(plaintext []byte) ([]byte, error) {
 	nonce := make([]byte, s.gcm.NonceSize())
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
@@ -37,6 +40,7 @@ func (s *Sealer) Seal(plaintext []byte) ([]byte, error) {
 	return s.gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
 
+// Open reverses Seal: it strips the nonce prefix and decrypts the body.
 func (s *Sealer) Open(ciphertext []byte) ([]byte, error) {
 	ns := s.gcm.NonceSize()
 	if len(ciphertext) < ns {

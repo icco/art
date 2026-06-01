@@ -12,11 +12,13 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// Store persists linked accounts and their sealed refresh tokens.
 type Store struct {
 	DB     *gorm.DB
 	Sealer *Sealer
 }
 
+// Save upserts an Account row, sealing the refresh token before write.
 func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primaryCal string, tok *oauth2.Token) error {
 	if tok.RefreshToken == "" {
 		return errors.New("oauth: refresh token missing — revoke and retry with prompt=consent")
@@ -47,6 +49,7 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 		Create(&a).Error
 }
 
+// Load returns the decrypted oauth2.Token and Account row for kind.
 func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Token, models.Account, error) {
 	var a models.Account
 	if err := s.DB.WithContext(ctx).Where("kind = ?", kind).First(&a).Error; err != nil {
@@ -63,6 +66,7 @@ func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Toke
 	return &tok, a, nil
 }
 
+// All returns all linked accounts in deterministic order.
 func (s *Store) All(ctx context.Context) ([]models.Account, error) {
 	var out []models.Account
 	err := s.DB.WithContext(ctx).Order("kind").Find(&out).Error

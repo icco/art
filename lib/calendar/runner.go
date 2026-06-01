@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Runner executes calendar syncs for all configured accounts.
 type Runner struct {
 	DB    *gorm.DB
 	OAuth *oauth.Flow

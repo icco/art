@@ -1,3 +1,4 @@
+// Command art runs the interactive terminal UI for the art API.
 package main
 
 import (

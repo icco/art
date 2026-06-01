@@ -1,3 +1,4 @@
+// Package config loads art's runtime configuration from environment variables.
 package config
 
 import (
@@ -10,6 +11,7 @@ import (
 	"time"
 )
 
+// Config is the resolved runtime configuration for the art server.
 type Config struct {
 	Port           string
 	DatabaseURL    string
@@ -22,6 +24,7 @@ type Config struct {
 	CredentialsEnv string
 }
 
+// OAuthConfig holds Google OAuth client credentials used for account linking.
 type OAuthConfig struct {
 	ClientID     string
 	ClientSecret string
@@ -32,11 +35,13 @@ type OAuthConfig struct {
 // Update here when Google ships a newer GA release.
 const VertexModel = "gemini-3.1-pro"
 
+// VertexConfig holds Vertex AI project and region settings for the LLM.
 type VertexConfig struct {
 	ProjectID string
 	Location  string
 }
 
+// Load reads configuration from the process environment and validates it.
 func Load() (*Config, error) {
 	c := &Config{
 		Port:           envOr("PORT", "8080"),
@@ -105,6 +110,7 @@ func (c *Config) validate() error {
 	return nil
 }
 
+// OwnerAllowed reports whether email is in the configured OwnerEmails list.
 func (c *Config) OwnerAllowed(email string) bool {
 	return slices.Contains(c.OwnerEmails, strings.ToLower(strings.TrimSpace(email)))
 }

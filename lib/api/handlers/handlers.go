@@ -15,6 +15,7 @@ import (
 // The working-hours replacement is the largest payload and fits in <8 KiB.
 const maxBodyBytes = 64 * 1024
 
+// Handlers wires HTTP handlers to their service dependencies.
 type Handlers struct {
 	Cfg     *config.Config
 	DB      *gorm.DB
@@ -23,15 +24,19 @@ type Handlers struct {
 	Planner PlannerService
 }
 
-// Service interfaces decouple handlers from concrete oauth/calendar/agent packages.
+// OAuthService decouples handlers from the concrete oauth package and lets
+// tests pass a fake implementation. SyncService and PlannerService do the
+// same for sync runs and planner runs respectively.
 type (
 	OAuthService interface {
 		StartURL(account string) (string, error)
 		Complete(ctx context.Context, state, code string) (account, email string, err error)
 	}
+	// SyncService runs upstream calendar/data syncs.
 	SyncService interface {
 		RunAll(ctx context.Context) (perAccountErrors map[string]string, err error)
 	}
+	// PlannerService executes a planner pass.
 	PlannerService interface {
 		Run(ctx context.Context) error
 	}

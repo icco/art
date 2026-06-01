@@ -10,7 +10,7 @@ import (
 
 func TestHealth(t *testing.T) {
 	w := httptest.NewRecorder()
-	handlers.Health(w, httptest.NewRequest("GET", "/healthz", nil))
+	handlers.Health(w, httptest.NewRequestWithContext(t.Context(), "GET", "/healthz", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("code: %d", w.Code)
 	}

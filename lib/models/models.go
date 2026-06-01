@@ -9,17 +9,29 @@ import (
 	"gorm.io/gorm"
 )
 
-// Enum-like string types. Postgres ENUMs are avoided because AutoMigrate
-// doesn't manage them well; CHECK constraints in the tags enforce the values.
-type (
-	AccountKind    string
-	SlotKind       string
-	ProjectStatus  string
-	SourceKind     string
-	SessionStatus  string
-	AgentRunStatus string
-)
+// The string types below are enum-like values stored as Postgres varchar.
+// Postgres ENUMs are avoided because AutoMigrate doesn't manage them well;
+// CHECK constraints in the tags enforce the allowed values instead.
 
+// AccountKind identifies which linked Google account an entity belongs to.
+type AccountKind string
+
+// SlotKind tags whether something is considered work or personal time.
+type SlotKind string
+
+// ProjectStatus is the lifecycle status of a Project.
+type ProjectStatus string
+
+// SourceKind says whether a Session was generated from a Project or Habit.
+type SourceKind string
+
+// SessionStatus is the lifecycle status of a Session.
+type SessionStatus string
+
+// AgentRunStatus is the lifecycle status of an AgentRun.
+type AgentRunStatus string
+
+// Enum values used as the string representation in Postgres.
 const (
 	AccountPersonal AccountKind = "personal"
 	AccountWork     AccountKind = "work"
@@ -44,10 +56,17 @@ const (
 	AgentRunFailed    AgentRunStatus = "failed"
 )
 
+// Valid reports whether a is one of the recognised AccountKind values.
 func (a AccountKind) Valid() bool { return a == AccountPersonal || a == AccountWork }
-func (s SlotKind) Valid() bool    { return s == SlotWork || s == SlotPersonal }
-func (s SourceKind) Valid() bool  { return s == SourceProject || s == SourceHabit }
 
+// Valid reports whether s is one of the recognised SlotKind values.
+func (s SlotKind) Valid() bool { return s == SlotWork || s == SlotPersonal }
+
+// Valid reports whether s is one of the recognised SourceKind values.
+func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit }
+
+// Base is embedded into every GORM model and supplies a UUID primary key
+// along with created/updated timestamps managed by GORM.
 type Base struct {
 	ID        string    `gorm:"type:uuid;primaryKey" json:"id"`
 	CreatedAt time.Time `json:"created_at"`
@@ -62,6 +81,7 @@ func (b *Base) BeforeCreate(_ *gorm.DB) error {
 	return nil
 }
 
+// Account is a single linked Google account (personal or work).
 type Account struct {
 	Base
 	Kind                  AccountKind `gorm:"type:varchar(16);uniqueIndex;not null;check:kind IN ('personal','work')" json:"kind"`
@@ -71,6 +91,7 @@ type Account struct {
 	ArtCalendarID         *string     `gorm:"type:varchar(255)" json:"art_calendar_id,omitempty"`
 }
 
+// WorkingHour is one allowed-time window for a given slot kind and weekday.
 type WorkingHour struct {
 	Base
 	SlotKind    SlotKind `gorm:"type:varchar(16);not null;check:slot_kind IN ('work','personal');uniqueIndex:idx_wh_unique,priority:1" json:"slot_kind"`
@@ -79,6 +100,7 @@ type WorkingHour struct {
 	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440" json:"end_minute"`
 }
 
+// Project is a goal with a target number of hours and an optional deadline.
 type Project struct {
 	Base
 	Name           string        `gorm:"type:varchar(255);not null" json:"name"`
@@ -97,6 +119,7 @@ type Cadence struct {
 	PreferredWindows []string `json:"preferred_windows,omitempty"`
 }
 
+// Habit is a recurring practice with a cadence and per-block duration.
 type Habit struct {
 	Base
 	Name                 string         `gorm:"type:varchar(255);not null" json:"name"`
@@ -107,6 +130,7 @@ type Habit struct {
 	Active               bool           `gorm:"not null;default:true;index" json:"active"`
 }
 
+// Session is one planned or completed instance of a project or habit on the calendar.
 type Session struct {
 	Base
 	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1" json:"source"`
@@ -121,6 +145,7 @@ type Session struct {
 	Status         SessionStatus `gorm:"type:varchar(16);not null;default:'planned';check:status IN ('planned','happened','skipped','moved')" json:"status"`
 }
 
+// Event mirrors a Google Calendar event pulled into the local database.
 type Event struct {
 	Base
 	AccountKind        AccountKind    `gorm:"type:varchar(16);not null;uniqueIndex:idx_event_lookup,priority:1;index:idx_event_window,priority:1" json:"account_kind"`
@@ -138,6 +163,7 @@ type Event struct {
 	ExtendedProperties datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"extended_properties"`
 }
 
+// SyncState tracks the per-calendar sync token used for incremental syncs.
 type SyncState struct {
 	AccountKind   AccountKind `gorm:"type:varchar(16);primaryKey" json:"account_kind"`
 	CalendarID    string      `gorm:"type:varchar(255);primaryKey" json:"calendar_id"`
@@ -145,6 +171,7 @@ type SyncState struct {
 	LastSyncedAt  *time.Time  `json:"last_synced_at,omitempty"`
 }
 
+// AgentRun records one planner invocation, its model usage, and outcome.
 type AgentRun struct {
 	Base
 	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started" json:"started_at"`

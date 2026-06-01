@@ -1,3 +1,4 @@
+// Package api wires HTTP middleware and routes for the art API server.
 package api
 
 import (
@@ -11,6 +12,7 @@ import (
 
 type idCtxKey struct{}
 
+// Identity is the authenticated caller information stored on a request context.
 type Identity struct {
 	Email string
 }
@@ -41,6 +43,7 @@ func OIDCMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 	}
 }
 
+// FromContext returns the Identity stored on ctx by OIDCMiddleware, if any.
 func FromContext(ctx context.Context) (Identity, bool) {
 	id, ok := ctx.Value(idCtxKey{}).(Identity)
 	return id, ok

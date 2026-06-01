@@ -1,3 +1,4 @@
+// Package db opens and migrates the Postgres database used by the art server.
 package db
 
 import (

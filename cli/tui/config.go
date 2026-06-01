@@ -5,11 +5,14 @@ import (
 	"os"
 )
 
+// Config holds runtime configuration for the TUI client.
 type Config struct {
 	APIURL   string
 	Audience string
 }
 
+// LoadConfig builds a Config from environment variables, falling back to
+// sensible defaults when ART_API_URL or ART_API_AUDIENCE are not set.
 func LoadConfig() (Config, error) {
 	c := Config{
 		APIURL:   envOr("ART_API_URL", "http://localhost:8080"),
