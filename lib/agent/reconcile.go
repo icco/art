@@ -72,8 +72,15 @@ func classifySession(sess models.Session, ev *models.Event, conflict, calendarSy
 // session: deleted events skip + reopen their source, moved events update
 // the session, conflicting events reschedule the block, finished blocks
 // become happened. Run after sync and before planning so a freed-up task is
-// rebooked in the same tick.
+// rebooked in the same tick — prefer ReconcileAndRun, which holds the run
+// lock across both steps.
 func (p *Planner) Reconcile(ctx context.Context) (ReconcileSummary, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.reconcileLocked(ctx)
+}
+
+func (p *Planner) reconcileLocked(ctx context.Context) (ReconcileSummary, error) {
 	bw := newBlockWriter(p)
 	return p.reconcileWith(ctx, func(ctx context.Context, account models.AccountKind, calendarID, eventID string) error {
 		client, err := bw.clientFor(ctx, account)

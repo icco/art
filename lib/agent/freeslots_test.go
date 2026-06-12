@@ -106,3 +106,24 @@ func TestHabitTargetCountPerWeek(t *testing.T) {
 		t.Fatalf("per_week count: got %d want 3", got)
 	}
 }
+
+func TestHabitTargetCountPerDay(t *testing.T) {
+	tz := mustTZ(t)
+	weekStart := time.Date(2026, 6, 15, 0, 0, 0, 0, tz) // Monday
+	weekEnd := weekStart.AddDate(0, 0, 7)
+
+	// A full week of a 1/day habit is 7 blocks, not 8.
+	if got := habitTargetCount(models.Cadence{Type: "per_day", Count: 1}, weekStart, weekEnd); got != 7 {
+		t.Fatalf("full week per_day: got %d want 7", got)
+	}
+	// From Wednesday noon, the partial Wednesday still counts: 5 days remain.
+	wedNoon := weekStart.AddDate(0, 0, 2).Add(12 * time.Hour)
+	if got := habitTargetCount(models.Cadence{Type: "per_day", Count: 1}, wedNoon, weekEnd); got != 5 {
+		t.Fatalf("partial week per_day: got %d want 5", got)
+	}
+	// DST spring-forward week (Mar 8 2026, US): still 7 calendar days.
+	dstWeek := time.Date(2026, 3, 9, 0, 0, 0, 0, tz)
+	if got := habitTargetCount(models.Cadence{Type: "per_day", Count: 1}, dstWeek, dstWeek.AddDate(0, 0, 7)); got != 7 {
+		t.Fatalf("DST week per_day: got %d want 7", got)
+	}
+}

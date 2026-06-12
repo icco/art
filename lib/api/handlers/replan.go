@@ -9,11 +9,7 @@ import (
 // ReplanRun reconciles calendar drift, triggers a planner run, and returns
 // the resulting AgentRun row.
 func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
-	if _, err := h.Planner.Reconcile(r.Context()); err != nil {
-		writeServerError(w, r, "reconcile", err)
-		return
-	}
-	if err := h.Planner.Run(r.Context()); err != nil {
+	if _, err := h.Planner.ReconcileAndRun(r.Context()); err != nil {
 		writeServerError(w, r, "planner run", err)
 		return
 	}

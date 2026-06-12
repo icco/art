@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 	"time"
 
@@ -28,11 +29,27 @@ type Planner struct {
 	mu sync.Mutex
 }
 
+// ReconcileAndRun reconciles calendar drift and then plans, holding the
+// run lock across both so a manual /replan and the cron tick can't
+// interleave (e.g. both deleting the same conflicted event).
+func (p *Planner) ReconcileAndRun(ctx context.Context) (ReconcileSummary, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	sum, err := p.reconcileLocked(ctx)
+	if err != nil {
+		return sum, err
+	}
+	return sum, p.runLocked(ctx)
+}
+
 // Run executes a single planner pass and records the result as an AgentRun row.
 func (p *Planner) Run(ctx context.Context) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.runLocked(ctx)
+}
 
+func (p *Planner) runLocked(ctx context.Context) error {
 	model := "deterministic"
 	if p.Cfg.LLMEnabled() {
 		model = p.Cfg.Vertex.Model
@@ -115,7 +132,9 @@ func habitTargetCount(c models.Cadence, from, weekEnd time.Time) int {
 	case "per_week":
 		return c.Count
 	case "per_day":
-		days := int(weekEnd.Sub(from).Hours()/24) + 1
+		// Count remaining days, a partial day counting as a whole one: a
+		// full week is exactly 7, Wednesday-noon-to-Monday is 5.
+		days := int(math.Ceil(weekEnd.Sub(from).Hours() / 24))
 		if days < 0 {
 			days = 0
 		}

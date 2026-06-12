@@ -40,7 +40,7 @@ type (
 	// PlannerService executes planner passes and drift reconciliation.
 	PlannerService interface {
 		Run(ctx context.Context) error
-		Reconcile(ctx context.Context) (agent.ReconcileSummary, error)
+		ReconcileAndRun(ctx context.Context) (agent.ReconcileSummary, error)
 	}
 )
 
