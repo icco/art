@@ -45,6 +45,13 @@ func NewRouter(d Deps) http.Handler {
 			r.Patch("/{id}", d.H.ProjectsUpdate)
 			r.Delete("/{id}", d.H.ProjectsDelete)
 		})
+		r.Route("/tasks", func(r chi.Router) {
+			r.Get("/", d.H.TasksList)
+			r.Post("/", d.H.TasksCreate)
+			r.Post("/quickadd", d.H.TasksQuickAdd)
+			r.Patch("/{id}", d.H.TasksUpdate)
+			r.Delete("/{id}", d.H.TasksDelete)
+		})
 		r.Route("/habits", func(r chi.Router) {
 			r.Get("/", d.H.HabitsList)
 			r.Post("/", d.H.HabitsCreate)

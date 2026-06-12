@@ -22,8 +22,11 @@ type SlotKind string
 // ProjectStatus is the lifecycle status of a Project.
 type ProjectStatus string
 
-// SourceKind says whether a Session was generated from a Project or Habit.
+// SourceKind says whether a Session was generated from a Project, Habit, or Task.
 type SourceKind string
+
+// TaskStatus is the lifecycle status of a Task.
+type TaskStatus string
 
 // SessionStatus is the lifecycle status of a Session.
 type SessionStatus string
@@ -45,6 +48,12 @@ const (
 
 	SourceProject SourceKind = "project"
 	SourceHabit   SourceKind = "habit"
+	SourceTask    SourceKind = "task"
+
+	TaskPending       TaskStatus = "pending"
+	TaskScheduled     TaskStatus = "scheduled"
+	TaskDone          TaskStatus = "done"
+	TaskUnschedulable TaskStatus = "unschedulable"
 
 	SessionPlanned  SessionStatus = "planned"
 	SessionHappened SessionStatus = "happened"
@@ -63,7 +72,14 @@ func (a AccountKind) Valid() bool { return a == AccountPersonal || a == AccountW
 func (s SlotKind) Valid() bool { return s == SlotWork || s == SlotPersonal }
 
 // Valid reports whether s is one of the recognised SourceKind values.
-func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit }
+func (s SourceKind) Valid() bool {
+	return s == SourceProject || s == SourceHabit || s == SourceTask
+}
+
+// Valid reports whether s is one of the recognised TaskStatus values.
+func (s TaskStatus) Valid() bool {
+	return s == TaskPending || s == TaskScheduled || s == TaskDone || s == TaskUnschedulable
+}
 
 // Base is embedded into every GORM model and supplies a UUID primary key
 // along with created/updated timestamps managed by GORM.
@@ -130,10 +146,21 @@ type Habit struct {
 	Active               bool           `gorm:"not null;default:true;index" json:"active"`
 }
 
-// Session is one planned or completed instance of a project or habit on the calendar.
+// Task is a one-off piece of work to schedule once, then complete.
+type Task struct {
+	Base
+	Title           string     `gorm:"type:varchar(255);not null" json:"title"`
+	Kind            SlotKind   `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
+	DurationMinutes int        `gorm:"not null;check:duration_minutes > 0" json:"duration_minutes"`
+	Deadline        *time.Time `json:"deadline,omitempty"`
+	Status          TaskStatus `gorm:"type:varchar(16);not null;default:'pending';index;check:status IN ('pending','scheduled','done','unschedulable')" json:"status"`
+	Notes           string     `gorm:"type:text;not null;default:''" json:"notes"`
+}
+
+// Session is one planned or completed instance of a project, habit, or task on the calendar.
 type Session struct {
 	Base
-	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1" json:"source"`
+	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit','task');index:idx_session_source,priority:1" json:"source"`
 	SourceID       string        `gorm:"type:uuid;not null;index:idx_session_source,priority:2" json:"source_id"`
 	AccountKind    AccountKind   `gorm:"type:varchar(16);not null;check:account_kind IN ('personal','work')" json:"account_kind"`
 	CalendarID     string        `gorm:"type:varchar(255);not null" json:"calendar_id"`
@@ -191,6 +218,7 @@ func All() []any {
 		&WorkingHour{},
 		&Project{},
 		&Habit{},
+		&Task{},
 		&Session{},
 		&Event{},
 		&SyncState{},
