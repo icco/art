@@ -38,7 +38,7 @@ the same primitives later.
 ```sh
 docker compose up -d db          # Postgres
 cp .env.example .env             # fill in
-make run                         # server
+task run                         # server
 ```
 
 Then link calendars (browser-consent each one):
@@ -61,7 +61,7 @@ curl -s -X PUT http://localhost:8080/working-hours \
 Launch the TUI:
 
 ```sh
-make build
+task build
 ART_API_URL=http://localhost:8080 ART_API_AUDIENCE="$OIDC_AUDIENCE" ./bin/art
 ```
 
