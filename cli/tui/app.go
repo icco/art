@@ -14,18 +14,13 @@ const (
 	screenWeek screen = iota
 	screenProjects
 	screenHabits
-	screenTasks
 	screenAddProject
 	screenAddHabit
-	screenQuickAdd
-	screenHours
 )
 
 const (
-	formKindProject  = "project"
-	formKindHabit    = "habit"
-	formKindQuickAdd = "quickadd"
-	formKindHours    = "hours"
+	formKindProject = "project"
+	formKindHabit   = "habit"
 )
 
 // App is the top-level Bubble Tea model for the art TUI.
@@ -34,9 +29,7 @@ type App struct {
 	client *Client
 
 	screen screen
-	// prevScreen is where Esc returns to from overlay forms (quick-add, hours).
-	prevScreen screen
-	status     string
+	status string
 
 	weekAnchor time.Time
 	events     []Event
@@ -46,9 +39,6 @@ type App struct {
 
 	habits      []Habit
 	habitCursor int
-
-	tasks      []Task
-	taskCursor int
 
 	form formState
 
@@ -79,7 +69,7 @@ func NewApp(cfg Config) *App {
 
 // Init implements tea.Model; it kicks off initial data loads.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.loadWeek(), a.loadProjects(), a.loadHabits(), a.loadTasks())
+	return tea.Batch(a.loadWeek(), a.loadProjects(), a.loadHabits())
 }
 
 // Update implements tea.Model.
@@ -99,16 +89,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case habitsLoadedMsg:
 		a.habits = []Habit(m)
 		return a, nil
-	case tasksLoadedMsg:
-		a.tasks = []Task(m)
-		if a.taskCursor >= len(a.tasks) && a.taskCursor > 0 {
-			a.taskCursor = len(a.tasks) - 1
-		}
-		return a, nil
-	case hoursLoadedMsg:
-		a.screen = screenHours
-		a.form = formState{kind: formKindHours, fields: hoursFields(m)}
-		return a, nil
 	case statusMsg:
 		a.status = string(m)
 		return a, nil
@@ -120,7 +100,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if a.inForm() {
+	if a.screen == screenAddProject || a.screen == screenAddHabit {
 		return a.handleFormKey(k)
 	}
 	switch k.String() {
@@ -132,19 +112,6 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.screen = screenProjects
 	case "3":
 		a.screen = screenHabits
-	case "4":
-		a.screen = screenTasks
-		return a, a.loadTasks()
-	case "5":
-		a.prevScreen = a.screen
-		return a, a.loadHours()
-	case "n":
-		a.prevScreen = a.screen
-		a.screen = screenQuickAdd
-		a.form = formState{
-			kind:   formKindQuickAdd,
-			fields: []formField{{label: `task (e.g. "pack office 2h by friday #work")`}},
-		}
 	case "left":
 		if a.screen == screenWeek {
 			a.weekAnchor = a.weekAnchor.AddDate(0, 0, -7)
@@ -162,22 +129,12 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if a.screen == screenHabits && a.habitCursor < len(a.habits)-1 {
 			a.habitCursor++
 		}
-		if a.screen == screenTasks && a.taskCursor < len(a.tasks)-1 {
-			a.taskCursor++
-		}
 	case "up", "k":
 		if a.screen == screenProjects && a.projCursor > 0 {
 			a.projCursor--
 		}
 		if a.screen == screenHabits && a.habitCursor > 0 {
 			a.habitCursor--
-		}
-		if a.screen == screenTasks && a.taskCursor > 0 {
-			a.taskCursor--
-		}
-	case "enter":
-		if a.screen == screenTasks && a.taskCursor < len(a.tasks) {
-			return a, a.toggleTaskDone(a.tasks[a.taskCursor])
 		}
 	case "a":
 		switch a.screen {
@@ -214,39 +171,24 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if a.habitCursor < len(a.habits) {
 				return a, a.deleteHabit(a.habits[a.habitCursor].ID)
 			}
-		case screenTasks:
-			if a.taskCursor < len(a.tasks) {
-				return a, a.deleteTask(a.tasks[a.taskCursor].ID)
-			}
 		}
 	case "r":
 		return a, a.replan()
 	case "s":
 		return a, a.sync()
 	case "?":
-		a.status = "1=week 2=projects 3=habits 4=tasks 5=hours  n=quick-add  a=add  d=delete  enter=toggle done  r=replan  s=sync  ←→=week nav  q=quit"
+		a.status = "1=week 2=projects 3=habits  a=add  d=delete  r=replan  s=sync  ←→=week nav  q=quit"
 	}
 	return a, nil
-}
-
-func (a *App) inForm() bool {
-	switch a.screen {
-	case screenAddProject, screenAddHabit, screenQuickAdd, screenHours:
-		return true
-	}
-	return false
 }
 
 func (a *App) handleFormKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyEsc:
-		switch a.form.kind {
-		case formKindProject:
+		if a.form.kind == formKindProject {
 			a.screen = screenProjects
-		case formKindHabit:
+		} else {
 			a.screen = screenHabits
-		default:
-			a.screen = a.prevScreen
 		}
 		return a, nil
 	case tea.KeyTab, tea.KeyDown:
@@ -286,9 +228,7 @@ func (a *App) View() string {
 		body = a.renderProjects()
 	case screenHabits:
 		body = a.renderHabits()
-	case screenTasks:
-		body = a.renderTasks()
-	case screenAddProject, screenAddHabit, screenQuickAdd, screenHours:
+	case screenAddProject, screenAddHabit:
 		body = a.renderForm()
 	}
 	return header + "\n" + body + "\n" + a.renderStatus()
@@ -299,8 +239,6 @@ func (a *App) renderHeader() string {
 		tabLabel("week", a.screen == screenWeek),
 		tabLabel("projects", a.screen == screenProjects),
 		tabLabel("habits", a.screen == screenHabits),
-		tabLabel("tasks", a.screen == screenTasks),
-		tabLabel("hours", a.screen == screenHours),
 	}
 	return lipgloss.NewStyle().Bold(true).Render("art ") + strings.Join(tabs, " ")
 }

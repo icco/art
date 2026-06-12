@@ -24,11 +24,7 @@ func newPlanner(t *testing.T) *agent.Planner {
 		Vertex: config.VertexConfig{
 			ProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 			Location:  cmpOr(os.Getenv("VERTEX_LOCATION"), "us-central1"),
-			Model:     "gemini-3.1-pro",
 		},
-	}
-	if cfg.Vertex.ProjectID != "" {
-		cfg.Planner = config.PlannerLLM
 	}
 	flow := oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: db})
 	return &agent.Planner{Cfg: cfg, DB: db, OAuth: flow}
@@ -86,7 +82,7 @@ func TestFindFreeSlotsHonorsBusy(t *testing.T) {
 	}
 	from := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
 	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
-	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5, nil)
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,38 +93,5 @@ func TestFindFreeSlotsHonorsBusy(t *testing.T) {
 	}
 	if len(slots) == 0 {
 		t.Fatal("expected at least one free slot in 9-18 window")
-	}
-}
-
-// A personal placement must respect busy time on the *work* account too:
-// every linked account's events block every placement.
-func TestFindFreeSlotsCrossAccountBusy(t *testing.T) {
-	db := testdb.Open(t)
-	tz, _ := time.LoadLocation("America/Los_Angeles")
-	if err := db.Create(&models.WorkingHour{
-		SlotKind: models.SlotPersonal, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 11 * 60,
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	// Work meeting fills the entire personal 9-11 window.
-	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
-	if err := db.Create(&models.Event{
-		AccountKind:   models.AccountWork,
-		CalendarID:    "primary",
-		GoogleEventID: "wbusy",
-		StartTime:     monday9,
-		EndTime:       monday9.Add(2 * time.Hour),
-		Status:        "confirmed",
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	slots, err := agent.FindFreeSlots(context.Background(), db, tz,
-		models.AccountPersonal, models.SlotPersonal, 60,
-		monday9, monday9.Add(2*time.Hour), 5, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(slots) != 0 {
-		t.Fatalf("personal slot booked over a work meeting: %v", slots)
 	}
 }

@@ -18,7 +18,7 @@ func newCycle(t *testing.T) *llmCycle {
 	tz, _ := time.LoadLocation("America/Los_Angeles")
 	cfg := &config.Config{Timezone: tz}
 	p := &Planner{Cfg: cfg, DB: db}
-	return &llmCycle{p: p, bw: newBlockWriter(p), summary: map[string]any{
+	return &llmCycle{p: p, summary: map[string]any{
 		"projects_scheduled": 0,
 		"habits_scheduled":   0,
 		"errors":             []string{},
@@ -163,7 +163,7 @@ func TestResolveSource(t *testing.T) {
 	if err := c.p.DB.Create(pj).Error; err != nil {
 		t.Fatal(err)
 	}
-	name, kind, err := c.bw.resolveSource(context.Background(), models.SourceProject, pj.ID)
+	name, kind, err := c.resolveSource(context.Background(), models.SourceProject, pj.ID)
 	if err != nil || name != "P1" || kind != models.SlotWork {
 		t.Fatalf("project resolve: %v %s %s", err, name, kind)
 	}
@@ -173,12 +173,12 @@ func TestResolveSource(t *testing.T) {
 	if err := c.p.DB.Create(h).Error; err != nil {
 		t.Fatal(err)
 	}
-	name, kind, err = c.bw.resolveSource(context.Background(), models.SourceHabit, h.ID)
+	name, kind, err = c.resolveSource(context.Background(), models.SourceHabit, h.ID)
 	if err != nil || name != "H1" || kind != models.SlotPersonal {
 		t.Fatalf("habit resolve: %v %s %s", err, name, kind)
 	}
 
-	if _, _, err := c.bw.resolveSource(context.Background(), models.SourceProject, "nonexistent"); err == nil {
+	if _, _, err := c.resolveSource(context.Background(), models.SourceProject, "nonexistent"); err == nil {
 		t.Fatal("expected error for missing project")
 	}
 }

@@ -16,28 +16,22 @@ const runOnceTimeout = 30 * time.Minute
 
 // Scheduler ticks the calendar sync and planner on a fixed interval.
 type Scheduler struct {
-	Sync     *calendar.Runner
-	Planner  *agent.Planner
-	Interval time.Duration
+	Sync    *calendar.Runner
+	Planner *agent.Planner
 
 	tick *time.Ticker
 	stop chan struct{}
 	wg   sync.WaitGroup
 }
 
-// New returns a Scheduler ready to be Start()ed. A non-positive interval
-// falls back to hourly.
-func New(sync *calendar.Runner, planner *agent.Planner, interval time.Duration) *Scheduler {
-	if interval <= 0 {
-		interval = time.Hour
-	}
-	return &Scheduler{Sync: sync, Planner: planner, Interval: interval, stop: make(chan struct{})}
+// New returns a Scheduler ready to be Start()ed.
+func New(sync *calendar.Runner, planner *agent.Planner) *Scheduler {
+	return &Scheduler{Sync: sync, Planner: planner, stop: make(chan struct{})}
 }
 
-// Start runs sync + planner once, then on every interval tick until ctx is
-// cancelled.
+// Start runs sync + planner once, then hourly until ctx is cancelled.
 func (s *Scheduler) Start(ctx context.Context) {
-	s.tick = time.NewTicker(s.Interval)
+	s.tick = time.NewTicker(time.Hour)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -73,17 +67,7 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	} else if len(errs) > 0 {
 		log.Warnw("sync had per-account errors", "errors", errs)
 	}
-	// Reconcile between sync and plan so a block freed up by an owner edit
-	// (deleted/moved event, conflicting meeting) is rebooked in this tick.
-	// ReconcileAndRun holds one lock across both steps so a manual /replan
-	// can't interleave.
-	sum, err := s.Planner.ReconcileAndRun(tickCtx)
-	if err != nil {
+	if err := s.Planner.Run(tickCtx); err != nil {
 		log.Errorw("planner failed", "err", err)
-	}
-	if sum != (agent.ReconcileSummary{}) {
-		log.Infow("reconciled drift",
-			"happened", sum.Happened, "moved", sum.Moved,
-			"skipped_deleted", sum.SkippedDeleted, "skipped_conflict", sum.SkippedConflict)
 	}
 }

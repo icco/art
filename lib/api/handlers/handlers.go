@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/icco/art/lib/agent"
 	"github.com/icco/art/lib/config"
 	gutillog "github.com/icco/gutil/logging"
 	gutilrender "github.com/icco/gutil/render"
@@ -37,10 +36,9 @@ type (
 	SyncService interface {
 		RunAll(ctx context.Context) (perAccountErrors map[string]string, err error)
 	}
-	// PlannerService executes planner passes and drift reconciliation.
+	// PlannerService executes a planner pass.
 	PlannerService interface {
 		Run(ctx context.Context) error
-		ReconcileAndRun(ctx context.Context) (agent.ReconcileSummary, error)
 	}
 )
 

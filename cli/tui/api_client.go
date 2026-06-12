@@ -162,51 +162,10 @@ type Event struct {
 
 // AgentRun summarises a planner or sync run reported by the API.
 type AgentRun struct {
-	ID        string          `json:"id"`
-	StartedAt time.Time       `json:"started_at"`
-	Status    string          `json:"status"`
-	Model     string          `json:"model"`
-	Summary   json.RawMessage `json:"summary"`
-	Error     string          `json:"error"`
-}
-
-// Task mirrors the API task resource.
-type Task struct {
-	ID              string     `json:"id"`
-	Title           string     `json:"title"`
-	Kind            string     `json:"kind"`
-	DurationMinutes int        `json:"duration_minutes"`
-	Deadline        *time.Time `json:"deadline,omitempty"`
-	Status          string     `json:"status"`
-	Notes           string     `json:"notes"`
-}
-
-// UpcomingBlock is one scheduled focus block from the status endpoint.
-type UpcomingBlock struct {
-	SessionID   string    `json:"session_id"`
-	Source      string    `json:"source"`
-	SourceID    string    `json:"source_id"`
-	Title       string    `json:"title"`
-	AccountKind string    `json:"account_kind"`
-	Start       time.Time `json:"start"`
-	End         time.Time `json:"end"`
-	Status      string    `json:"status"`
-}
-
-// WorkingHour mirrors the API working-hours resource.
-type WorkingHour struct {
-	SlotKind    string `json:"slot_kind"`
-	DayOfWeek   int    `json:"day_of_week"`
-	StartMinute int    `json:"start_minute"`
-	EndMinute   int    `json:"end_minute"`
-}
-
-// StatusReport is the aggregated /status response.
-type StatusReport struct {
-	Upcoming           []UpcomingBlock `json:"upcoming"`
-	TasksPending       []Task          `json:"tasks_pending"`
-	TasksUnschedulable []Task          `json:"tasks_unschedulable"`
-	LastRun            *AgentRun       `json:"last_run,omitempty"`
+	ID      string          `json:"id"`
+	Status  string          `json:"status"`
+	Summary json.RawMessage `json:"summary"`
+	Error   string          `json:"error"`
 }
 
 // ListProjects returns all projects visible to the caller.
@@ -248,57 +207,6 @@ func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, e
 	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	var out []Event
 	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
-}
-
-// QuickAdd captures a one-line task ("pack office 2h by friday"); the
-// server parses it and returns the created task so the caller can echo what
-// was understood.
-func (c *Client) QuickAdd(ctx context.Context, input string) (Task, error) {
-	var out Task
-	return out, c.do(ctx, "POST", "/tasks/quickadd", map[string]string{"input": input}, &out)
-}
-
-// ListTasks returns tasks, optionally filtered by comma-separated statuses.
-func (c *Client) ListTasks(ctx context.Context, statuses string) ([]Task, error) {
-	path := "/tasks?limit=500"
-	if statuses != "" {
-		path += "&status=" + statuses
-	}
-	var out []Task
-	return out, c.do(ctx, "GET", path, nil, &out)
-}
-
-// UpdateTask applies a partial update to a task.
-func (c *Client) UpdateTask(ctx context.Context, id string, patch map[string]any) (Task, error) {
-	var out Task
-	return out, c.do(ctx, "PATCH", "/tasks/"+id, patch, &out)
-}
-
-// DeleteTask removes the task with the given id.
-func (c *Client) DeleteTask(ctx context.Context, id string) error {
-	return c.do(ctx, "DELETE", "/tasks/"+id, nil, nil)
-}
-
-// ListWorkingHours returns all configured working-hour windows.
-func (c *Client) ListWorkingHours(ctx context.Context) ([]WorkingHour, error) {
-	var out []WorkingHour
-	return out, c.do(ctx, "GET", "/working-hours", nil, &out)
-}
-
-// ReplaceWorkingHours atomically replaces the entire working-hours table;
-// the API is replace-only, so always send the full set.
-func (c *Client) ReplaceWorkingHours(ctx context.Context, hours []WorkingHour) ([]WorkingHour, error) {
-	if hours == nil {
-		hours = []WorkingHour{}
-	}
-	var out []WorkingHour
-	return out, c.do(ctx, "PUT", "/working-hours", hours, &out)
-}
-
-// Status returns the aggregated status report.
-func (c *Client) Status(ctx context.Context) (StatusReport, error) {
-	var out StatusReport
-	return out, c.do(ctx, "GET", "/status", nil, &out)
 }
 
 // Replan triggers a planner run on the server and returns its result.

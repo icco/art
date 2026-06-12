@@ -47,24 +47,13 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 			AutoDeclineMode: "declineNone",
 		},
 	}
-	var out *calendar.Event
-	err := withRetry(ctx, retryBase, func() error {
-		var err error
-		out, err = c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
-		return err
-	})
-	return out, err
+	return c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
 }
 
 // DeleteManaged refuses to delete events not tagged art_managed=true.
 // Safety invariant: Art never touches human-created events.
 func (c *Client) DeleteManaged(ctx context.Context, calendarID, eventID string) error {
-	var ev *calendar.Event
-	err := withRetry(ctx, retryBase, func() error {
-		var err error
-		ev, err = c.Service.Events.Get(calendarID, eventID).Context(ctx).Do()
-		return err
-	})
+	ev, err := c.Service.Events.Get(calendarID, eventID).Context(ctx).Do()
 	if err != nil {
 		return err
 	}
@@ -73,7 +62,5 @@ func (c *Client) DeleteManaged(ctx context.Context, calendarID, eventID string) 
 		ev.ExtendedProperties.Private[ArtManagedKey] != ArtManagedTrue {
 		return fmt.Errorf("calendar: refusing to delete non-Art event %q", eventID)
 	}
-	return withRetry(ctx, retryBase, func() error {
-		return c.Service.Events.Delete(calendarID, eventID).Context(ctx).Do()
-	})
+	return c.Service.Events.Delete(calendarID, eventID).Context(ctx).Do()
 }
