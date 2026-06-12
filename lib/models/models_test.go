@@ -15,7 +15,13 @@ func TestKindValidity(t *testing.T) {
 		{"SlotInvalid", SlotKind("x").Valid()},
 		{"SourceProject", SourceProject.Valid()},
 		{"SourceHabit", SourceHabit.Valid()},
+		{"SourceTask", SourceTask.Valid()},
 		{"SourceInvalid", SourceKind("x").Valid()},
+		{"TaskPending", TaskPending.Valid()},
+		{"TaskScheduled", TaskScheduled.Valid()},
+		{"TaskDone", TaskDone.Valid()},
+		{"TaskUnschedulable", TaskUnschedulable.Valid()},
+		{"TaskInvalid", TaskStatus("x").Valid()},
 	}
 	for _, c := range cases {
 		expect := c.name[len(c.name)-7:] != "Invalid"

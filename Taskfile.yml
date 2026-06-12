@@ -1,0 +1,40 @@
+version: "3"
+tasks:
+  run:
+    desc: Run the API/cron server
+    cmds:
+      - go run .
+  tui:
+    desc: Run the terminal UI
+    cmds:
+      - go run ./cmd/art
+  build:
+    desc: Build server and TUI binaries into bin/
+    cmds:
+      - mkdir -p bin
+      - go build -o bin/art-server .
+      - go build -o bin/art ./cmd/art
+  test:
+    desc: Run all tests
+    # -p 1 because DB-backed tests share one TEST_DATABASE_URL and each
+    # package drops + recreates all tables; parallel packages corrupt
+    # each other.
+    cmds:
+      - go test -p 1 ./...
+  lint:
+    desc: Vet and check formatting
+    cmds:
+      - go vet ./...
+      - test -z "$(gofmt -l .)" || (echo "run gofmt"; exit 1)
+  tidy:
+    desc: Tidy go.mod
+    cmds:
+      - go mod tidy
+  docker-up:
+    desc: Start docker compose services
+    cmds:
+      - docker compose up -d
+  docker-down:
+    desc: Stop docker compose services
+    cmds:
+      - docker compose down

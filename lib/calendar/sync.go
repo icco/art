@@ -16,21 +16,44 @@ import (
 )
 
 // HistoryWindow is how far back a full sync walks; FutureWindow is the
-// matching forward bound for upcoming events.
+// matching forward bound for upcoming events. Both are defaults that
+// ART_SYNC_PAST_DAYS / ART_SYNC_FUTURE_DAYS override via Syncer fields.
 const (
 	HistoryWindow = 365 * 24 * time.Hour
 	FutureWindow  = 60 * 24 * time.Hour
 )
 
+// retryBase is the initial backoff delay for transient Google API errors.
+const retryBase = 500 * time.Millisecond
+
 // Syncer pulls events from a single calendar account into the database.
+// Past/Future bound full syncs; zero values fall back to the defaults.
 type Syncer struct {
 	Client *Client
 	DB     *gorm.DB
+	Past   time.Duration
+	Future time.Duration
+}
+
+func (s *Syncer) windows() (past, future time.Duration) {
+	past, future = s.Past, s.Future
+	if past <= 0 {
+		past = HistoryWindow
+	}
+	if future <= 0 {
+		future = FutureWindow
+	}
+	return past, future
 }
 
 // Run performs an incremental sync, falling back to a bounded full sync.
 func (s *Syncer) Run(ctx context.Context) error {
-	list, err := s.Client.Service.CalendarList.List().Context(ctx).Do()
+	var list *calendar.CalendarList
+	err := withRetry(ctx, retryBase, func() error {
+		var err error
+		list, err = s.Client.Service.CalendarList.List().Context(ctx).Do()
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("calendarList: %w", err)
 	}
@@ -57,9 +80,10 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 			SingleEvents(true).
 			MaxResults(2500)
 		if fullSync {
+			past, future := s.windows()
 			call = call.
-				TimeMin(now.Add(-HistoryWindow).Format(time.RFC3339)).
-				TimeMax(now.Add(FutureWindow).Format(time.RFC3339))
+				TimeMin(now.Add(-past).Format(time.RFC3339)).
+				TimeMax(now.Add(future).Format(time.RFC3339))
 		} else {
 			call = call.SyncToken(*state.LastSyncToken)
 		}
@@ -67,7 +91,12 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 			call = call.PageToken(pageToken)
 		}
 
-		resp, err := call.Do()
+		var resp *calendar.Events
+		err := withRetry(ctx, retryBase, func() error {
+			var err error
+			resp, err = call.Do()
+			return err
+		})
 		if err != nil {
 			var gerr *googleapi.Error
 			if errors.As(err, &gerr) && gerr.Code == 410 {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
+	"sync"
 	"time"
 
 	"github.com/icco/art/lib/config"
@@ -13,18 +15,46 @@ import (
 	"gorm.io/gorm"
 )
 
-// Planner schedules focus blocks for the *current calendar week* only and
-// never inside the in-progress hour. ADK orchestration wraps the same
-// primitives as tools.
+// Planner schedules focus blocks inside the rolling 14-day window and never
+// inside the in-progress hour. The deterministic planner is the default;
+// the optional ADK/Gemini planner wraps the same primitives as tools and
+// falls back to deterministic on failure.
 type Planner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB
 	OAuth *oauth.Flow
+
+	// mu serializes runs: a manual /replan concurrent with the cron tick
+	// must not double-book the same free slots.
+	mu sync.Mutex
+}
+
+// ReconcileAndRun reconciles calendar drift and then plans, holding the
+// run lock across both so a manual /replan and the cron tick can't
+// interleave (e.g. both deleting the same conflicted event).
+func (p *Planner) ReconcileAndRun(ctx context.Context) (ReconcileSummary, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	sum, err := p.reconcileLocked(ctx)
+	if err != nil {
+		return sum, err
+	}
+	return sum, p.runLocked(ctx)
 }
 
 // Run executes a single planner pass and records the result as an AgentRun row.
 func (p *Planner) Run(ctx context.Context) error {
-	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: config.VertexModel}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.runLocked(ctx)
+}
+
+func (p *Planner) runLocked(ctx context.Context) error {
+	model := "deterministic"
+	if p.Cfg.LLMEnabled() {
+		model = p.Cfg.Vertex.Model + "+sweep"
+	}
+	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: model}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
 	}
@@ -32,10 +62,22 @@ func (p *Planner) Run(ctx context.Context) error {
 	summary := map[string]any{
 		"projects_scheduled": 0,
 		"habits_scheduled":   0,
+		"tasks_scheduled":    0,
 		"errors":             []string{},
 	}
-	runErr := p.llmPlan(ctx, summary)
-	return p.finish(ctx, run.ID, summary, runErr)
+	// The planners cooperate: the LLM places blocks with judgment first,
+	// then the deterministic pass sweeps the same needs — anything the LLM
+	// missed (or a run that died mid-way) gets placed mechanically, and the
+	// sweep is what marks unfittable tasks unschedulable. Need computation
+	// is net of existing sessions, so the sweep no-ops where the LLM
+	// already did the job. An LLM failure is recorded but never blocks the
+	// sweep.
+	if p.Cfg.LLMEnabled() {
+		if err := p.llmPlan(ctx, summary); err != nil {
+			appendErr(summary, "llm planner: "+err.Error()+" (deterministic sweep still runs)")
+		}
+	}
+	return p.finish(ctx, run.ID, summary, p.deterministicPlan(ctx, summary))
 }
 
 func (p *Planner) finish(ctx context.Context, id string, summary map[string]any, runErr error) error {
@@ -92,7 +134,9 @@ func habitTargetCount(c models.Cadence, from, weekEnd time.Time) int {
 	case "per_week":
 		return c.Count
 	case "per_day":
-		days := int(weekEnd.Sub(from).Hours()/24) + 1
+		// Count remaining days, a partial day counting as a whole one: a
+		// full week is exactly 7, Wednesday-noon-to-Monday is 5.
+		days := int(math.Ceil(weekEnd.Sub(from).Hours() / 24))
 		if days < 0 {
 			days = 0
 		}

@@ -17,6 +17,20 @@ func TestWeekWindow(t *testing.T) {
 	}
 }
 
+func TestPlanWindow(t *testing.T) {
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	// Friday afternoon: the rolling window must cross the week boundary.
+	fri := time.Date(2026, 6, 12, 14, 17, 0, 0, tz)
+	start, end := PlanWindow(fri, tz)
+	wantStart := time.Date(2026, 6, 12, 22, 0, 0, 0, time.UTC) // next hour, UTC (PDT is UTC-7)
+	if !start.Equal(wantStart) {
+		t.Fatalf("PlanWindow start: got %v want %v", start, wantStart)
+	}
+	if !end.Equal(start.Add(14 * 24 * time.Hour)) {
+		t.Fatalf("PlanWindow end != start+14d: %v vs %v", end, start)
+	}
+}
+
 func TestNextHour(t *testing.T) {
 	in := time.Date(2026, 5, 27, 14, 17, 30, 0, time.UTC)
 	got := NextHour(in)
