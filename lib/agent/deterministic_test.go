@@ -11,7 +11,7 @@ import (
 // Mon 2026-06-15 00:00 PT → +14d.
 func allHours() []models.WorkingHour {
 	var hours []models.WorkingHour
-	for d := 0; d < 7; d++ {
+	for d := range 7 {
 		for _, k := range []models.SlotKind{models.SlotWork, models.SlotPersonal} {
 			hours = append(hours, models.WorkingHour{SlotKind: k, DayOfWeek: d, StartMinute: 9 * 60, EndMinute: 17 * 60})
 		}
@@ -58,7 +58,7 @@ func TestPlaceTaskSplitsWhenNoContiguousFits(t *testing.T) {
 	start, end, tz := planWindow(t)
 	// Busy 11:00-17:00 every day for the whole window: only 9-11 free daily.
 	var busy []busyRange
-	for d := 0; d < 14; d++ {
+	for d := range 14 {
 		dayStart := time.Date(2026, 6, 15+d, 11, 0, 0, 0, tz)
 		busy = append(busy, busyRange{start: dayStart, end: dayStart.Add(6 * time.Hour)})
 	}
@@ -86,7 +86,7 @@ func TestPlaceTaskRefusesWhenDeadlineTooTight(t *testing.T) {
 	// Deadline Tuesday EOD, but Mon+Tue are fully busy.
 	deadline := time.Date(2026, 6, 16, 23, 59, 59, 0, tz)
 	var busy []busyRange
-	for d := 0; d < 2; d++ {
+	for d := range 2 {
 		dayStart := time.Date(2026, 6, 15+d, 9, 0, 0, 0, tz)
 		busy = append(busy, busyRange{start: dayStart, end: dayStart.Add(8 * time.Hour)})
 	}
@@ -188,7 +188,7 @@ func TestPlaceItemsDontOverlap(t *testing.T) {
 	start, end, tz := planWindow(t)
 	// Narrow hours: only 9-11 daily → forces items to share scarce space.
 	var hours []models.WorkingHour
-	for d := 0; d < 7; d++ {
+	for d := range 7 {
 		hours = append(hours, models.WorkingHour{SlotKind: models.SlotPersonal, DayOfWeek: d, StartMinute: 9 * 60, EndMinute: 11 * 60})
 	}
 	items := []PlanItem{

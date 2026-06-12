@@ -24,7 +24,7 @@ func RunStatus() int {
 func runAdd(w io.Writer, input string) int {
 	cfg, err := LoadConfig()
 	if err != nil {
-		fmt.Fprintln(w, "config:", err)
+		_, _ = fmt.Fprintln(w, "config:", err)
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -32,17 +32,17 @@ func runAdd(w io.Writer, input string) int {
 
 	task, err := NewClient(cfg).QuickAdd(ctx, input)
 	if err != nil {
-		fmt.Fprintln(w, "add failed:", err)
+		_, _ = fmt.Fprintln(w, "add failed:", err)
 		return 1
 	}
-	fmt.Fprintf(w, "added: %s\n", formatTask(task))
+	_, _ = fmt.Fprintf(w, "added: %s\n", formatTask(task))
 	return 0
 }
 
 func runStatus(w io.Writer) int {
 	cfg, err := LoadConfig()
 	if err != nil {
-		fmt.Fprintln(w, "config:", err)
+		_, _ = fmt.Fprintln(w, "config:", err)
 		return 1
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -50,10 +50,10 @@ func runStatus(w io.Writer) int {
 
 	report, err := NewClient(cfg).Status(ctx)
 	if err != nil {
-		fmt.Fprintln(w, "status failed:", err)
+		_, _ = fmt.Fprintln(w, "status failed:", err)
 		return 1
 	}
-	fmt.Fprint(w, formatStatus(report, time.Local))
+	_, _ = fmt.Fprint(w, formatStatus(report, time.Local))
 	return 0
 }
 

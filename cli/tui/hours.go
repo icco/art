@@ -114,6 +114,6 @@ func parseMinuteOfDay(s string) (int, error) {
 	return h*60 + m, nil
 }
 
-func formatMinuteOfDay(min int) string {
-	return fmt.Sprintf("%d:%02d", min/60, min%60)
+func formatMinuteOfDay(minute int) string {
+	return fmt.Sprintf("%d:%02d", minute/60, minute%60)
 }

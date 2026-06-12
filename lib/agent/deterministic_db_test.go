@@ -19,7 +19,7 @@ type fakeCommit struct {
 	fail  bool
 }
 
-func (f *fakeCommit) commit(ctx context.Context, source models.SourceKind, sourceID string, start, end time.Time) (string, string, error) {
+func (f *fakeCommit) commit(_ context.Context, source models.SourceKind, sourceID string, start, end time.Time) (string, string, error) {
 	if f.fail {
 		return "", "", context.DeadlineExceeded
 	}
