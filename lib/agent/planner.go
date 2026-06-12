@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/icco/art/lib/config"
@@ -13,17 +14,25 @@ import (
 	"gorm.io/gorm"
 )
 
-// Planner schedules focus blocks for the *current calendar week* only and
-// never inside the in-progress hour. ADK orchestration wraps the same
-// primitives as tools.
+// Planner schedules focus blocks inside the rolling 14-day window and never
+// inside the in-progress hour. The deterministic planner is the default;
+// the optional ADK/Gemini planner wraps the same primitives as tools and
+// falls back to deterministic on failure.
 type Planner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB
 	OAuth *oauth.Flow
+
+	// mu serializes runs: a manual /replan concurrent with the cron tick
+	// must not double-book the same free slots.
+	mu sync.Mutex
 }
 
 // Run executes a single planner pass and records the result as an AgentRun row.
 func (p *Planner) Run(ctx context.Context) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	model := "deterministic"
 	if p.Cfg.LLMEnabled() {
 		model = p.Cfg.Vertex.Model
@@ -36,9 +45,19 @@ func (p *Planner) Run(ctx context.Context) error {
 	summary := map[string]any{
 		"projects_scheduled": 0,
 		"habits_scheduled":   0,
+		"tasks_scheduled":    0,
 		"errors":             []string{},
 	}
-	runErr := p.llmPlan(ctx, summary)
+	var runErr error
+	if p.Cfg.LLMEnabled() {
+		runErr = p.llmPlan(ctx, summary)
+		if runErr != nil {
+			appendErr(summary, "llm planner: "+runErr.Error()+" (falling back to deterministic)")
+			runErr = p.deterministicPlan(ctx, summary)
+		}
+	} else {
+		runErr = p.deterministicPlan(ctx, summary)
+	}
 	return p.finish(ctx, run.ID, summary, runErr)
 }
 

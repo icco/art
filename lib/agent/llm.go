@@ -4,12 +4,10 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/models"
 	adkagent "google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
@@ -34,11 +32,11 @@ type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
 	summary map[string]any
-	clients map[models.AccountKind]*calendar.Client
+	bw      *blockWriter
 }
 
 func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
-	cycle := &llmCycle{p: p, ctx: ctx, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
+	cycle := &llmCycle{p: p, ctx: ctx, summary: summary, bw: newBlockWriter(p)}
 
 	model, err := gemini.NewModel(ctx, p.Cfg.Vertex.Model, &genai.ClientConfig{
 		Project:  p.Cfg.Vertex.ProjectID,
@@ -79,7 +77,7 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 	sessionID := uuid.NewString()
 	msg := &genai.Content{
 		Role:  "user",
-		Parts: []*genai.Part{{Text: "Plan focus blocks for the current week now."}},
+		Parts: []*genai.Part{{Text: "Plan focus blocks for the planning window now."}},
 	}
 
 	var lastErr error
@@ -97,13 +95,12 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 
 func (c *llmCycle) instruction() string {
 	now := time.Now().In(c.p.Cfg.Timezone)
-	from := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	from, planEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	return fmt.Sprintf("%s\n\nNow: %s\nPlan window: [%s, %s) in %s.",
 		systemInstruction,
 		now.Format(time.RFC3339),
 		from.In(c.p.Cfg.Timezone).Format(time.RFC3339),
-		weekEnd.In(c.p.Cfg.Timezone).Format(time.RFC3339),
+		planEnd.In(c.p.Cfg.Timezone).Format(time.RFC3339),
 		c.p.Cfg.Timezone.String(),
 	)
 }
@@ -137,7 +134,16 @@ type workingHourInfo struct {
 	EndMinute   int    `json:"end_minute"`
 }
 
+type taskInfo struct {
+	ID               string `json:"id"`
+	Title            string `json:"title"`
+	Kind             string `json:"kind"`
+	MinutesRemaining int    `json:"minutes_remaining"`
+	Deadline         string `json:"deadline,omitempty"`
+}
+
 type listStateResult struct {
+	Tasks        []taskInfo        `json:"tasks"`
 	Projects     []projectInfo     `json:"projects"`
 	Habits       []habitInfo       `json:"habits"`
 	WorkingHours []workingHourInfo `json:"working_hours"`
@@ -160,7 +166,7 @@ type findFreeSlotsResult struct {
 }
 
 type commitFocusBlockArgs struct {
-	Source   string `json:"source"    jsonschema:"project or habit"`
+	Source   string `json:"source"    jsonschema:"task, project, or habit"`
 	SourceID string `json:"source_id"`
 	StartISO string `json:"start"     jsonschema:"RFC3339 start time in UTC"`
 	EndISO   string `json:"end"       jsonschema:"RFC3339 end time in UTC"`
@@ -177,7 +183,7 @@ func (c *llmCycle) tools() ([]tool.Tool, error) {
 	listState, err := functiontool.New[listStateArgs, listStateResult](
 		functiontool.Config{
 			Name:        "list_state",
-			Description: "List active projects, active habits, and working-hour windows.",
+			Description: "List open tasks, active projects, active habits, and working-hour windows.",
 		},
 		c.listState,
 	)
@@ -187,7 +193,7 @@ func (c *llmCycle) tools() ([]tool.Tool, error) {
 	findSlots, err := functiontool.New[findFreeSlotsArgs, findFreeSlotsResult](
 		functiontool.Config{
 			Name:        "find_free_slots",
-			Description: "Return candidate free time slots that respect working hours and avoid existing events on the chosen account. The window is implicitly [planning_start, week_end).",
+			Description: "Return candidate free time slots that respect working hours and avoid existing events on every linked account. The window is implicitly the rolling 14-day planning window.",
 		},
 		c.findFreeSlots,
 	)
@@ -211,6 +217,30 @@ func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, 
 	ctx := c.ctx
 	var out listStateResult
 
+	var tasks []models.Task
+	if err := c.p.DB.WithContext(ctx).
+		Where("status IN ?", []models.TaskStatus{models.TaskPending, models.TaskUnschedulable}).
+		Order("COALESCE(deadline, now() + interval '365 days') ASC").
+		Find(&tasks).Error; err != nil {
+		return out, err
+	}
+	for _, task := range tasks {
+		covered, err := sessionMinutes(ctx, c.p.DB, models.SourceTask, task.ID)
+		if err != nil {
+			return out, err
+		}
+		info := taskInfo{
+			ID:               task.ID,
+			Title:            task.Title,
+			Kind:             string(task.Kind),
+			MinutesRemaining: task.DurationMinutes - covered,
+		}
+		if task.Deadline != nil {
+			info.Deadline = task.Deadline.Format(time.RFC3339)
+		}
+		out.Tasks = append(out.Tasks, info)
+	}
+
 	var projects []models.Project
 	if err := c.p.DB.WithContext(ctx).
 		Where("status = ?", models.ProjectActive).
@@ -219,11 +249,17 @@ func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, 
 		return out, err
 	}
 	for _, pj := range projects {
+		// Hours remaining derive from sessions; Project.ScheduledHours is
+		// never written and stays zero.
+		scheduled, err := sessionMinutes(ctx, c.p.DB, models.SourceProject, pj.ID)
+		if err != nil {
+			return out, err
+		}
 		info := projectInfo{
 			ID:             pj.ID,
 			Name:           pj.Name,
 			Kind:           string(pj.Kind),
-			HoursRemaining: pj.TargetHours - pj.ScheduledHours,
+			HoursRemaining: pj.TargetHours - float64(scheduled)/60,
 		}
 		if pj.Deadline != nil {
 			info.Deadline = pj.Deadline.Format(time.RFC3339)
@@ -283,11 +319,10 @@ func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFr
 	if maxResults <= 0 {
 		maxResults = 5
 	}
-	from := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	from, planEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	slots, err := FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone,
 		models.AccountKind(args.AccountKind), models.SlotKind(args.SlotKind),
-		args.DurationMin, from, weekEnd, maxResults)
+		args.DurationMin, from, planEnd, maxResults, nil)
 	if err != nil {
 		return findFreeSlotsResult{}, err
 	}
@@ -305,7 +340,7 @@ func (c *llmCycle) commitFocusBlock(_ tool.Context, args commitFocusBlockArgs) (
 	ctx := c.ctx
 	source := models.SourceKind(args.Source)
 	if !source.Valid() {
-		return commitFocusBlockResult{}, fmt.Errorf("source must be 'project' or 'habit'")
+		return commitFocusBlockResult{}, fmt.Errorf("source must be 'task', 'project', or 'habit'")
 	}
 	start, err := time.Parse(time.RFC3339, args.StartISO)
 	if err != nil {
@@ -318,54 +353,16 @@ func (c *llmCycle) commitFocusBlock(_ tool.Context, args commitFocusBlockArgs) (
 
 	// Enforce the same invariants as the deterministic planner. The LLM
 	// should respect these via the prompt, but tools are the source of truth.
-	planFrom := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	planFrom, planEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	if start.Before(planFrom) {
 		return commitFocusBlockResult{}, fmt.Errorf("start %s is before planning start %s", start, planFrom)
 	}
-	if end.After(weekEnd) {
-		return commitFocusBlockResult{}, fmt.Errorf("end %s is past the current week", end)
+	if end.After(planEnd) {
+		return commitFocusBlockResult{}, fmt.Errorf("end %s is past the planning window end %s", end, planEnd)
 	}
 
-	name, kind, err := c.resolveSource(ctx, source, args.SourceID)
+	sessID, evID, err := c.bw.CommitBlock(ctx, source, args.SourceID, start, end)
 	if err != nil {
-		return commitFocusBlockResult{}, err
-	}
-
-	acct := accountForKind(kind)
-	client, err := c.clientFor(ctx, acct)
-	if err != nil {
-		return commitFocusBlockResult{}, fmt.Errorf("account %s not linked: %w", acct, err)
-	}
-
-	calID := client.Account.PrimaryCalendarID
-	if client.Account.ArtCalendarID != nil && *client.Account.ArtCalendarID != "" {
-		calID = *client.Account.ArtCalendarID
-	}
-	ev, err := client.CreateFocus(ctx, calendar.FocusBlock{
-		CalendarID:  calID,
-		Start:       start,
-		End:         end,
-		Summary:     focusTitle(source, name),
-		Description: focusDescription(source, args.SourceID),
-		Source:      source,
-		SourceID:    args.SourceID,
-	})
-	if err != nil {
-		return commitFocusBlockResult{}, err
-	}
-
-	sess := models.Session{
-		Source:         source,
-		SourceID:       args.SourceID,
-		AccountKind:    client.Account.Kind,
-		CalendarID:     calID,
-		GoogleEventID:  &ev.Id,
-		ScheduledStart: start,
-		ScheduledEnd:   end,
-		Status:         models.SessionPlanned,
-	}
-	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
 		return commitFocusBlockResult{}, err
 	}
 
@@ -374,38 +371,13 @@ func (c *llmCycle) commitFocusBlock(_ tool.Context, args commitFocusBlockArgs) (
 		c.summary["projects_scheduled"] = intVal(c.summary["projects_scheduled"]) + 1
 	case models.SourceHabit:
 		c.summary["habits_scheduled"] = intVal(c.summary["habits_scheduled"]) + 1
-	}
-	return commitFocusBlockResult{SessionID: sess.ID, GoogleEventID: ev.Id}, nil
-}
-
-func (c *llmCycle) resolveSource(ctx context.Context, source models.SourceKind, id string) (string, models.SlotKind, error) {
-	switch source {
-	case models.SourceProject:
-		var pj models.Project
-		if err := c.p.DB.WithContext(ctx).First(&pj, "id = ?", id).Error; err != nil {
-			return "", "", fmt.Errorf("project %s: %w", id, err)
+	case models.SourceTask:
+		c.summary["tasks_scheduled"] = intVal(c.summary["tasks_scheduled"]) + 1
+		if err := markTaskScheduledIfCovered(ctx, c.p.DB, args.SourceID); err != nil {
+			appendErr(c.summary, "task status: "+err.Error())
 		}
-		return pj.Name, pj.Kind, nil
-	case models.SourceHabit:
-		var h models.Habit
-		if err := c.p.DB.WithContext(ctx).First(&h, "id = ?", id).Error; err != nil {
-			return "", "", fmt.Errorf("habit %s: %w", id, err)
-		}
-		return h.Name, h.Kind, nil
 	}
-	return "", "", errors.New("unknown source kind")
-}
-
-func (c *llmCycle) clientFor(ctx context.Context, acct models.AccountKind) (*calendar.Client, error) {
-	if cl, ok := c.clients[acct]; ok {
-		return cl, nil
-	}
-	cl, err := calendar.NewClient(ctx, c.p.OAuth, acct)
-	if err != nil {
-		return nil, err
-	}
-	c.clients[acct] = cl
-	return cl, nil
+	return commitFocusBlockResult{SessionID: sessID, GoogleEventID: evID}, nil
 }
 
 func intVal(v any) int {
