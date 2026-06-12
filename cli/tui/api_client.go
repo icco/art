@@ -193,6 +193,14 @@ type UpcomingBlock struct {
 	Status      string    `json:"status"`
 }
 
+// WorkingHour mirrors the API working-hours resource.
+type WorkingHour struct {
+	SlotKind    string `json:"slot_kind"`
+	DayOfWeek   int    `json:"day_of_week"`
+	StartMinute int    `json:"start_minute"`
+	EndMinute   int    `json:"end_minute"`
+}
+
 // StatusReport is the aggregated /status response.
 type StatusReport struct {
 	Upcoming           []UpcomingBlock `json:"upcoming"`
@@ -269,6 +277,22 @@ func (c *Client) UpdateTask(ctx context.Context, id string, patch map[string]any
 // DeleteTask removes the task with the given id.
 func (c *Client) DeleteTask(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/tasks/"+id, nil, nil)
+}
+
+// ListWorkingHours returns all configured working-hour windows.
+func (c *Client) ListWorkingHours(ctx context.Context) ([]WorkingHour, error) {
+	var out []WorkingHour
+	return out, c.do(ctx, "GET", "/working-hours", nil, &out)
+}
+
+// ReplaceWorkingHours atomically replaces the entire working-hours table;
+// the API is replace-only, so always send the full set.
+func (c *Client) ReplaceWorkingHours(ctx context.Context, hours []WorkingHour) ([]WorkingHour, error) {
+	if hours == nil {
+		hours = []WorkingHour{}
+	}
+	var out []WorkingHour
+	return out, c.do(ctx, "PUT", "/working-hours", hours, &out)
 }
 
 // Status returns the aggregated status report.

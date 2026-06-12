@@ -88,11 +88,50 @@ func (a *App) renderHabits() string {
 	return b.String()
 }
 
+func (a *App) renderTasks() string {
+	if len(a.tasks) == 0 {
+		return "No tasks.  Press 'n' to quick-add one."
+	}
+	var b strings.Builder
+	for i, t := range a.tasks {
+		cursor := "  "
+		if i == a.taskCursor {
+			cursor = "> "
+		}
+		dl := ""
+		if t.Deadline != nil {
+			dl = " by " + t.Deadline.Local().Format("Mon Jan 2")
+		}
+		fmt.Fprintf(&b, "%s[%s] %s %s%s [%s]\n",
+			cursor, taskStatusGlyph(t.Status), t.Title, formatMinutes(t.DurationMinutes), dl, t.Kind)
+	}
+	b.WriteString("\nenter=toggle done  d=delete  n=quick-add")
+	return b.String()
+}
+
+func taskStatusGlyph(status string) string {
+	switch status {
+	case "done":
+		return "x"
+	case "scheduled":
+		return "s"
+	case "unschedulable":
+		return "!"
+	default:
+		return " "
+	}
+}
+
 func (a *App) renderForm() string {
 	var b strings.Builder
 	title := "New project"
-	if a.form.kind == formKindHabit {
+	switch a.form.kind {
+	case formKindHabit:
 		title = "New habit"
+	case formKindQuickAdd:
+		title = "Quick-add task"
+	case formKindHours:
+		title = "Working hours (HH:MM-HH:MM, comma-separate multiple, blank = none)"
 	}
 	fmt.Fprintf(&b, "%s — Tab/Enter to submit, Esc to cancel\n\n", title)
 	for i, f := range a.form.fields {

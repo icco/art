@@ -14,6 +14,8 @@ type (
 	eventsLoadedMsg   []Event
 	projectsLoadedMsg []Project
 	habitsLoadedMsg   []Habit
+	tasksLoadedMsg    []Task
+	hoursLoadedMsg    []WorkingHour
 	statusMsg         string
 	errMsg            struct{ error }
 )
@@ -53,6 +55,56 @@ func (a *App) loadHabits() tea.Cmd {
 			return errMsg{err}
 		}
 		return habitsLoadedMsg(hs)
+	}
+}
+
+func (a *App) loadTasks() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		ts, err := a.client.ListTasks(ctx, "")
+		if err != nil {
+			return errMsg{err}
+		}
+		return tasksLoadedMsg(ts)
+	}
+}
+
+func (a *App) loadHours() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		hs, err := a.client.ListWorkingHours(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return hoursLoadedMsg(hs)
+	}
+}
+
+func (a *App) deleteTask(id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := a.client.DeleteTask(ctx, id); err != nil {
+			return errMsg{err}
+		}
+		return a.loadTasks()()
+	}
+}
+
+func (a *App) toggleTaskDone(t Task) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		next := "done"
+		if t.Status == "done" {
+			next = "pending"
+		}
+		if _, err := a.client.UpdateTask(ctx, t.ID, map[string]any{"status": next}); err != nil {
+			return errMsg{err}
+		}
+		return a.loadTasks()()
 	}
 }
 
@@ -104,6 +156,29 @@ func (a *App) submitForm() tea.Cmd {
 			}
 			a.screen = screenHabits
 			return statusMsg("habit created")
+		case formKindQuickAdd:
+			input := strings.TrimSpace(a.form.fields[0].value)
+			if input == "" {
+				return errMsg{errors.New("task needs a description")}
+			}
+			task, err := a.client.QuickAdd(ctx, input)
+			if err != nil {
+				return errMsg{err}
+			}
+			a.screen = a.prevScreen
+			return tea.Batch(a.loadTasks(), func() tea.Msg {
+				return statusMsg("added: " + formatTask(task))
+			})()
+		case formKindHours:
+			hours, err := parseHoursForm(a.form.fields)
+			if err != nil {
+				return errMsg{err}
+			}
+			if _, err := a.client.ReplaceWorkingHours(ctx, hours); err != nil {
+				return errMsg{err}
+			}
+			a.screen = a.prevScreen
+			return statusMsg("working hours saved")
 		}
 		return statusMsg("")
 	}
