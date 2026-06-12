@@ -6,8 +6,13 @@ import (
 	"github.com/icco/art/lib/models"
 )
 
-// ReplanRun triggers a planner run and returns the resulting AgentRun row.
+// ReplanRun reconciles calendar drift, triggers a planner run, and returns
+// the resulting AgentRun row.
 func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
+	if _, err := h.Planner.Reconcile(r.Context()); err != nil {
+		writeServerError(w, r, "reconcile", err)
+		return
+	}
 	if err := h.Planner.Run(r.Context()); err != nil {
 		writeServerError(w, r, "planner run", err)
 		return

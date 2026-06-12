@@ -73,6 +73,15 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	} else if len(errs) > 0 {
 		log.Warnw("sync had per-account errors", "errors", errs)
 	}
+	// Reconcile between sync and plan so a block freed up by an owner edit
+	// (deleted/moved event, conflicting meeting) is rebooked in this tick.
+	if sum, err := s.Planner.Reconcile(tickCtx); err != nil {
+		log.Errorw("reconcile failed", "err", err)
+	} else if sum != (agent.ReconcileSummary{}) {
+		log.Infow("reconciled drift",
+			"happened", sum.Happened, "moved", sum.Moved,
+			"skipped_deleted", sum.SkippedDeleted, "skipped_conflict", sum.SkippedConflict)
+	}
 	if err := s.Planner.Run(tickCtx); err != nil {
 		log.Errorw("planner failed", "err", err)
 	}
