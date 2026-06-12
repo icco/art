@@ -52,7 +52,7 @@ func (p *Planner) Run(ctx context.Context) error {
 func (p *Planner) runLocked(ctx context.Context) error {
 	model := "deterministic"
 	if p.Cfg.LLMEnabled() {
-		model = p.Cfg.Vertex.Model
+		model = p.Cfg.Vertex.Model + "+sweep"
 	}
 	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: model}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
@@ -65,17 +65,19 @@ func (p *Planner) runLocked(ctx context.Context) error {
 		"tasks_scheduled":    0,
 		"errors":             []string{},
 	}
-	var runErr error
+	// The planners cooperate: the LLM places blocks with judgment first,
+	// then the deterministic pass sweeps the same needs — anything the LLM
+	// missed (or a run that died mid-way) gets placed mechanically, and the
+	// sweep is what marks unfittable tasks unschedulable. Need computation
+	// is net of existing sessions, so the sweep no-ops where the LLM
+	// already did the job. An LLM failure is recorded but never blocks the
+	// sweep.
 	if p.Cfg.LLMEnabled() {
-		runErr = p.llmPlan(ctx, summary)
-		if runErr != nil {
-			appendErr(summary, "llm planner: "+runErr.Error()+" (falling back to deterministic)")
-			runErr = p.deterministicPlan(ctx, summary)
+		if err := p.llmPlan(ctx, summary); err != nil {
+			appendErr(summary, "llm planner: "+err.Error()+" (deterministic sweep still runs)")
 		}
-	} else {
-		runErr = p.deterministicPlan(ctx, summary)
 	}
-	return p.finish(ctx, run.ID, summary, runErr)
+	return p.finish(ctx, run.ID, summary, p.deterministicPlan(ctx, summary))
 }
 
 func (p *Planner) finish(ctx context.Context, id string, summary map[string]any, runErr error) error {

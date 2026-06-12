@@ -37,9 +37,10 @@ const minSyncFutureDays = 14
 // PlannerMode selects which planning engine the cron and replan paths use.
 type PlannerMode string
 
-// Planner modes. llm (the default) plans with Vertex Gemini and falls back
-// to deterministic on failure; deterministic skips the LLM entirely. Vertex
-// credentials are required at boot either way.
+// Planner modes. llm (the default) has Vertex Gemini place blocks first and
+// then runs the deterministic planner as a sweep over whatever is left;
+// deterministic skips the LLM entirely. Vertex credentials are required at
+// boot either way.
 const (
 	PlannerDeterministic PlannerMode = "deterministic"
 	PlannerLLM           PlannerMode = "llm"

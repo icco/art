@@ -47,9 +47,13 @@ reconcile → plan**:
   every placement, and absence-style all-day events (OOO/vacation/PTO)
   block their whole day.
 
-The ADK/Gemini planner (`ART_PLANNER=llm`, the default) plans via Vertex
-and falls back to the deterministic Go planner on failure; set
-`ART_PLANNER=deterministic` to skip the LLM entirely. Vertex credentials
+The two planners cooperate. With `ART_PLANNER=llm` (the default) the
+ADK/Gemini planner places blocks first, then the deterministic Go planner
+sweeps the same needs — anything the LLM missed, or a run that failed
+mid-way, gets placed mechanically, and the sweep is what marks unfittable
+tasks `unschedulable`. Need computation is net of existing sessions, so
+the sweep no-ops where the LLM already did the job.
+`ART_PLANNER=deterministic` skips the LLM entirely. Vertex credentials
 (`VERTEX_PROJECT_ID`, optionally `VERTEX_MODEL`) are required at boot
 either way.
 
