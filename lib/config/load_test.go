@@ -101,6 +101,8 @@ func setRequiredEnv(t *testing.T) {
 	_ = os.Unsetenv("VERTEX_MODEL")
 	_ = os.Unsetenv("ART_PLANNER")
 	_ = os.Unsetenv("ART_CRON_INTERVAL")
+	_ = os.Unsetenv("ART_SYNC_PAST_DAYS")
+	_ = os.Unsetenv("ART_SYNC_FUTURE_DAYS")
 }
 
 func TestLoadWithoutVertex(t *testing.T) {
@@ -169,6 +171,38 @@ func TestLoadCronInterval(t *testing.T) {
 	t.Setenv("ART_CRON_INTERVAL", "sometimes")
 	if _, err := Load(); err == nil {
 		t.Fatal("invalid ART_CRON_INTERVAL should fail")
+	}
+}
+
+func TestLoadSyncWindows(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.SyncPastDays != 365 || cfg.SyncFutureDays != 60 {
+		t.Fatalf("defaults: past=%d future=%d", cfg.SyncPastDays, cfg.SyncFutureDays)
+	}
+
+	t.Setenv("ART_SYNC_PAST_DAYS", "30")
+	t.Setenv("ART_SYNC_FUTURE_DAYS", "21")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load with overrides: %v", err)
+	}
+	if cfg.SyncPastDays != 30 || cfg.SyncFutureDays != 21 {
+		t.Fatalf("overrides: past=%d future=%d", cfg.SyncPastDays, cfg.SyncFutureDays)
+	}
+
+	// The planner books 14 days out; syncing less than that would leave the
+	// planner blind to busy time it schedules around.
+	t.Setenv("ART_SYNC_FUTURE_DAYS", "7")
+	if _, err := Load(); err == nil {
+		t.Fatal("future window below the planning horizon should fail")
+	}
+	t.Setenv("ART_SYNC_FUTURE_DAYS", "x")
+	if _, err := Load(); err == nil {
+		t.Fatal("non-numeric ART_SYNC_FUTURE_DAYS should fail")
 	}
 }
 

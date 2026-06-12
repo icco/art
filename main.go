@@ -56,7 +56,12 @@ func run(log *zap.SugaredLogger) error {
 	oauthStore := &oauth.Store{DB: gdb, Sealer: sealer}
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
 
-	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow}
+	syncRunner := &calendar.Runner{
+		DB:     gdb,
+		OAuth:  oauthFlow,
+		Past:   time.Duration(cfg.SyncPastDays) * 24 * time.Hour,
+		Future: time.Duration(cfg.SyncFutureDays) * 24 * time.Hour,
+	}
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
 	h := &handlers.Handlers{

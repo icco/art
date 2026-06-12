@@ -3,16 +3,20 @@ package calendar
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
 	"gorm.io/gorm"
 )
 
-// Runner executes calendar syncs for all configured accounts.
+// Runner executes calendar syncs for all configured accounts. Past/Future
+// bound full syncs; zero values use the package defaults.
 type Runner struct {
-	DB    *gorm.DB
-	OAuth *oauth.Flow
+	DB     *gorm.DB
+	OAuth  *oauth.Flow
+	Past   time.Duration
+	Future time.Duration
 }
 
 // RunAll skips unlinked accounts silently and returns per-account errors in the map.
@@ -27,7 +31,7 @@ func (r *Runner) RunAll(ctx context.Context) (map[string]string, error) {
 			results[string(kind)] = err.Error()
 			continue
 		}
-		syncer := &Syncer{Client: client, DB: r.DB}
+		syncer := &Syncer{Client: client, DB: r.DB, Past: r.Past, Future: r.Future}
 		if err := syncer.Run(ctx); err != nil {
 			results[string(kind)] = err.Error()
 		}

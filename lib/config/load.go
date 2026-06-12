@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -24,7 +25,14 @@ type Config struct {
 	CredentialsEnv string
 	Planner        PlannerMode
 	CronInterval   time.Duration
+	SyncPastDays   int
+	SyncFutureDays int
 }
+
+// minSyncFutureDays is the planner's 14-day horizon: syncing fewer future
+// days would leave the planner blind to busy time it schedules around.
+// (Mirrors agent.PlanHorizon; config can't import agent.)
+const minSyncFutureDays = 14
 
 // PlannerMode selects which planning engine the cron and replan paths use.
 type PlannerMode string
@@ -75,6 +83,16 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid ART_CRON_INTERVAL: %w", err)
 	}
 	c.CronInterval = interval
+
+	if c.SyncPastDays, err = envDays("ART_SYNC_PAST_DAYS", 365); err != nil {
+		return nil, err
+	}
+	if c.SyncFutureDays, err = envDays("ART_SYNC_FUTURE_DAYS", 60); err != nil {
+		return nil, err
+	}
+	if c.SyncFutureDays < minSyncFutureDays {
+		return nil, fmt.Errorf("ART_SYNC_FUTURE_DAYS must be >= %d (the planning horizon)", minSyncFutureDays)
+	}
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {
 		e = strings.TrimSpace(strings.ToLower(e))
@@ -141,6 +159,18 @@ func (c *Config) LLMEnabled() bool {
 // OwnerAllowed reports whether email is in the configured OwnerEmails list.
 func (c *Config) OwnerAllowed(email string) bool {
 	return slices.Contains(c.OwnerEmails, strings.ToLower(strings.TrimSpace(email)))
+}
+
+func envDays(key string, def int) (int, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer, got %q", key, raw)
+	}
+	return n, nil
 }
 
 func envOr(key, def string) string {
