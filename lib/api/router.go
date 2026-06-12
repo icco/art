@@ -62,6 +62,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Put("/working-hours", d.H.WorkingHoursReplace)
 		r.Get("/events", d.H.EventsList)
 		r.Get("/sessions", d.H.SessionsList)
+		r.Get("/status", d.H.Status)
 		r.Post("/sync", d.H.SyncRun)
 		r.Post("/replan", d.H.ReplanRun)
 	})
