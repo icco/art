@@ -16,22 +16,28 @@ const runOnceTimeout = 30 * time.Minute
 
 // Scheduler ticks the calendar sync and planner on a fixed interval.
 type Scheduler struct {
-	Sync    *calendar.Runner
-	Planner *agent.Planner
+	Sync     *calendar.Runner
+	Planner  *agent.Planner
+	Interval time.Duration
 
 	tick *time.Ticker
 	stop chan struct{}
 	wg   sync.WaitGroup
 }
 
-// New returns a Scheduler ready to be Start()ed.
-func New(sync *calendar.Runner, planner *agent.Planner) *Scheduler {
-	return &Scheduler{Sync: sync, Planner: planner, stop: make(chan struct{})}
+// New returns a Scheduler ready to be Start()ed. A non-positive interval
+// falls back to hourly.
+func New(sync *calendar.Runner, planner *agent.Planner, interval time.Duration) *Scheduler {
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	return &Scheduler{Sync: sync, Planner: planner, Interval: interval, stop: make(chan struct{})}
 }
 
-// Start runs sync + planner once, then hourly until ctx is cancelled.
+// Start runs sync + planner once, then on every interval tick until ctx is
+// cancelled.
 func (s *Scheduler) Start(ctx context.Context) {
-	s.tick = time.NewTicker(time.Hour)
+	s.tick = time.NewTicker(s.Interval)
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()

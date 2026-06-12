@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEnvOr(t *testing.T) {
@@ -85,6 +86,89 @@ func TestLoadValidate(t *testing.T) {
 	}
 	if cfg.Vertex.Location == "" {
 		t.Fatal("Vertex location default missing")
+	}
+}
+
+func setRequiredEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("DATABASE_URL", "postgres://localhost/x")
+	t.Setenv("OWNER_EMAILS", "you@example.com")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "cid")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "csec")
+	t.Setenv("TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("OIDC_AUDIENCE", "aud")
+	_ = os.Unsetenv("VERTEX_PROJECT_ID")
+	_ = os.Unsetenv("VERTEX_MODEL")
+	_ = os.Unsetenv("ART_PLANNER")
+	_ = os.Unsetenv("ART_CRON_INTERVAL")
+}
+
+func TestLoadWithoutVertex(t *testing.T) {
+	setRequiredEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load without VERTEX_PROJECT_ID should succeed: %v", err)
+	}
+	if cfg.Planner != PlannerDeterministic {
+		t.Fatalf("default planner: got %q, want %q", cfg.Planner, PlannerDeterministic)
+	}
+	if cfg.Vertex.Model != "gemini-3.1-pro" {
+		t.Fatalf("default model: got %q", cfg.Vertex.Model)
+	}
+	if cfg.CronInterval != time.Hour {
+		t.Fatalf("default cron interval: got %v", cfg.CronInterval)
+	}
+}
+
+func TestLoadLLMPlannerRequiresVertex(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ART_PLANNER", "llm")
+	if _, err := Load(); err == nil {
+		t.Fatal("ART_PLANNER=llm without VERTEX_PROJECT_ID should fail")
+	}
+	t.Setenv("VERTEX_PROJECT_ID", "proj")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("ART_PLANNER=llm with VERTEX_PROJECT_ID: %v", err)
+	}
+	if cfg.Planner != PlannerLLM {
+		t.Fatalf("planner: got %q, want %q", cfg.Planner, PlannerLLM)
+	}
+}
+
+func TestLoadPlannerInvalid(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ART_PLANNER", "psychic")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid ART_PLANNER should fail")
+	}
+}
+
+func TestLoadVertexModelOverride(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("VERTEX_MODEL", "gemini-4.0-flash")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Vertex.Model != "gemini-4.0-flash" {
+		t.Fatalf("model override: got %q", cfg.Vertex.Model)
+	}
+}
+
+func TestLoadCronInterval(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ART_CRON_INTERVAL", "30m")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.CronInterval != 30*time.Minute {
+		t.Fatalf("cron interval: got %v", cfg.CronInterval)
+	}
+	t.Setenv("ART_CRON_INTERVAL", "sometimes")
+	if _, err := Load(); err == nil {
+		t.Fatal("invalid ART_CRON_INTERVAL should fail")
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	adkagent "google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
@@ -41,7 +40,7 @@ type llmCycle struct {
 func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 	cycle := &llmCycle{p: p, ctx: ctx, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
 
-	model, err := gemini.NewModel(ctx, config.VertexModel, &genai.ClientConfig{
+	model, err := gemini.NewModel(ctx, p.Cfg.Vertex.Model, &genai.ClientConfig{
 		Project:  p.Cfg.Vertex.ProjectID,
 		Location: p.Cfg.Vertex.Location,
 		Backend:  genai.BackendVertexAI,

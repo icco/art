@@ -24,7 +24,11 @@ type Planner struct {
 
 // Run executes a single planner pass and records the result as an AgentRun row.
 func (p *Planner) Run(ctx context.Context) error {
-	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: config.VertexModel}
+	model := "deterministic"
+	if p.Cfg.LLMEnabled() {
+		model = p.Cfg.Vertex.Model
+	}
+	run := models.AgentRun{StartedAt: time.Now(), Status: models.AgentRunRunning, Model: model}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
 	}
