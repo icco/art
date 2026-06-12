@@ -37,8 +37,9 @@ const minSyncFutureDays = 14
 // PlannerMode selects which planning engine the cron and replan paths use.
 type PlannerMode string
 
-// Planner modes. Deterministic needs no external services; llm requires
-// Vertex AI credentials and falls back to deterministic on failure.
+// Planner modes. llm (the default) plans with Vertex Gemini and falls back
+// to deterministic on failure; deterministic skips the LLM entirely. Vertex
+// credentials are required at boot either way.
 const (
 	PlannerDeterministic PlannerMode = "deterministic"
 	PlannerLLM           PlannerMode = "llm"
@@ -75,7 +76,7 @@ func Load() (*Config, error) {
 			Location:  envOr("VERTEX_LOCATION", "us-central1"),
 			Model:     envOr("VERTEX_MODEL", "gemini-3.1-pro"),
 		},
-		Planner: PlannerMode(envOr("ART_PLANNER", string(PlannerDeterministic))),
+		Planner: PlannerMode(envOr("ART_PLANNER", string(PlannerLLM))),
 	}
 
 	interval, err := time.ParseDuration(envOr("ART_CRON_INTERVAL", "1h"))
@@ -130,6 +131,9 @@ func (c *Config) validate() error {
 	if c.OAuth.ClientSecret == "" {
 		missing = append(missing, "GOOGLE_OAUTH_CLIENT_SECRET")
 	}
+	if c.Vertex.ProjectID == "" {
+		missing = append(missing, "VERTEX_PROJECT_ID")
+	}
 	if len(c.TokenEncKey) == 0 {
 		missing = append(missing, "TOKEN_ENCRYPTION_KEY")
 	}
@@ -140,11 +144,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))
 	}
 	switch c.Planner {
-	case PlannerDeterministic:
-	case PlannerLLM:
-		if c.Vertex.ProjectID == "" {
-			return errors.New("ART_PLANNER=llm requires VERTEX_PROJECT_ID")
-		}
+	case PlannerDeterministic, PlannerLLM:
 	default:
 		return fmt.Errorf("invalid ART_PLANNER %q (want %q or %q)", c.Planner, PlannerDeterministic, PlannerLLM)
 	}

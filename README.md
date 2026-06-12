@@ -47,10 +47,11 @@ reconcile → plan**:
   every placement, and absence-style all-day events (OOO/vacation/PTO)
   block their whole day.
 
-The planner is deterministic Go by default and needs no GCP credentials.
-Set `ART_PLANNER=llm` (+ `VERTEX_PROJECT_ID`, optionally `VERTEX_MODEL`)
-to use the ADK/Gemini planner instead; it falls back to deterministic on
-failure.
+The ADK/Gemini planner (`ART_PLANNER=llm`, the default) plans via Vertex
+and falls back to the deterministic Go planner on failure; set
+`ART_PLANNER=deterministic` to skip the LLM entirely. Vertex credentials
+(`VERTEX_PROJECT_ID`, optionally `VERTEX_MODEL`) are required at boot
+either way.
 
 ## Setup
 

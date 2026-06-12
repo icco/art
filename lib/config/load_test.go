@@ -97,7 +97,7 @@ func setRequiredEnv(t *testing.T) {
 	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "csec")
 	t.Setenv("TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	t.Setenv("OIDC_AUDIENCE", "aud")
-	_ = os.Unsetenv("VERTEX_PROJECT_ID")
+	t.Setenv("VERTEX_PROJECT_ID", "proj")
 	_ = os.Unsetenv("VERTEX_MODEL")
 	_ = os.Unsetenv("ART_PLANNER")
 	_ = os.Unsetenv("ART_CRON_INTERVAL")
@@ -105,14 +105,14 @@ func setRequiredEnv(t *testing.T) {
 	_ = os.Unsetenv("ART_SYNC_FUTURE_DAYS")
 }
 
-func TestLoadWithoutVertex(t *testing.T) {
+func TestLoadDefaults(t *testing.T) {
 	setRequiredEnv(t)
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("Load without VERTEX_PROJECT_ID should succeed: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Planner != PlannerDeterministic {
-		t.Fatalf("default planner: got %q, want %q", cfg.Planner, PlannerDeterministic)
+	if cfg.Planner != PlannerLLM {
+		t.Fatalf("default planner: got %q, want %q", cfg.Planner, PlannerLLM)
 	}
 	if cfg.Vertex.Model != "gemini-3.1-pro" {
 		t.Fatalf("default model: got %q", cfg.Vertex.Model)
@@ -122,19 +122,28 @@ func TestLoadWithoutVertex(t *testing.T) {
 	}
 }
 
-func TestLoadLLMPlannerRequiresVertex(t *testing.T) {
+// GCP is a hard boot requirement, regardless of planner mode.
+func TestLoadRequiresVertex(t *testing.T) {
 	setRequiredEnv(t)
-	t.Setenv("ART_PLANNER", "llm")
-	if _, err := Load(); err == nil {
-		t.Fatal("ART_PLANNER=llm without VERTEX_PROJECT_ID should fail")
+	_ = os.Unsetenv("VERTEX_PROJECT_ID")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "VERTEX_PROJECT_ID") {
+		t.Fatalf("boot without VERTEX_PROJECT_ID should fail naming it, got: %v", err)
 	}
-	t.Setenv("VERTEX_PROJECT_ID", "proj")
+	t.Setenv("ART_PLANNER", "deterministic")
+	if _, err := Load(); err == nil {
+		t.Fatal("deterministic mode still requires VERTEX_PROJECT_ID to boot")
+	}
+}
+
+func TestLoadDeterministicPlannerOptIn(t *testing.T) {
+	setRequiredEnv(t)
+	t.Setenv("ART_PLANNER", "deterministic")
 	cfg, err := Load()
 	if err != nil {
-		t.Fatalf("ART_PLANNER=llm with VERTEX_PROJECT_ID: %v", err)
+		t.Fatalf("Load: %v", err)
 	}
-	if cfg.Planner != PlannerLLM {
-		t.Fatalf("planner: got %q, want %q", cfg.Planner, PlannerLLM)
+	if cfg.Planner != PlannerDeterministic || cfg.LLMEnabled() {
+		t.Fatalf("planner: got %q (llm=%v), want explicit deterministic", cfg.Planner, cfg.LLMEnabled())
 	}
 }
 
