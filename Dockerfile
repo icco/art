@@ -12,7 +12,7 @@ COPY . .
 RUN go build -ldflags="-s -w" -o /server .
 
 # Final stage
-FROM alpine:3.23
+FROM alpine:3.24
 
 LABEL org.opencontainers.image.source=https://github.com/icco/art
 LABEL org.opencontainers.image.description="A service for managing calendars."
