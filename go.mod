@@ -16,7 +16,7 @@ require (
 	google.golang.org/genai v1.60.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
-	gorm.io/gorm v1.31.1
+	gorm.io/gorm v1.31.2
 	moul.io/zapgorm2 v1.3.0
 )
 
