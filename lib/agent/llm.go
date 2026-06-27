@@ -30,7 +30,7 @@ var systemInstruction string
 // the DB, write to the agent's calendar, and append per-item errors / counts
 // to the summary that gets persisted on the agent_runs row.
 //
-// ctx is the parent context; tool.Context does not carry one.
+// ctx is the parent context; agent.ToolContext does not carry one.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
@@ -208,7 +208,7 @@ func (c *llmCycle) tools() ([]tool.Tool, error) {
 	return []tool.Tool{listState, findSlots, commit}, nil
 }
 
-func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, error) {
+func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listStateResult, error) {
 	ctx := c.ctx
 	var out listStateResult
 
@@ -272,7 +272,7 @@ func (c *llmCycle) listState(_ tool.Context, _ listStateArgs) (listStateResult, 
 	return out, nil
 }
 
-func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFreeSlotsResult, error) {
+func (c *llmCycle) findFreeSlots(_ adkagent.ToolContext, args findFreeSlotsArgs) (findFreeSlotsResult, error) {
 	ctx := c.ctx
 	if !models.AccountKind(args.AccountKind).Valid() {
 		return findFreeSlotsResult{}, fmt.Errorf("account_kind must be 'personal' or 'work'")
@@ -302,7 +302,7 @@ func (c *llmCycle) findFreeSlots(_ tool.Context, args findFreeSlotsArgs) (findFr
 	return out, nil
 }
 
-func (c *llmCycle) commitFocusBlock(_ tool.Context, args commitFocusBlockArgs) (commitFocusBlockResult, error) {
+func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBlockArgs) (commitFocusBlockResult, error) {
 	ctx := c.ctx
 	source := models.SourceKind(args.Source)
 	if !source.Valid() {
