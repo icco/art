@@ -13,7 +13,7 @@ require (
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/adk v1.4.0
 	google.golang.org/api v0.286.0
-	google.golang.org/genai v1.60.0
+	google.golang.org/genai v1.62.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.2
