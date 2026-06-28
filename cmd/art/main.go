@@ -9,7 +9,14 @@ import (
 	"github.com/icco/art/cli/tui"
 )
 
+// Version is set by goreleaser via -ldflags at build time.
+var Version = "dev"
+
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "--version" || os.Args[1] == "-v") {
+		fmt.Println(Version)
+		return
+	}
 	cfg, err := tui.LoadConfig()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)

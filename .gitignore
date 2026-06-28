@@ -32,6 +32,7 @@ vertex-sa.json
 
 # Build output
 bin/
+dist/
 
 # Editor/IDE
 .idea/
