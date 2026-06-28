@@ -27,6 +27,8 @@ func newRouter(h *handlers.Handlers) http.Handler {
 	r.Put("/working-hours", h.WorkingHoursReplace)
 	r.Get("/events", h.EventsList)
 	r.Get("/sessions", h.SessionsList)
+	r.Get("/emails", h.EmailsList)
+	r.Post("/triage/run", h.TriageRun)
 	return r
 }
 

@@ -54,9 +54,10 @@ func NewClassifier(ctx context.Context, cfg *config.Config, corrections string) 
 	return &Classifier{client: client, model: config.VertexModel, corrections: corrections}, nil
 }
 
-// TokensIn and TokensOut report cumulative token usage across all Classify
-// calls, for the agent_runs row.
-func (c *Classifier) TokensIn() int  { return c.tokensIn }
+// TokensIn reports cumulative prompt tokens across all Classify calls.
+func (c *Classifier) TokensIn() int { return c.tokensIn }
+
+// TokensOut reports cumulative output tokens across all Classify calls.
 func (c *Classifier) TokensOut() int { return c.tokensOut }
 
 // Classify returns the model's triage decision for a single message.

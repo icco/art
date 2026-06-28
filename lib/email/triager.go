@@ -16,7 +16,7 @@ import (
 // tests substitute a fake without touching the Google API.
 type Gmailer interface {
 	EnsureLabels(ctx context.Context) (map[string]string, error)
-	FetchMessageIDs(ctx context.Context, query string, max int) ([]string, error)
+	FetchMessageIDs(ctx context.Context, query string, limit int) ([]string, error)
 	GetMessage(ctx context.Context, id string) (*gmail.Message, error)
 	ModifyLabels(ctx context.Context, msgID string, add, remove []string) error
 	CreateDraft(ctx context.Context, in gmail.DraftInput) (string, error)

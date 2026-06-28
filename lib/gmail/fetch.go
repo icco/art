@@ -31,12 +31,12 @@ type Message struct {
 // FetchMessageIDs returns up to max message IDs matching the Gmail search
 // query (e.g. "in:inbox -label:Art/Triaged newer_than:14d"), following
 // pagination as needed.
-func (c *Client) FetchMessageIDs(ctx context.Context, query string, max int) ([]string, error) {
+func (c *Client) FetchMessageIDs(ctx context.Context, query string, limit int) ([]string, error) {
 	var ids []string
 	pageToken := ""
-	for len(ids) < max {
+	for len(ids) < limit {
 		call := c.Service.Users.Messages.List(User).Q(query).Context(ctx)
-		remaining := min(int64(max-len(ids)), 500)
+		remaining := min(int64(limit-len(ids)), 500)
 		call = call.MaxResults(remaining)
 		if pageToken != "" {
 			call = call.PageToken(pageToken)
@@ -53,8 +53,8 @@ func (c *Client) FetchMessageIDs(ctx context.Context, query string, max int) ([]
 		}
 		pageToken = resp.NextPageToken
 	}
-	if len(ids) > max {
-		ids = ids[:max]
+	if len(ids) > limit {
+		ids = ids[:limit]
 	}
 	return ids, nil
 }

@@ -90,13 +90,13 @@ func detectReversal(ctx context.Context, gm reconcileGmailer, row *models.EmailM
 // buildCorrections renders recently-detected reversals into a prompt block the
 // classifier appends to its system instruction. Bounded to the most recent
 // `max` reversals.
-func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, max int) (string, error) {
+func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, limit int) (string, error) {
 	cutoff := time.Now().AddDate(0, 0, -withinDays)
 	var rows []models.EmailMessage
 	if err := db.WithContext(ctx).
 		Where("reversed AND reconciled_at >= ?", cutoff).
 		Order("reconciled_at DESC").
-		Limit(max).
+		Limit(limit).
 		Find(&rows).Error; err != nil {
 		return "", err
 	}
