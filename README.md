@@ -68,24 +68,12 @@ Gmail uses the `gmail.modify` **restricted scope**, so:
 
 ## Security
 
-**The CLI is safe to distribute.** It ships no secrets — it mints a Google ID
-token for *whoever runs it* and sends it as a bearer token. The server enforces
-the token audience (`OIDC_AUDIENCE`) and rejects any email not in `OWNER_EMAILS`,
-so anyone else just gets `403`. Every request is also rate-limited per client IP
-(`RATE_LIMIT_RPM`, default 120) and gets security headers; a **verified**,
-allow-listed email is required for all data endpoints.
-
-`/`, `/healthz`, `/oauth/callback`, and `/metrics` are public — restrict
-`/metrics` at your reverse-proxy edge.
-
-**Deployment checklist:**
-
-1. Keep secrets out of git (`TOKEN_ENCRYPTION_KEY`, `GOOGLE_OAUTH_CLIENT_SECRET`,
-   DB password) — use a secret manager or an untracked `.env`. If any were ever
-   committed, rotate them. Rotating `TOKEN_ENCRYPTION_KEY` invalidates stored
-   refresh tokens, so re-link both accounts afterward.
-2. Restrict `/metrics` at the proxy (scraper / LAN only).
-3. Keep Postgres off the public internet; prefer `sslmode=require` across hosts.
+The CLI is safe to distribute — it ships no secrets, minting a Google ID token
+for *whoever runs it*. The server enforces the token audience (`OIDC_AUDIENCE`)
+and only serves emails in `OWNER_EMAILS`; anyone else gets `403`. Requests are
+rate-limited per client IP (`RATE_LIMIT_RPM`, default 120), and a verified,
+allow-listed email is required for all data endpoints. `/`, `/healthz`,
+`/oauth/callback`, and `/metrics` are unauthenticated.
 
 ## Out of scope for v1
 
