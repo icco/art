@@ -40,9 +40,10 @@ func TestEmailsList(t *testing.T) {
 	h := &handlers.Handlers{DB: db}
 	r := newRouter(h)
 
+	const runID = "00000000-0000-0000-0000-000000000001"
 	rows := []models.EmailMessage{
-		{AccountKind: models.AccountWork, GmailMessageID: "w1", Subject: "work", Category: models.EmailArchive, Action: models.ActionArchived},
-		{AccountKind: models.AccountPersonal, GmailMessageID: "p1", Subject: "personal", Category: models.EmailReply, Action: models.ActionReply},
+		{RunID: runID, AccountKind: models.AccountWork, GmailMessageID: "w1", Subject: "work", Category: models.EmailArchive, Action: models.ActionArchived},
+		{RunID: runID, AccountKind: models.AccountPersonal, GmailMessageID: "p1", Subject: "personal", Category: models.EmailReply, Action: models.ActionReply},
 	}
 	if err := db.Create(&rows).Error; err != nil {
 		t.Fatal(err)
