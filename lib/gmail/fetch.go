@@ -24,6 +24,8 @@ type Message struct {
 	Body       string
 	ReceivedAt time.Time
 	LabelIDs   []string
+	// MessageIDHeader is the RFC822 Message-ID, used to thread draft replies.
+	MessageIDHeader string
 }
 
 // FetchMessageIDs returns up to max message IDs matching the Gmail search
@@ -83,6 +85,8 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
 				out.To = h.Value
 			case "subject":
 				out.Subject = h.Value
+			case "message-id":
+				out.MessageIDHeader = h.Value
 			}
 		}
 		out.Body = extractBody(m.Payload)
