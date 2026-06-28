@@ -88,6 +88,52 @@ func (a *App) renderHabits() string {
 	return b.String()
 }
 
+func (a *App) renderDigest() string {
+	if len(a.emails) == 0 {
+		return "No triaged mail.  Press 't' to run triage."
+	}
+	var b strings.Builder
+	for i, e := range a.emails {
+		cursor := "  "
+		if i == a.emailCursor {
+			cursor = "> "
+		}
+		acct := personalStyle
+		if e.AccountKind == "work" {
+			acct = workStyle
+		}
+		from := e.From
+		if len(from) > 28 {
+			from = from[:28]
+		}
+		line := fmt.Sprintf("%s%-6s %-28s %s", cursor, actionTag(e), from, e.Subject)
+		b.WriteString(acct.Render(line))
+		b.WriteString("\n")
+		if i == a.emailCursor && e.Summary != "" {
+			fmt.Fprintf(&b, "      %s\n", lipgloss.NewStyle().Faint(true).Render(e.Summary))
+		}
+	}
+	return b.String()
+}
+
+// actionTag renders a short, color-coded tag for what art did to a message.
+func actionTag(e Email) string {
+	tag := e.Action
+	if e.Reversed {
+		tag = "↶" + tag
+	} else if !e.Applied {
+		tag = "~" + tag // proposed only (dry run)
+	}
+	style := personalStyle
+	switch e.Action {
+	case "archived":
+		style = lipgloss.NewStyle().Faint(true)
+	case "reply", "thinking":
+		style = focusStyle
+	}
+	return style.Render(fmt.Sprintf("%-7s", tag))
+}
+
 func (a *App) renderForm() string {
 	var b strings.Builder
 	title := "New project"

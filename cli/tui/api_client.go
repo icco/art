@@ -168,6 +168,20 @@ type AgentRun struct {
 	Error   string          `json:"error"`
 }
 
+// Email mirrors the API triaged-message resource.
+type Email struct {
+	ID          string    `json:"id"`
+	AccountKind string    `json:"account_kind"`
+	From        string    `json:"from"`
+	Subject     string    `json:"subject"`
+	Summary     string    `json:"summary"`
+	Category    string    `json:"category"`
+	Action      string    `json:"action"`
+	Applied     bool      `json:"applied"`
+	Reversed    bool      `json:"reversed"`
+	ReceivedAt  time.Time `json:"received_at"`
+}
+
 // ListProjects returns all projects visible to the caller.
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project
@@ -218,4 +232,15 @@ func (c *Client) Replan(ctx context.Context) (AgentRun, error) {
 // Sync triggers a sync of upstream calendars on the server.
 func (c *Client) Sync(ctx context.Context) error {
 	return c.do(ctx, "POST", "/sync", nil, nil)
+}
+
+// ListEmails returns recently triaged messages, newest first.
+func (c *Client) ListEmails(ctx context.Context) ([]Email, error) {
+	var out []Email
+	return out, c.do(ctx, "GET", "/emails?limit=200", nil, &out)
+}
+
+// Triage triggers an email-triage pass on the server.
+func (c *Client) Triage(ctx context.Context) error {
+	return c.do(ctx, "POST", "/triage/run", nil, nil)
 }

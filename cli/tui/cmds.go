@@ -14,6 +14,7 @@ type (
 	eventsLoadedMsg   []Event
 	projectsLoadedMsg []Project
 	habitsLoadedMsg   []Habit
+	emailsLoadedMsg   []Email
 	statusMsg         string
 	errMsg            struct{ error }
 )
@@ -53,6 +54,29 @@ func (a *App) loadHabits() tea.Cmd {
 			return errMsg{err}
 		}
 		return habitsLoadedMsg(hs)
+	}
+}
+
+func (a *App) loadEmails() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		es, err := a.client.ListEmails(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return emailsLoadedMsg(es)
+	}
+}
+
+func (a *App) triage() tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := a.client.Triage(ctx); err != nil {
+			return errMsg{err}
+		}
+		return statusMsg("triage done")
 	}
 }
 

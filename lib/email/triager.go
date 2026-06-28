@@ -21,11 +21,17 @@ type Gmailer interface {
 	CreateDraft(ctx context.Context, in gmail.DraftInput) (string, error)
 }
 
+// messageClassifier is the classifier behaviour the triager depends on; *Classifier
+// satisfies it, and tests substitute a fake to avoid calling Gemini.
+type messageClassifier interface {
+	Classify(ctx context.Context, m *gmail.Message) (Classification, error)
+}
+
 // Triager classifies and acts on one account's inbox, recording an audit row
 // per message.
 type Triager struct {
 	DB                  *gorm.DB
-	Classifier          *Classifier
+	Classifier          messageClassifier
 	BackfillDays        int
 	MaxPerRun           int
 	ConfidenceThreshold float64
