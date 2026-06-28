@@ -13,13 +13,19 @@ import (
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/gmail/v1"
 	oauthv2 "google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
 )
 
 // Scopes is the set of Google OAuth scopes art requests at account linking.
+//
+// gmail.GmailModifyScope is a Google "restricted" scope: it allows reading,
+// changing labels (archive), and creating drafts, but never sending or
+// permanent deletion. Adding it forces re-consent on every linked account.
 var Scopes = []string{
 	calendar.CalendarScope,
+	gmail.GmailModifyScope,
 	"openid",
 	"https://www.googleapis.com/auth/userinfo.email",
 	"https://www.googleapis.com/auth/userinfo.profile",
