@@ -3,6 +3,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -16,6 +17,10 @@ type idCtxKey struct{}
 type Identity struct {
 	Email string
 }
+
+// errNotAuthorized is returned by authorize when a validated token's claims do
+// not grant access. It maps to a 403 with a generic message (no claim echo).
+var errNotAuthorized = errors.New("not authorized")
 
 // OIDCMiddleware verifies the Google ID token and gates on OWNER_EMAILS.
 func OIDCMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
@@ -32,14 +37,42 @@ func OIDCMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				http.Error(w, "invalid id token", http.StatusUnauthorized)
 				return
 			}
-			email, _ := payload.Claims["email"].(string)
-			if email == "" || !cfg.OwnerAllowed(email) {
+			id, err := authorize(payload, cfg)
+			if err != nil {
 				http.Error(w, "not authorized", http.StatusForbidden)
 				return
 			}
-			ctx := context.WithValue(r.Context(), idCtxKey{}, Identity{Email: email})
+			ctx := context.WithValue(r.Context(), idCtxKey{}, id)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
+	}
+}
+
+// authorize maps a validated ID token's claims to an Identity. It requires a
+// verified email that is on the owner allow-list. It is pure (no I/O) so the
+// authorization policy can be unit-tested without minting real Google tokens.
+func authorize(payload *idtoken.Payload, cfg *config.Config) (Identity, error) {
+	if payload == nil || !emailVerified(payload.Claims) {
+		return Identity{}, errNotAuthorized
+	}
+	email, _ := payload.Claims["email"].(string)
+	if email == "" || !cfg.OwnerAllowed(email) {
+		return Identity{}, errNotAuthorized
+	}
+	return Identity{Email: email}, nil
+}
+
+// emailVerified reports whether the token asserts a verified email. Google ID
+// tokens encode the claim as a bool; some issuers use the string "true". Any
+// other value (including absent) is treated as unverified.
+func emailVerified(claims map[string]any) bool {
+	switch v := claims["email_verified"].(type) {
+	case bool:
+		return v
+	case string:
+		return v == "true"
+	default:
+		return false
 	}
 }
 
