@@ -7,6 +7,7 @@ import (
 
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
+	gutillog "github.com/icco/gutil/logging"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -93,12 +94,18 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 		return 0, fmt.Errorf("list inbox: %w", err)
 	}
 
+	log := gutillog.FromContext(ctx)
 	triagedID := labels[gmail.LabelTriaged]
 	processed := 0
 	for _, id := range ids {
 		msg, err := gm.GetMessage(ctx, id)
 		if err != nil {
-			return processed, fmt.Errorf("get message %s: %w", id, err)
+			// Per-message failures must not wedge the queue: one bad message
+			// would otherwise abort the account and be retried every run until
+			// it ages out of the backfill window.
+			log.Warnw("triage: get message failed", "account", kind, "id", id, "err", err)
+			summary["errors"]++
+			continue
 		}
 		// Defensive: the label search can lag, so skip anything already tagged.
 		if triagedID != "" && slices.Contains(msg.LabelIDs, triagedID) {
@@ -107,7 +114,12 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 
 		cls, err := t.Classifier.Classify(ctx, msg)
 		if err != nil {
-			return processed, fmt.Errorf("classify %s: %w", id, err)
+			// Gemini safety-blocks, rate limits, and invalid output are
+			// non-fatal: leave the message untagged so a later run retries it,
+			// and move on to the rest.
+			log.Warnw("triage: classify failed", "account", kind, "id", id, "err", err)
+			summary["errors"]++
+			continue
 		}
 		d := decideAction(cls.Category, cls.Confidence, t.ConfidenceThreshold)
 
@@ -129,15 +141,20 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			Action:         d.Action,
 		}
 
+		var applyErr error
 		if !t.DryRun {
-			if err := t.apply(ctx, gm, labels, msg, d, &row); err != nil {
-				return processed, fmt.Errorf("apply %s: %w", id, err)
-			}
-			row.Applied = true
+			applyErr = t.apply(ctx, gm, labels, msg, d, &row)
+			row.Applied = applyErr == nil
 		}
 
+		// Always record the audit row, even on a partial apply failure.
 		if err := t.upsert(ctx, &row); err != nil {
 			return processed, fmt.Errorf("persist %s: %w", id, err)
+		}
+		if applyErr != nil {
+			log.Warnw("triage: apply failed", "account", kind, "id", id, "err", applyErr)
+			summary["errors"]++
+			continue
 		}
 		summary[string(cls.Category)]++
 		processed++
@@ -146,7 +163,27 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 }
 
 // apply executes the decision against Gmail and records what was done on row.
+//
+// Labels are applied before the draft on purpose: it stamps Art/Triaged so the
+// message is not re-fetched next run, and means a draft is only ever created
+// after the message is marked done — so a later failure can't leave an orphan
+// draft that the next run would duplicate.
 func (t *Triager) apply(ctx context.Context, gm Gmailer, labels map[string]string, msg *gmail.Message, d decision, row *models.EmailMessage) error {
+	add := make([]string, 0, len(d.AddLabels))
+	for _, name := range d.AddLabels {
+		if id := labels[name]; id != "" {
+			add = append(add, id)
+		}
+	}
+	var remove []string
+	if d.RemoveInbox {
+		remove = []string{gmail.InboxLabel}
+	}
+	if err := gm.ModifyLabels(ctx, msg.ID, add, remove); err != nil {
+		return err
+	}
+	row.Archived = d.RemoveInbox
+
 	if d.MakeDraft {
 		draftID, err := gm.CreateDraft(ctx, gmail.DraftInput{
 			ThreadID:  msg.ThreadID,
@@ -160,19 +197,7 @@ func (t *Triager) apply(ctx context.Context, gm Gmailer, labels map[string]strin
 		}
 		row.DraftID = draftID
 	}
-
-	add := make([]string, 0, len(d.AddLabels))
-	for _, name := range d.AddLabels {
-		if id := labels[name]; id != "" {
-			add = append(add, id)
-		}
-	}
-	var remove []string
-	if d.RemoveInbox {
-		remove = []string{gmail.InboxLabel}
-		row.Archived = true
-	}
-	return gm.ModifyLabels(ctx, msg.ID, add, remove)
+	return nil
 }
 
 // upsert writes the audit row idempotently. The fetch query re-surfaces any
