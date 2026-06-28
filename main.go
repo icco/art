@@ -17,6 +17,7 @@ import (
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/cron"
 	"github.com/icco/art/lib/db"
+	"github.com/icco/art/lib/email"
 	"github.com/icco/art/lib/oauth"
 	gutillog "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
@@ -58,6 +59,7 @@ func run(log *zap.SugaredLogger) error {
 
 	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow}
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
+	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
 	h := &handlers.Handlers{
 		Cfg:     cfg,
@@ -65,10 +67,11 @@ func run(log *zap.SugaredLogger) error {
 		OAuth:   oauthFlow,
 		Sync:    syncRunner,
 		Planner: planner,
+		Triage:  triager,
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 
-	scheduler := cron.New(syncRunner, planner)
+	scheduler := cron.New(syncRunner, planner, triager)
 	scheduler.Start(ctx)
 	defer scheduler.Stop()
 

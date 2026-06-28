@@ -22,6 +22,7 @@ type Handlers struct {
 	OAuth   OAuthService
 	Sync    SyncService
 	Planner PlannerService
+	Triage  TriageService
 }
 
 // OAuthService decouples handlers from the concrete oauth package and lets
@@ -39,6 +40,10 @@ type (
 	// PlannerService executes a planner pass.
 	PlannerService interface {
 		Run(ctx context.Context) error
+	}
+	// TriageService executes an email-triage pass across all linked accounts.
+	TriageService interface {
+		RunAll(ctx context.Context) error
 	}
 )
 
