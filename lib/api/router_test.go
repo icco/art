@@ -38,8 +38,6 @@ func TestRouter_HealthzPublic(t *testing.T) {
 }
 
 func TestRouter_MetricsPublic(t *testing.T) {
-	// /metrics is intentionally public (Prometheus scrape); it is expected to
-	// be restricted at the reverse-proxy edge, not by app auth.
 	if got := get(t, newTestRouter(0), "/metrics", nil).Code; got != http.StatusOK {
 		t.Fatalf("/metrics: got %d want 200", got)
 	}
@@ -79,14 +77,11 @@ func TestRouter_HSTSOnlyOverHTTPS(t *testing.T) {
 	}
 }
 
-// TestRouter_RateLimitNotBypassable proves the limiter keys on the trusted
-// rightmost X-Forwarded-For hop: rotating the attacker-controlled leftmost
-// entry every request must NOT reset the counter.
+// A rotating spoofed leftmost X-Forwarded-For must not reset the counter.
 func TestRouter_RateLimitNotBypassable(t *testing.T) {
 	h := newTestRouter(2)
 	var got429 bool
 	for i := range 5 {
-		// Same real (rightmost) client, different spoofed leftmost entry.
 		xff := fmt.Sprintf("10.0.0.%d, 9.9.9.9", i)
 		if get(t, h, "/healthz", map[string]string{"X-Forwarded-For": xff}).Code == http.StatusTooManyRequests {
 			got429 = true

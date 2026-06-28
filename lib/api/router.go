@@ -17,7 +17,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// defaultRateLimitRPM is used when the configured limit is unset or invalid.
 const defaultRateLimitRPM = 120
 
 // Deps bundles the dependencies needed to construct the API router.
@@ -40,16 +39,10 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(gutillog.Middleware(d.Log.Desugar()))
 	r.Use(middleware.Recoverer)
 	r.Use(secureHeaders)
-	// Rate limit by the real client IP. We deliberately key on the rightmost
-	// X-Forwarded-For hop (the one Caddy appends) rather than chi's RealIP,
-	// which trusts the attacker-controlled leftmost entry. See clientIPKey.
 	r.Use(httprate.Limit(rpm, time.Minute, httprate.WithKeyFuncs(clientIPKey)))
 	r.Use(middleware.Timeout(60 * time.Second))
 
-	// Public, unauthenticated endpoints. Health is harmless and needed by the
-	// reverse proxy / uptime checks; the OAuth callback is where Google
-	// redirects; /metrics is scraped by Prometheus and is expected to be
-	// restricted at the reverse-proxy edge rather than by app auth.
+	// Public: health, the Google OAuth redirect, and Prometheus scrape.
 	r.Get("/", handlers.Health)
 	r.Get("/healthz", handlers.Health)
 	r.Get("/oauth/callback", d.H.OAuthCallback)
@@ -84,17 +77,14 @@ func NewRouter(d Deps) http.Handler {
 	return r
 }
 
-// secureHeaders sets conservative response headers for an API with no browser
-// clients. CORS is intentionally absent. HSTS is only sent over HTTPS so the
-// plaintext localhost dev server doesn't pin a browser to https://localhost.
+// secureHeaders sets API security headers. No CORS (no browser clients); HSTS
+// only over HTTPS. CSP allows the inline style on the OAuth callback page.
 func secureHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
-		// The only HTML response is the OAuth callback page, which uses an
-		// inline style attribute; allow inline styles but nothing else.
 		h.Set("Content-Security-Policy",
 			"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
 		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
@@ -104,10 +94,8 @@ func secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// clientIPKey derives a rate-limit key from the true client IP. Behind a single
-// trusted proxy (Caddy) that appends the connecting peer, the trustworthy value
-// is the rightmost X-Forwarded-For entry; attacker-supplied entries land to its
-// left and are ignored. Falls back to RemoteAddr when no header is present.
+// clientIPKey keys the rate limiter on the rightmost X-Forwarded-For hop (the
+// one the trusted proxy appends), not the spoofable leftmost entry.
 func clientIPKey(r *http.Request) (string, error) {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
@@ -122,8 +110,6 @@ func clientIPKey(r *http.Request) (string, error) {
 	return canonicalIP(host), nil
 }
 
-// canonicalIP normalizes an address to its canonical IP form, collapsing
-// equivalent representations so they share one rate-limit bucket.
 func canonicalIP(s string) string {
 	if ip := net.ParseIP(s); ip != nil {
 		return ip.String()
