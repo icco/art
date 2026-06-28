@@ -16,6 +16,13 @@ func TestKindValidity(t *testing.T) {
 		{"SourceProject", SourceProject.Valid()},
 		{"SourceHabit", SourceHabit.Valid()},
 		{"SourceInvalid", SourceKind("x").Valid()},
+		{"AgentRunPlanner", AgentRunPlanner.Valid()},
+		{"AgentRunTriage", AgentRunTriage.Valid()},
+		{"AgentRunInvalid", AgentRunKind("x").Valid()},
+		{"EmailArchive", EmailArchive.Valid()},
+		{"EmailReply", EmailReply.Valid()},
+		{"EmailKeep", EmailKeep.Valid()},
+		{"EmailInvalid", EmailCategory("x").Valid()},
 	}
 	for _, c := range cases {
 		expect := c.name[len(c.name)-7:] != "Invalid"

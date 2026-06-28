@@ -14,6 +14,7 @@ const (
 	screenWeek screen = iota
 	screenProjects
 	screenHabits
+	screenDigest
 	screenAddProject
 	screenAddHabit
 )
@@ -39,6 +40,9 @@ type App struct {
 
 	habits      []Habit
 	habitCursor int
+
+	emails      []Email
+	emailCursor int
 
 	form formState
 
@@ -69,7 +73,7 @@ func NewApp(cfg Config) *App {
 
 // Init implements tea.Model; it kicks off initial data loads.
 func (a *App) Init() tea.Cmd {
-	return tea.Batch(a.loadWeek(), a.loadProjects(), a.loadHabits())
+	return tea.Batch(a.loadWeek(), a.loadProjects(), a.loadHabits(), a.loadEmails())
 }
 
 // Update implements tea.Model.
@@ -88,6 +92,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case habitsLoadedMsg:
 		a.habits = []Habit(m)
+		return a, nil
+	case emailsLoadedMsg:
+		a.emails = []Email(m)
 		return a, nil
 	case statusMsg:
 		a.status = string(m)
@@ -112,6 +119,8 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.screen = screenProjects
 	case "3":
 		a.screen = screenHabits
+	case "4":
+		a.screen = screenDigest
 	case "left":
 		if a.screen == screenWeek {
 			a.weekAnchor = a.weekAnchor.AddDate(0, 0, -7)
@@ -129,12 +138,18 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if a.screen == screenHabits && a.habitCursor < len(a.habits)-1 {
 			a.habitCursor++
 		}
+		if a.screen == screenDigest && a.emailCursor < len(a.emails)-1 {
+			a.emailCursor++
+		}
 	case "up", "k":
 		if a.screen == screenProjects && a.projCursor > 0 {
 			a.projCursor--
 		}
 		if a.screen == screenHabits && a.habitCursor > 0 {
 			a.habitCursor--
+		}
+		if a.screen == screenDigest && a.emailCursor > 0 {
+			a.emailCursor--
 		}
 	case "a":
 		switch a.screen {
@@ -176,8 +191,11 @@ func (a *App) handleKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, a.replan()
 	case "s":
 		return a, a.sync()
+	case "t":
+		a.status = "triaging…"
+		return a, a.triage()
 	case "?":
-		a.status = "1=week 2=projects 3=habits  a=add  d=delete  r=replan  s=sync  ←→=week nav  q=quit"
+		a.status = "1=week 2=projects 3=habits 4=digest  a=add  d=delete  r=replan  s=sync  t=triage  ←→=week nav  q=quit"
 	}
 	return a, nil
 }
@@ -228,6 +246,8 @@ func (a *App) View() string {
 		body = a.renderProjects()
 	case screenHabits:
 		body = a.renderHabits()
+	case screenDigest:
+		body = a.renderDigest()
 	case screenAddProject, screenAddHabit:
 		body = a.renderForm()
 	}
@@ -239,6 +259,7 @@ func (a *App) renderHeader() string {
 		tabLabel("week", a.screen == screenWeek),
 		tabLabel("projects", a.screen == screenProjects),
 		tabLabel("habits", a.screen == screenHabits),
+		tabLabel("digest", a.screen == screenDigest),
 	}
 	return lipgloss.NewStyle().Bold(true).Render("art ") + strings.Join(tabs, " ")
 }

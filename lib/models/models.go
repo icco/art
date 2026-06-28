@@ -31,6 +31,16 @@ type SessionStatus string
 // AgentRunStatus is the lifecycle status of an AgentRun.
 type AgentRunStatus string
 
+// AgentRunKind distinguishes the planner from the email triager so both can
+// share the agent_runs table.
+type AgentRunKind string
+
+// EmailCategory is the triage classification assigned to an email.
+type EmailCategory string
+
+// EmailAction is the action art actually applied to an email.
+type EmailAction string
+
 // Enum values used as the string representation in Postgres.
 const (
 	AccountPersonal AccountKind = "personal"
@@ -54,6 +64,33 @@ const (
 	AgentRunRunning   AgentRunStatus = "running"
 	AgentRunSucceeded AgentRunStatus = "succeeded"
 	AgentRunFailed    AgentRunStatus = "failed"
+
+	AgentRunPlanner AgentRunKind = "planner"
+	AgentRunTriage  AgentRunKind = "triage"
+
+	// EmailArchive marks bulk mail to remove from the inbox.
+	EmailArchive EmailCategory = "archive"
+	// EmailReply marks mail that wants a response; art drafts one.
+	EmailReply EmailCategory = "reply"
+	// EmailRead marks FYI mail worth reading but needing no reply.
+	EmailRead EmailCategory = "read"
+	// EmailThinking marks mail that needs thought before any action.
+	EmailThinking EmailCategory = "thinking"
+	// EmailKeep marks mail art leaves untouched in the inbox.
+	EmailKeep EmailCategory = "keep"
+
+	// ActionArchived means art removed INBOX and added Art/Archived.
+	ActionArchived EmailAction = "archived"
+	// ActionReply means art labeled Art/Reply and created a draft.
+	ActionReply EmailAction = "reply"
+	// ActionRead means art labeled Art/Read.
+	ActionRead EmailAction = "read"
+	// ActionThinking means art labeled Art/Thinking.
+	ActionThinking EmailAction = "thinking"
+	// ActionKeep means art only labeled Art/Triaged.
+	ActionKeep EmailAction = "keep"
+	// ActionNone means art classified but applied nothing (dry run).
+	ActionNone EmailAction = "none"
 )
 
 // Valid reports whether a is one of the recognised AccountKind values.
@@ -64,6 +101,18 @@ func (s SlotKind) Valid() bool { return s == SlotWork || s == SlotPersonal }
 
 // Valid reports whether s is one of the recognised SourceKind values.
 func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit }
+
+// Valid reports whether k is one of the recognised AgentRunKind values.
+func (k AgentRunKind) Valid() bool { return k == AgentRunPlanner || k == AgentRunTriage }
+
+// Valid reports whether c is one of the recognised EmailCategory values.
+func (c EmailCategory) Valid() bool {
+	switch c {
+	case EmailArchive, EmailReply, EmailRead, EmailThinking, EmailKeep:
+		return true
+	}
+	return false
+}
 
 // Base is embedded into every GORM model and supplies a UUID primary key
 // along with created/updated timestamps managed by GORM.
@@ -171,9 +220,11 @@ type SyncState struct {
 	LastSyncedAt  *time.Time  `json:"last_synced_at,omitempty"`
 }
 
-// AgentRun records one planner invocation, its model usage, and outcome.
+// AgentRun records one planner or triage invocation, its model usage, and
+// outcome. Kind discriminates which agent produced the row.
 type AgentRun struct {
 	Base
+	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'planner';index;check:kind IN ('planner','triage')" json:"kind"`
 	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started" json:"started_at"`
 	EndedAt   *time.Time     `json:"ended_at,omitempty"`
 	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')" json:"status"`
@@ -182,6 +233,37 @@ type AgentRun struct {
 	TokensOut int            `gorm:"not null;default:0" json:"tokens_out"`
 	Summary   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"summary"`
 	Error     string         `gorm:"type:text;not null;default:''" json:"error"`
+}
+
+// EmailMessage is one triaged Gmail message: its metadata, the classification
+// art assigned, the action art applied, and reconcile state used for learning.
+// Bodies are never stored; re-fetch from Gmail on demand.
+type EmailMessage struct {
+	Base
+	RunID          string      `gorm:"type:uuid;not null;index" json:"run_id"`
+	AccountKind    AccountKind `gorm:"type:varchar(16);not null;uniqueIndex:idx_email_lookup,priority:1;check:account_kind IN ('personal','work')" json:"account_kind"`
+	GmailMessageID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_email_lookup,priority:2" json:"gmail_message_id"`
+	ThreadID       string      `gorm:"type:varchar(255);not null;default:''" json:"thread_id"`
+	FromAddr       string      `gorm:"type:text;not null;default:''" json:"from"`
+	ToAddr         string      `gorm:"type:text;not null;default:''" json:"to"`
+	Subject        string      `gorm:"type:text;not null;default:''" json:"subject"`
+	Snippet        string      `gorm:"type:text;not null;default:''" json:"snippet"`
+	ReceivedAt     time.Time   `gorm:"index" json:"received_at"`
+
+	Category   EmailCategory `gorm:"type:varchar(16);not null;check:category IN ('archive','reply','read','thinking','keep')" json:"category"`
+	Summary    string        `gorm:"type:text;not null;default:''" json:"summary"`
+	DraftReply string        `gorm:"type:text;not null;default:''" json:"draft_reply"`
+	Reason     string        `gorm:"type:text;not null;default:''" json:"reason"`
+	Confidence float64       `gorm:"type:numeric(4,3);not null;default:0" json:"confidence"`
+
+	Action   EmailAction `gorm:"type:varchar(16);not null;default:'none'" json:"action"`
+	Applied  bool        `gorm:"not null;default:false" json:"applied"`
+	DraftID  string      `gorm:"type:varchar(255);not null;default:''" json:"draft_id"`
+	Archived bool        `gorm:"not null;default:false" json:"archived"`
+
+	Reversed     bool       `gorm:"not null;default:false;index" json:"reversed"`
+	ReversalKind string     `gorm:"type:varchar(32);not null;default:''" json:"reversal_kind"`
+	ReconciledAt *time.Time `json:"reconciled_at,omitempty"`
 }
 
 // All returns the models in AutoMigrate order.
@@ -195,5 +277,6 @@ func All() []any {
 		&Event{},
 		&SyncState{},
 		&AgentRun{},
+		&EmailMessage{},
 	}
 }

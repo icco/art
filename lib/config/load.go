@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -22,6 +23,17 @@ type Config struct {
 	OAuth          OAuthConfig
 	Vertex         VertexConfig
 	CredentialsEnv string
+	Triage         TriageConfig
+}
+
+// TriageConfig controls the Gmail email-triage agent.
+type TriageConfig struct {
+	Enabled             bool
+	DryRun              bool
+	BackfillDays        int
+	MaxPerRun           int
+	ConfidenceThreshold float64
+	ReconcileDays       int
 }
 
 // OAuthConfig holds Google OAuth client credentials used for account linking.
@@ -56,6 +68,14 @@ func Load() (*Config, error) {
 		Vertex: VertexConfig{
 			ProjectID: os.Getenv("VERTEX_PROJECT_ID"),
 			Location:  envOr("VERTEX_LOCATION", "us-central1"),
+		},
+		Triage: TriageConfig{
+			Enabled:             envBool("TRIAGE_ENABLED", true),
+			DryRun:              envBool("TRIAGE_DRY_RUN", false),
+			BackfillDays:        envInt("TRIAGE_BACKFILL_DAYS", 14),
+			MaxPerRun:           envInt("TRIAGE_MAX_PER_RUN", 50),
+			ConfidenceThreshold: envFloat("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
+			ReconcileDays:       envInt("TRIAGE_RECONCILE_DAYS", 14),
 		},
 	}
 
@@ -118,6 +138,33 @@ func (c *Config) OwnerAllowed(email string) bool {
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return def
+}
+
+func envBool(key string, def bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return def
+}
+
+func envFloat(key string, def float64) float64 {
+	if v := os.Getenv(key); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return f
+		}
 	}
 	return def
 }

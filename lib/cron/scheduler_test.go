@@ -8,12 +8,13 @@ import (
 
 	"github.com/icco/art/lib/agent"
 	"github.com/icco/art/lib/calendar"
+	"github.com/icco/art/lib/email"
 )
 
 // We can't easily exercise Start without a real DB + Google client; cover the
 // constructor + Stop happy path.
 func TestNewAndStop(t *testing.T) {
-	s := New(&calendar.Runner{}, &agent.Planner{})
+	s := New(&calendar.Runner{}, &agent.Planner{}, &email.Runner{})
 	if s == nil || s.stop == nil {
 		t.Fatal("scheduler not initialized")
 	}
