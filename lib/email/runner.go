@@ -54,7 +54,32 @@ func (r *Runner) RunAll(ctx context.Context) error {
 func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[string]int, runErrs *[]string) (tokensIn, tokensOut int) {
 	log := gutillog.FromContext(ctx)
 
-	corrections, err := r.corrections(ctx)
+	// Build a client per linked account once; both phases reuse it.
+	order := []models.AccountKind{models.AccountPersonal, models.AccountWork}
+	clients := map[models.AccountKind]*gmail.Client{}
+	for _, kind := range order {
+		gm, err := gmail.NewClient(ctx, r.OAuth, kind)
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				*runErrs = append(*runErrs, fmt.Sprintf("%s: client: %v", kind, err))
+			}
+			continue // not linked, or failed to build
+		}
+		clients[kind] = gm
+	}
+
+	// Phase 1: reconcile prior actions so the corrections block is current.
+	for _, kind := range order {
+		gm, ok := clients[kind]
+		if !ok {
+			continue
+		}
+		if err := Reconcile(ctx, r.DB, kind, gm, r.Cfg.Triage.ReconcileDays, r.Cfg.Triage.MaxPerRun); err != nil {
+			log.Warnw("reconcile failed", "account", kind, "err", err)
+		}
+	}
+
+	corrections, err := buildCorrections(ctx, r.DB, r.Cfg.Triage.ReconcileDays, maxCorrections)
 	if err != nil {
 		log.Warnw("building corrections failed", "err", err)
 	}
@@ -74,13 +99,10 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 		DryRun:              r.Cfg.Triage.DryRun,
 	}
 
-	for _, kind := range []models.AccountKind{models.AccountPersonal, models.AccountWork} {
-		gm, err := gmail.NewClient(ctx, r.OAuth, kind)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				continue // account not linked
-			}
-			*runErrs = append(*runErrs, fmt.Sprintf("%s: client: %v", kind, err))
+	// Phase 2: triage new mail.
+	for _, kind := range order {
+		gm, ok := clients[kind]
+		if !ok {
 			continue
 		}
 		n, err := triager.RunAccount(ctx, runID, kind, gm, counts)
@@ -91,6 +113,9 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 	}
 	return classifier.TokensIn(), classifier.TokensOut()
 }
+
+// maxCorrections bounds how many recent reversals feed the classifier prompt.
+const maxCorrections = 15
 
 func (r *Runner) finish(ctx context.Context, id string, counts map[string]int, runErrs []string, tokensIn, tokensOut int) error {
 	summary := map[string]any{
@@ -117,10 +142,4 @@ func (r *Runner) finish(ctx context.Context, id string, counts map[string]int, r
 		"tokens_in":  tokensIn,
 		"tokens_out": tokensOut,
 	}).Error
-}
-
-// corrections returns the feedback block appended to the classifier prompt.
-// Implemented by the reconcile pass; empty until then.
-func (r *Runner) corrections(_ context.Context) (string, error) {
-	return "", nil
 }
