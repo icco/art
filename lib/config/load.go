@@ -24,6 +24,7 @@ type Config struct {
 	Vertex         VertexConfig
 	CredentialsEnv string
 	Triage         TriageConfig
+	RateLimitRPM   int
 }
 
 // TriageConfig controls the Gmail email-triage agent.
@@ -77,6 +78,7 @@ func Load() (*Config, error) {
 			ConfidenceThreshold: envFloat("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
 			ReconcileDays:       envInt("TRIAGE_RECONCILE_DAYS", 14),
 		},
+		RateLimitRPM: envInt("RATE_LIMIT_RPM", 120),
 	}
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {
