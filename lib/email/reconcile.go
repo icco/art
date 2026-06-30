@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/icco/art/lib/models"
+	gutillog "github.com/icco/gutil/logging"
 	"gorm.io/gorm"
 )
 
@@ -29,7 +30,7 @@ type reconcileGmailer interface {
 // To keep hourly cost bounded it checks at most `cap` rows per call, oldest-
 // reconciled first, and stamps ReconciledAt on every row it checks so
 // successive runs round-robin across the window.
-func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm reconcileGmailer, withinDays, maxRows int) error {
+func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm reconcileGmailer, withinDays, maxRows int) (int, error) {
 	cutoff := time.Now().AddDate(0, 0, -withinDays)
 	var rows []models.EmailMessage
 	if err := db.WithContext(ctx).
@@ -38,15 +39,20 @@ func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm rec
 		Order("reconciled_at ASC NULLS FIRST").
 		Limit(maxRows).
 		Find(&rows).Error; err != nil {
-		return err
+		return 0, err
 	}
 
+	log := gutillog.FromContext(ctx)
 	now := time.Now()
+	errCount := 0
 	for i := range rows {
 		row := &rows[i]
 		reversalKind, err := detectReversal(ctx, gm, row)
 		if err != nil {
-			// Transient Gmail error: leave the row for a later run.
+			// Transient Gmail error: log it, count it, and leave the row for a
+			// later run rather than wedging the pass.
+			log.Warnw("reconcile: detect reversal failed", "account", kind, "id", row.GmailMessageID, "err", err)
+			errCount++
 			continue
 		}
 		updates := map[string]any{"reconciled_at": &now}
@@ -56,10 +62,10 @@ func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm rec
 		}
 		if err := db.WithContext(ctx).Model(&models.EmailMessage{}).
 			Where("id = ?", row.ID).Updates(updates).Error; err != nil {
-			return err
+			return errCount, err
 		}
 	}
-	return nil
+	return errCount, nil
 }
 
 func detectReversal(ctx context.Context, gm reconcileGmailer, row *models.EmailMessage) (string, error) {
