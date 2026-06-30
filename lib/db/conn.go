@@ -29,7 +29,22 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	if err := migrateEmailCategories(db); err != nil {
 		return nil, fmt.Errorf("migrate email categories: %w", err)
 	}
+	if err := dropArtCalendarColumn(db); err != nil {
+		return nil, fmt.Errorf("drop art calendar column: %w", err)
+	}
 	return db, nil
+}
+
+// dropArtCalendarColumn removes the retired art_calendar_id column. Art always
+// writes focus blocks to the account's primary calendar, so the separate
+// art-calendar override no longer exists. AutoMigrate never drops columns, so
+// this is explicit. Idempotent: a no-op once the column is gone.
+func dropArtCalendarColumn(db *gorm.DB) error {
+	m := db.Migrator()
+	if !m.HasColumn(&models.Account{}, "art_calendar_id") {
+		return nil
+	}
+	return m.DropColumn(&models.Account{}, "art_calendar_id")
 }
 
 // migrateEmailCategories remaps the retired 'read'/'thinking' categories to

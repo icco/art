@@ -86,6 +86,20 @@ func reverseEmail(c *Client, id string) tea.Cmd {
 	}
 }
 
+func setEmailArchived(c *Client, id string, archived bool) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		if _, err := c.SetEmailArchived(ctx, id, archived); err != nil {
+			return errMsg{err}
+		}
+		if archived {
+			return statusMsg("email archived")
+		}
+		return statusMsg("email moved to inbox")
+	}
+}
+
 func loadRuns(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := bg()

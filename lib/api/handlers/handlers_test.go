@@ -255,6 +255,80 @@ func TestEventsAndSessionsList(t *testing.T) {
 	}
 }
 
+func TestEventsPrimaryFilter(t *testing.T) {
+	db := testdb.Open(t)
+	h := &handlers.Handlers{DB: db}
+	r := newRouter(h)
+
+	accts := []models.Account{
+		{Kind: models.AccountPersonal, Email: "p@x", RefreshTokenEncrypted: []byte("x"), PrimaryCalendarID: "pcal"},
+		{Kind: models.AccountWork, Email: "w@x", RefreshTokenEncrypted: []byte("x"), PrimaryCalendarID: "wcal"},
+	}
+	if err := db.Create(&accts).Error; err != nil {
+		t.Fatalf("seed accounts: %v", err)
+	}
+	now := time.Now().UTC()
+	evs := []models.Event{
+		{AccountKind: models.AccountPersonal, CalendarID: "pcal", GoogleEventID: "e1", Summary: "primary personal", StartTime: now, EndTime: now.Add(time.Hour)},
+		{AccountKind: models.AccountPersonal, CalendarID: "holidays", GoogleEventID: "e2", Summary: "secondary personal", StartTime: now, EndTime: now.Add(time.Hour)},
+		{AccountKind: models.AccountWork, CalendarID: "wcal", GoogleEventID: "e3", Summary: "primary work", StartTime: now, EndTime: now.Add(time.Hour)},
+	}
+	if err := db.Create(&evs).Error; err != nil {
+		t.Fatalf("seed events: %v", err)
+	}
+
+	// Without the param, every calendar's events come back.
+	var all []models.Event
+	w := do(t, r, "GET", "/events", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", w.Code, w.Body)
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &all)
+	if len(all) != 3 {
+		t.Fatalf("unfiltered: want 3 events, got %d", len(all))
+	}
+
+	// calendar=primary keeps only events on each account's primary calendar.
+	var primary []models.Event
+	w = do(t, r, "GET", "/events?calendar=primary", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("primary list: %d %s", w.Code, w.Body)
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &primary)
+	if len(primary) != 2 {
+		t.Fatalf("primary: want 2 events, got %d", len(primary))
+	}
+	for _, e := range primary {
+		if e.CalendarID == "holidays" {
+			t.Errorf("secondary calendar leaked into primary filter: %+v", e)
+		}
+	}
+}
+
+func TestEventsPrimaryFilterNoAccounts(t *testing.T) {
+	db := testdb.Open(t)
+	h := &handlers.Handlers{DB: db}
+	r := newRouter(h)
+
+	now := time.Now().UTC()
+	ev := models.Event{AccountKind: models.AccountPersonal, CalendarID: "pcal", GoogleEventID: "e1", StartTime: now, EndTime: now.Add(time.Hour)}
+	if err := db.Create(&ev).Error; err != nil {
+		t.Fatalf("seed event: %v", err)
+	}
+
+	// No account has a primary calendar set, so the filter must return nothing
+	// rather than silently falling back to all events.
+	var out []models.Event
+	w := do(t, r, "GET", "/events?calendar=primary", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("primary list: %d %s", w.Code, w.Body)
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	if len(out) != 0 {
+		t.Fatalf("no primary calendars: want 0 events, got %d", len(out))
+	}
+}
+
 type stubTriage struct {
 	msg models.EmailMessage
 	err error
@@ -262,6 +336,9 @@ type stubTriage struct {
 
 func (s stubTriage) RunAll(context.Context) error { return nil }
 func (s stubTriage) Reverse(context.Context, string) (models.EmailMessage, error) {
+	return s.msg, s.err
+}
+func (s stubTriage) SetArchived(context.Context, string, bool) (models.EmailMessage, error) {
 	return s.msg, s.err
 }
 
@@ -288,6 +365,37 @@ func TestEmailReverse(t *testing.T) {
 	r2 := chi.NewRouter()
 	r2.Post("/emails/{id}/reverse", h2.EmailReverse)
 	if w := do(t, r2, "POST", "/emails/missing/reverse", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown id: got %d, want 404", w.Code)
+	}
+}
+
+func TestEmailSetArchived(t *testing.T) {
+	h := &handlers.Handlers{Triage: stubTriage{
+		msg: models.EmailMessage{Archived: true, Action: models.ActionArchived},
+	}}
+	r := chi.NewRouter()
+	r.Post("/emails/{id}/archive", h.EmailSetArchived)
+
+	w := do(t, r, "POST", "/emails/abc/archive", map[string]any{"archived": true})
+	if w.Code != http.StatusOK {
+		t.Fatalf("set archived: %d %s", w.Code, w.Body)
+	}
+	var got models.EmailMessage
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	if !got.Archived {
+		t.Error("expected archived row in response")
+	}
+
+	// Malformed body is a client error.
+	if w := do(t, r, "POST", "/emails/abc/archive", "not-json"); w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed body: got %d, want 400", w.Code)
+	}
+
+	// Unknown id surfaces as 404.
+	h2 := &handlers.Handlers{Triage: stubTriage{err: gorm.ErrRecordNotFound}}
+	r2 := chi.NewRouter()
+	r2.Post("/emails/{id}/archive", h2.EmailSetArchived)
+	if w := do(t, r2, "POST", "/emails/missing/archive", map[string]any{"archived": false}); w.Code != http.StatusNotFound {
 		t.Fatalf("unknown id: got %d, want 404", w.Code)
 	}
 }

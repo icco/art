@@ -124,9 +124,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 // Project mirrors the API project resource.
 type Project struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
 	Kind           string     `json:"kind"`
 	TargetHours    float64    `json:"target_hours"`
 	ScheduledHours float64    `json:"scheduled_hours"`
@@ -196,6 +196,7 @@ type Email struct {
 	Category    string    `json:"category"`
 	Action      string    `json:"action"`
 	Applied     bool      `json:"applied"`
+	Archived    bool      `json:"archived"`
 	Reversed    bool      `json:"reversed"`
 	ReceivedAt  time.Time `json:"received_at"`
 }
@@ -246,9 +247,10 @@ func (c *Client) DeleteHabit(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/habits/"+id, nil, nil)
 }
 
-// ListEvents returns events between from and to (inclusive of from, exclusive of to).
+// ListEvents returns primary-calendar events between from and to (inclusive of
+// from, exclusive of to). The TUI only ever shows primary calendars.
 func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, error) {
-	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
+	q := fmt.Sprintf("?from=%s&to=%s&calendar=primary", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	var out []Event
 	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
 }
@@ -297,4 +299,10 @@ func (c *Client) Triage(ctx context.Context) error {
 func (c *Client) ReverseEmail(ctx context.Context, id string) (Email, error) {
 	var out Email
 	return out, c.do(ctx, "POST", "/emails/"+id+"/reverse", nil, &out)
+}
+
+// SetEmailArchived moves a triaged message between the inbox and the archive.
+func (c *Client) SetEmailArchived(ctx context.Context, id string, archived bool) (Email, error) {
+	var out Email
+	return out, c.do(ctx, "POST", "/emails/"+id+"/archive", map[string]bool{"archived": archived}, &out)
 }

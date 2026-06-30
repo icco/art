@@ -115,6 +115,46 @@ func TestClientEventsReplanSync(t *testing.T) {
 	}
 }
 
+func TestClientListEventsPrimaryOnly(t *testing.T) {
+	var gotCalendar string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCalendar = r.URL.Query().Get("calendar")
+		_ = json.NewEncoder(w).Encode([]Event{{ID: "e1"}})
+	}))
+	defer server.Close()
+	if _, err := stubClient(server).ListEvents(context.Background(), time.Now(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if gotCalendar != "primary" {
+		t.Fatalf("calendar param = %q, want primary", gotCalendar)
+	}
+}
+
+func TestClientSetEmailArchived(t *testing.T) {
+	var gotPath, gotMethod string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotMethod = r.URL.Path, r.Method
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(Email{ID: "e1", Archived: true})
+	}))
+	defer server.Close()
+
+	got, err := stubClient(server).SetEmailArchived(context.Background(), "e1", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMethod != "POST" || gotPath != "/emails/e1/archive" {
+		t.Fatalf("request = %s %s, want POST /emails/e1/archive", gotMethod, gotPath)
+	}
+	if gotBody["archived"] != true {
+		t.Errorf("body archived = %v, want true", gotBody["archived"])
+	}
+	if !got.Archived {
+		t.Errorf("returned email not archived: %+v", got)
+	}
+}
+
 func TestClientErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusBadRequest)

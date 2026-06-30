@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -26,8 +27,9 @@ type dashboardPage struct {
 
 func newDashboardPage(c *Client) dashboardPage { return dashboardPage{client: c} }
 
-func (p dashboardPage) Title() string  { return "dashboard" }
-func (p dashboardPage) FullInput() bool { return false }
+func (p dashboardPage) Title() string           { return "dashboard" }
+func (p dashboardPage) FullInput() bool         { return false }
+func (p dashboardPage) bindings() []key.Binding { return nil }
 
 func (p dashboardPage) Init() tea.Cmd {
 	from := startOfWeek(timeNow())

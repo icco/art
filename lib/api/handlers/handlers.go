@@ -46,6 +46,7 @@ type (
 	TriageService interface {
 		RunAll(ctx context.Context) error
 		Reverse(ctx context.Context, id string) (models.EmailMessage, error)
+		SetArchived(ctx context.Context, id string, archived bool) (models.EmailMessage, error)
 	}
 )
 

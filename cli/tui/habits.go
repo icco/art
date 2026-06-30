@@ -48,8 +48,11 @@ func newHabitsPage(c *Client, isDark bool) habitsPage {
 	return habitsPage{client: c, list: l, keys: defaultKeyMap()}
 }
 
-func (p habitsPage) Title() string  { return "habits" }
+func (p habitsPage) Title() string   { return "habits" }
 func (p habitsPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
+func (p habitsPage) bindings() []key.Binding {
+	return []key.Binding{p.keys.Add, p.keys.Edit, p.keys.Delete}
+}
 
 func (p habitsPage) Init() tea.Cmd { return loadHabits(p.client) }
 
@@ -138,6 +141,10 @@ func (p habitsPage) submitForm() tea.Cmd {
 func (p habitsPage) View() string {
 	if p.form != nil {
 		return p.form.View()
+	}
+	if len(p.list.Items()) == 0 {
+		title := p.list.Styles.Title.Render(p.list.Title)
+		return title + "\n\n" + faintStyle.Render("No habits yet — press a to add.")
 	}
 	return p.list.View()
 }

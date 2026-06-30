@@ -23,8 +23,11 @@ func newCalendarPage(c *Client) calendarPage {
 	return calendarPage{client: c, anchor: startOfWeek(timeNow()), keys: defaultKeyMap()}
 }
 
-func (p calendarPage) Title() string  { return "calendar" }
+func (p calendarPage) Title() string   { return "calendar" }
 func (p calendarPage) FullInput() bool { return false }
+func (p calendarPage) bindings() []key.Binding {
+	return []key.Binding{p.keys.PrevWeek, p.keys.NextWeek}
+}
 
 func (p calendarPage) Init() tea.Cmd {
 	return p.load()

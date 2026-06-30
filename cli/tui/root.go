@@ -237,6 +237,14 @@ func (m rootModel) renderFooter(width int) string {
 	default:
 		status = subtleStyle.Render(status)
 	}
+	page := m.pages[m.current()]
+	if page.FullInput() {
+		// A form or list filter is capturing input, so the page and global keys
+		// don't apply; advertising them would mislead. The form/filter shows its
+		// own guidance, so keep the footer to the status line.
+		return status + "\n"
+	}
 	m.help.SetWidth(width)
-	return status + "\n" + m.help.View(m.keys)
+	h := pageHelp{keys: m.keys, page: page.bindings()}
+	return status + "\n" + m.help.View(h)
 }

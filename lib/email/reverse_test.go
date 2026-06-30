@@ -114,6 +114,39 @@ func TestReverseAndRecordWritesRow(t *testing.T) {
 	}
 }
 
+func TestReverseAndRecordClearsArchived(t *testing.T) {
+	db := testdb.Open(t)
+	row := &models.EmailMessage{
+		RunID:          "00000000-0000-0000-0000-000000000001",
+		AccountKind:    models.AccountPersonal,
+		GmailMessageID: "m2",
+		Category:       models.EmailArchive,
+		Action:         models.ActionArchived,
+		Applied:        true,
+		Archived:       true,
+	}
+	if err := db.Create(row).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// Un-archiving restores INBOX in Gmail, so Archived must reflect that the
+	// message is back in the inbox — otherwise it is a stale direction flag.
+	out, err := reverseAndRecord(context.Background(), db, &fakeReverseGmail{}, row)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Archived {
+		t.Error("returned row should have Archived=false after un-archive")
+	}
+	var got models.EmailMessage
+	if err := db.First(&got, "id = ?", row.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Archived {
+		t.Error("persisted row should have Archived=false after un-archive")
+	}
+}
+
 func TestRunnerReverseNotFound(t *testing.T) {
 	db := testdb.Open(t)
 	r := &Runner{DB: db}

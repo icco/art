@@ -61,6 +61,9 @@ func newDigestPage(c *Client, isDark bool) digestPage {
 
 func (p digestPage) Title() string   { return "digest" }
 func (p digestPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
+func (p digestPage) bindings() []key.Binding {
+	return []key.Binding{p.keys.Archive, p.keys.Reject}
+}
 
 func (p digestPage) Init() tea.Cmd { return loadEmails(p.client) }
 
@@ -99,6 +102,14 @@ func (p digestPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 			p.reverseID = it.e.ID
 			p.form = newConfirmForm(p.cf, it.e.Subject, p.width, p.height)
 			return p, p.form.Init()
+		}
+	}
+	if key.Matches(m, p.keys.Archive) {
+		if it, ok := p.list.SelectedItem().(emailItem); ok {
+			// Toggle is instant and reversible: archive an inbox message, or
+			// move an archived one back to the inbox.
+			target := !it.e.Archived
+			return p, tea.Sequence(setEmailArchived(p.client, it.e.ID, target), loadEmails(p.client))
 		}
 	}
 	var cmd tea.Cmd
