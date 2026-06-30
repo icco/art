@@ -27,8 +27,11 @@ type Client struct {
 }
 
 // NewClient returns a Client configured to talk to the API endpoint in cfg.
+//
+// No client Timeout: it would override the per-request context deadlines in
+// commands.go and cap the 5-min triage/replan passes.
 func NewClient(cfg Config) *Client {
-	return &Client{cfg: cfg, hc: &http.Client{Timeout: 30 * time.Second}}
+	return &Client{cfg: cfg, hc: &http.Client{}}
 }
 
 func (c *Client) idToken(ctx context.Context) (string, error) {
