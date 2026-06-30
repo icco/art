@@ -27,7 +27,16 @@ func (p calendarPage) Title() string  { return "calendar" }
 func (p calendarPage) FullInput() bool { return false }
 
 func (p calendarPage) Init() tea.Cmd {
-	return loadEvents(p.client, p.anchor, p.anchor.AddDate(0, 0, 7))
+	return p.load()
+}
+
+// load fetches the visible week plus a day of padding on each side. All-day
+// events are stored at UTC midnight, so ones near the week boundary fall just
+// outside the server's start_time window when it's expressed in local time;
+// the padding keeps them from being dropped. dayKey then files each event
+// under the correct day.
+func (p calendarPage) load() tea.Cmd {
+	return loadEvents(p.client, p.anchor.AddDate(0, 0, -1), p.anchor.AddDate(0, 0, 8))
 }
 
 func (p calendarPage) Update(msg tea.Msg) (Page, tea.Cmd) {
@@ -40,10 +49,10 @@ func (p calendarPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 		switch {
 		case key.Matches(msg, p.keys.PrevWeek):
 			p.anchor = p.anchor.AddDate(0, 0, -7)
-			return p, loadEvents(p.client, p.anchor, p.anchor.AddDate(0, 0, 7))
+			return p, p.load()
 		case key.Matches(msg, p.keys.NextWeek):
 			p.anchor = p.anchor.AddDate(0, 0, 7)
-			return p, loadEvents(p.client, p.anchor, p.anchor.AddDate(0, 0, 7))
+			return p, p.load()
 		}
 	}
 	return p, nil
@@ -55,8 +64,7 @@ func (p calendarPage) View() string {
 
 	byDay := make(map[string][]Event)
 	for _, e := range p.events {
-		key := e.StartTime.Local().Format("2006-01-02")
-		byDay[key] = append(byDay[key], e)
+		byDay[dayKey(e)] = append(byDay[dayKey(e)], e)
 	}
 	for d := range 7 {
 		day := p.anchor.AddDate(0, 0, d)
@@ -74,8 +82,22 @@ func (p calendarPage) View() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// dayKey returns the calendar day an event belongs under. All-day events are
+// stored at UTC midnight; converting them to local time would shift them onto
+// the previous (or next) day, so they're keyed by their UTC date. Timed events
+// use local time.
+func dayKey(e Event) string {
+	if e.AllDay {
+		return e.StartTime.UTC().Format("2006-01-02")
+	}
+	return e.StartTime.Local().Format("2006-01-02")
+}
+
 func renderEventLine(e Event) string {
-	span := fmt.Sprintf("%s–%s", e.StartTime.Local().Format("15:04"), e.EndTime.Local().Format("15:04"))
+	span := "all day"
+	if !e.AllDay {
+		span = fmt.Sprintf("%s–%s", e.StartTime.Local().Format("15:04"), e.EndTime.Local().Format("15:04"))
+	}
 	mark := ""
 	if e.IsArtManaged {
 		mark = "◆ "
