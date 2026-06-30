@@ -86,6 +86,12 @@ func TestLoadValidate(t *testing.T) {
 	if cfg.Vertex.Location == "" {
 		t.Fatal("Vertex location default missing")
 	}
+	if cfg.Triage.BackfillDays != 7 || cfg.Triage.ReconcileDays != 7 {
+		t.Errorf("triage window defaults = %d/%d, want 7/7", cfg.Triage.BackfillDays, cfg.Triage.ReconcileDays)
+	}
+	if cfg.Triage.MaxPerRun != 1000 {
+		t.Errorf("MaxPerRun default = %d, want 1000", cfg.Triage.MaxPerRun)
+	}
 }
 
 func TestLoadBadTimezone(t *testing.T) {
