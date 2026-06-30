@@ -69,6 +69,21 @@ func TestBuildCorrectionsManualArchived(t *testing.T) {
 	}
 }
 
+func TestBuildCorrectionsRespectsLimit(t *testing.T) {
+	db := testdb.Open(t)
+	seedReversed(t, db, "g1", models.EmailArchive, reversalUnarchived)
+	seedReversed(t, db, "g2", models.EmailArchive, reversalUnarchived)
+	seedReversed(t, db, "g3", models.EmailArchive, reversalUnarchived)
+
+	corr, err := buildCorrections(context.Background(), db, 14, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(corr, "\n- "); n != 2 {
+		t.Errorf("limit=2 should cap corrections at 2, got %d:\n%s", n, corr)
+	}
+}
+
 func TestBuildCorrectionsEmpty(t *testing.T) {
 	db := testdb.Open(t)
 	got, err := buildCorrections(context.Background(), db, 14, 15)
