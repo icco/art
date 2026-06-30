@@ -37,9 +37,9 @@ func (c *Client) idToken(ctx context.Context) (string, error) {
 	if c.token != "" && time.Now().Before(c.tokenExp.Add(-30*time.Second)) {
 		return c.token, nil
 	}
-	// #nosec G204 -- audience comes from server config, not user input.
-	cmd := exec.CommandContext(ctx, "gcloud", "auth", "print-identity-token",
-		"--audiences="+c.cfg.Audience)
+	// No --audiences: gcloud rejects it for user accounts. The token's audience
+	// is gcloud's client ID, which the server checks against OIDC_AUDIENCE.
+	cmd := exec.CommandContext(ctx, "gcloud", "auth", "print-identity-token")
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
