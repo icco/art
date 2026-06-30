@@ -15,6 +15,9 @@ const (
 	reversalUnarchived     = "unarchived"
 	reversalReplyDismissed = "reply_dismissed"
 	reversalMiscategorized = "miscategorized"
+	// reversalManualArchived records that Nat archived mail art had left in the
+	// inbox — the opposite correction to reversalUnarchived.
+	reversalManualArchived = "manual_archived"
 )
 
 // buildCorrections renders recently-reversed decisions into a prompt block the
@@ -43,6 +46,8 @@ func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, limit int) (
 		switch r.ReversalKind {
 		case reversalUnarchived:
 			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'keep'.\n", r.FromAddr, r.Subject)
+		case reversalManualArchived:
+			fmt.Fprintf(&b, "- You left an email from %q (subject %q) in the inbox; Nat archived it — prefer 'archive' for similar mail.\n", r.FromAddr, r.Subject)
 		case reversalReplyDismissed:
 			fmt.Fprintf(&b, "- You flagged mail from %q (subject %q) as needing a reply; Nat disagreed. Be more cautious labeling similar mail 'reply'.\n", r.FromAddr, r.Subject)
 		case reversalMiscategorized:

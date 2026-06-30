@@ -56,6 +56,19 @@ func TestBuildCorrections(t *testing.T) {
 	}
 }
 
+func TestBuildCorrectionsManualArchived(t *testing.T) {
+	db := testdb.Open(t)
+	seedReversed(t, db, "g3", models.EmailKeep, reversalManualArchived)
+
+	corr, err := buildCorrections(context.Background(), db, 14, 15)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(corr, "archived it") || !strings.Contains(corr, "prefer 'archive'") {
+		t.Errorf("corrections missing manual-archive guidance:\n%s", corr)
+	}
+}
+
 func TestBuildCorrectionsEmpty(t *testing.T) {
 	db := testdb.Open(t)
 	got, err := buildCorrections(context.Background(), db, 14, 15)

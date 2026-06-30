@@ -62,14 +62,23 @@ func reverseAndRecord(ctx context.Context, db *gorm.DB, gm reversalGmailer, row 
 		return models.EmailMessage{}, err
 	}
 	now := time.Now()
+	updates := map[string]any{"reversed": true, "reversal_kind": kind, "reconciled_at": &now}
+	// Un-archiving restores INBOX in Gmail, so Archived must follow or it becomes
+	// a stale direction flag for the archive/inbox toggle.
+	if kind == reversalUnarchived {
+		updates["archived"] = false
+	}
 	if err := db.WithContext(ctx).Model(&models.EmailMessage{}).
 		Where("id = ?", row.ID).
-		Updates(map[string]any{"reversed": true, "reversal_kind": kind, "reconciled_at": &now}).Error; err != nil {
+		Updates(updates).Error; err != nil {
 		return models.EmailMessage{}, err
 	}
 	row.Reversed = true
 	row.ReversalKind = kind
 	row.ReconciledAt = &now
+	if kind == reversalUnarchived {
+		row.Archived = false
+	}
 	return *row, nil
 }
 
