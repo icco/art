@@ -134,7 +134,9 @@ func (r *Runner) finish(ctx context.Context, id string, counts map[string]int, r
 		errStr = runErrs[0]
 	}
 	t := time.Now()
-	return r.DB.WithContext(ctx).Model(&models.AgentRun{}).Where("id = ?", id).Updates(map[string]any{
+	// Record the outcome even if ctx already timed out mid-run, so a started
+	// run never stays stuck "running".
+	return r.DB.WithContext(context.WithoutCancel(ctx)).Model(&models.AgentRun{}).Where("id = ?", id).Updates(map[string]any{
 		"ended_at":   &t,
 		"status":     string(status),
 		"summary":    datatypes.JSON(body),

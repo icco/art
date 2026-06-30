@@ -1,18 +1,50 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/icco/art/lib/models"
+	gutillog "github.com/icco/gutil/logging"
 )
 
-// TriageRun runs an email-triage pass across all linked accounts.
+// triageRunTimeout bounds a detached triage pass and doubles as the staleness
+// window for the in-flight guard: a run still "running" past this is treated as
+// abandoned (e.g. the process restarted mid-pass) so it can't block new runs.
+const triageRunTimeout = 10 * time.Minute
+
+// TriageRun starts an email-triage pass across all linked accounts and returns
+// immediately. The pass can take minutes, so it runs detached from the request:
+// a client disconnect or the router timeout no longer aborts it. Progress is
+// tracked by the AgentRun row (kind=triage); clients poll /agent-runs to see
+// when it lands.
 func (h *Handlers) TriageRun(w http.ResponseWriter, r *http.Request) {
-	if err := h.Triage.RunAll(r.Context()); err != nil {
+	var running int64
+	if err := h.DB.WithContext(r.Context()).Model(&models.AgentRun{}).
+		Where("kind = ? AND status = ? AND started_at > ?",
+			string(models.AgentRunTriage), string(models.AgentRunRunning),
+			time.Now().Add(-triageRunTimeout)).
+		Count(&running).Error; err != nil {
 		writeServerError(w, r, "triage run", err)
 		return
 	}
-	writeJSON(w, r, http.StatusOK, map[string]any{"ok": true})
+	if running > 0 {
+		writeJSON(w, r, http.StatusAccepted, map[string]any{"status": "running"})
+		return
+	}
+
+	// Keep the request's logger/request-id but drop its cancellation so the
+	// pass survives the response returning.
+	ctx := context.WithoutCancel(r.Context())
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, triageRunTimeout)
+		defer cancel()
+		if err := h.Triage.RunAll(ctx); err != nil {
+			gutillog.FromContext(ctx).Errorw("triage run", "err", err)
+		}
+	}()
+	writeJSON(w, r, http.StatusAccepted, map[string]any{"status": "started"})
 }
 
 // EmailsList responds with triaged messages, newest first. Supports optional

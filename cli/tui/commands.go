@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -175,13 +176,72 @@ func syncCalendars(c *Client) tea.Cmd {
 	}
 }
 
+const (
+	triagePollInterval = 2 * time.Second
+	triagePollTimeout  = 8 * time.Minute
+)
+
+// triage kicks off a detached server-side triage pass, then polls the runs
+// list until it lands. The work survives even if the TUI exits mid-poll.
 func triage(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if err := c.Triage(ctx); err != nil {
+		// Snapshot the latest finished triage run so we can tell the run we
+		// trigger apart from an earlier one.
+		baseline, err := latestTriageID(c)
+		if err != nil {
 			return errMsg{err}
 		}
-		return statusMsg("triage done")
+		startCtx, cancel := bg()
+		err = c.Triage(startCtx)
+		cancel()
+		if err != nil {
+			return errMsg{err}
+		}
+		deadline := timeNow().Add(triagePollTimeout)
+		for timeNow().Before(deadline) {
+			time.Sleep(triagePollInterval)
+			latest, err := latestTriageRun(c)
+			if err != nil {
+				continue
+			}
+			if settled(latest, baseline) {
+				if latest.Status == "failed" {
+					return errMsg{fmt.Errorf("triage failed: %s", latest.Error)}
+				}
+				return statusMsg("triage done")
+			}
+		}
+		return statusMsg("triage still running…")
 	}
+}
+
+// settled reports whether a triage run distinct from baseline has finished.
+func settled(latest *AgentRun, baseline string) bool {
+	return latest != nil && latest.Status != "running" && latest.ID != baseline
+}
+
+func latestTriageRun(c *Client) (*AgentRun, error) {
+	ctx, cancel := bg()
+	defer cancel()
+	runs, err := c.ListRuns(ctx, "triage", 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(runs) == 0 {
+		return nil, nil
+	}
+	return &runs[0], nil
+}
+
+// latestTriageID returns the id of the most recent finished triage run, or ""
+// when the latest is still running or none exist — i.e. no baseline to exclude.
+func latestTriageID(c *Client) (string, error) {
+	latest, err := latestTriageRun(c)
+	if err != nil {
+		return "", err
+	}
+	if latest == nil || latest.Status == "running" {
+		return "", nil
+	}
+	return latest.ID, nil
 }
