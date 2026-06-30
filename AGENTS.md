@@ -41,8 +41,8 @@ deterministic Go today — ADK/Vertex can wrap the same primitives later.
 ## Build / test
 
 ```sh
-make build                       # ./bin/art
-make run                         # server
+task build                       # ./bin/art
+task run                         # server
 go test ./...                    # set TEST_DATABASE_URL for DB-backed packages
 golangci-lint run
 ```
