@@ -116,7 +116,7 @@ func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, limit int) (
 	for _, r := range rows {
 		switch r.ReversalKind {
 		case reversalUnarchived:
-			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'read' or 'keep'.\n", r.FromAddr, r.Subject)
+			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'keep'.\n", r.FromAddr, r.Subject)
 		case reversalDraftDeleted:
 			fmt.Fprintf(&b, "- You drafted a reply to %q (subject %q); Nat discarded it without sending. Be more cautious drafting replies to similar mail.\n", r.FromAddr, r.Subject)
 		case reversalMiscategorized:

@@ -99,6 +99,9 @@ func TestReconcileDetectsReversals(t *testing.T) {
 	if !strings.Contains(corr, "moved it back") || !strings.Contains(corr, "discarded") {
 		t.Errorf("corrections missing expected guidance:\n%s", corr)
 	}
+	if strings.Contains(corr, "'read'") {
+		t.Errorf("corrections must not reference the removed 'read' category:\n%s", corr)
+	}
 }
 
 func TestBuildCorrectionsEmpty(t *testing.T) {
