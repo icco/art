@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/models"
 	gutillog "github.com/icco/gutil/logging"
 	gutilrender "github.com/icco/gutil/render"
 	"gorm.io/gorm"
@@ -44,6 +45,7 @@ type (
 	// TriageService executes an email-triage pass across all linked accounts.
 	TriageService interface {
 		RunAll(ctx context.Context) error
+		Reverse(ctx context.Context, id string) (models.EmailMessage, error)
 	}
 )
 

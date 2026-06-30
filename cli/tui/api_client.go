@@ -292,3 +292,9 @@ func (c *Client) ListEmails(ctx context.Context) ([]Email, error) {
 func (c *Client) Triage(ctx context.Context) error {
 	return c.do(ctx, "POST", "/triage/run", nil, nil)
 }
+
+// ReverseEmail marks a triaged decision bad and undoes it server-side.
+func (c *Client) ReverseEmail(ctx context.Context, id string) (Email, error) {
+	var out Email
+	return out, c.do(ctx, "POST", "/emails/"+id+"/reverse", nil, &out)
+}

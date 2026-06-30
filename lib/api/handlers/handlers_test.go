@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
+	"gorm.io/gorm"
 )
 
 func newRouter(h *handlers.Handlers) http.Handler {
@@ -250,5 +252,42 @@ func TestEventsAndSessionsList(t *testing.T) {
 	w = do(t, r, "GET", "/sessions", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("sessions list empty: %d", w.Code)
+	}
+}
+
+type stubTriage struct {
+	msg models.EmailMessage
+	err error
+}
+
+func (s stubTriage) RunAll(context.Context) error { return nil }
+func (s stubTriage) Reverse(context.Context, string) (models.EmailMessage, error) {
+	return s.msg, s.err
+}
+
+func TestEmailReverse(t *testing.T) {
+	db := testdb.Open(t)
+
+	h := &handlers.Handlers{DB: db, Triage: stubTriage{
+		msg: models.EmailMessage{Action: models.ActionArchived, Reversed: true, ReversalKind: "unarchived"},
+	}}
+	r := chi.NewRouter()
+	r.Post("/emails/{id}/reverse", h.EmailReverse)
+
+	w := do(t, r, "POST", "/emails/abc/reverse", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("reverse: %d %s", w.Code, w.Body)
+	}
+	var got models.EmailMessage
+	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	if !got.Reversed {
+		t.Error("expected reversed row in response")
+	}
+
+	h2 := &handlers.Handlers{DB: db, Triage: stubTriage{err: gorm.ErrRecordNotFound}}
+	r2 := chi.NewRouter()
+	r2.Post("/emails/{id}/reverse", h2.EmailReverse)
+	if w := do(t, r2, "POST", "/emails/missing/reverse", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("unknown id: got %d, want 404", w.Code)
 	}
 }
