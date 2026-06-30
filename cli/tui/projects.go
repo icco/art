@@ -50,7 +50,7 @@ func newProjectsPage(c *Client, isDark bool) projectsPage {
 	return projectsPage{client: c, list: l, keys: defaultKeyMap()}
 }
 
-func (p projectsPage) Title() string  { return "projects" }
+func (p projectsPage) Title() string   { return "projects" }
 func (p projectsPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
 func (p projectsPage) bindings() []key.Binding {
 	return []key.Binding{p.keys.Add, p.keys.Edit, p.keys.Delete}
@@ -147,7 +147,8 @@ func (p projectsPage) View() string {
 		return p.form.View()
 	}
 	if len(p.list.Items()) == 0 {
-		return strings.TrimRight(p.list.View(), "\n") + "\n\n" + faintStyle.Render("No projects yet — press a to add.")
+		title := p.list.Styles.Title.Render(p.list.Title)
+		return title + "\n\n" + faintStyle.Render("No projects yet — press a to add.")
 	}
 	return p.list.View()
 }

@@ -124,9 +124,9 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 
 // Project mirrors the API project resource.
 type Project struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Description    string     `json:"description"`
 	Kind           string     `json:"kind"`
 	TargetHours    float64    `json:"target_hours"`
 	ScheduledHours float64    `json:"scheduled_hours"`
