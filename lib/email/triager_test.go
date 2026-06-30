@@ -23,10 +23,8 @@ func TestDecideAction(t *testing.T) {
 		wantLabel   string
 	}{
 		{"archive high confidence", models.EmailArchive, 0.95, models.ActionArchived, true, false, gmail.LabelArchived},
-		{"archive low confidence downgrades", models.EmailArchive, 0.5, models.ActionRead, false, false, gmail.LabelRead},
+		{"archive low confidence downgrades to keep", models.EmailArchive, 0.5, models.ActionKeep, false, false, ""},
 		{"reply drafts", models.EmailReply, 0.9, models.ActionReply, false, true, gmail.LabelReply},
-		{"read labels", models.EmailRead, 0.9, models.ActionRead, false, false, gmail.LabelRead},
-		{"thinking labels", models.EmailThinking, 0.9, models.ActionThinking, false, false, gmail.LabelThinking},
 		{"keep is inert", models.EmailKeep, 0.9, models.ActionKeep, false, false, ""},
 	}
 	for _, c := range cases {
@@ -71,8 +69,6 @@ func (f *fakeGmail) EnsureLabels(context.Context) (map[string]string, error) {
 		gmail.LabelTriaged:  "L_TRIAGED",
 		gmail.LabelArchived: "L_ARCHIVED",
 		gmail.LabelReply:    "L_REPLY",
-		gmail.LabelRead:     "L_READ",
-		gmail.LabelThinking: "L_THINKING",
 	}, nil
 }
 
@@ -203,7 +199,7 @@ func TestRunAccountDryRun(t *testing.T) {
 
 func TestRunAccountIdempotent(t *testing.T) {
 	byID := map[string]Classification{
-		"m1": {Category: models.EmailRead, Confidence: 0.9},
+		"m1": {Category: models.EmailKeep, Confidence: 0.9},
 		"m2": {Category: models.EmailKeep, Confidence: 0.9},
 	}
 	tr, gm := newTriager(t, false, byID)

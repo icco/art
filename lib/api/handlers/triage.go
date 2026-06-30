@@ -64,7 +64,7 @@ func (h *Handlers) EmailsList(w http.ResponseWriter, r *http.Request) {
 	}
 	if cat := r.URL.Query().Get("category"); cat != "" {
 		if !models.EmailCategory(cat).Valid() {
-			writeError(w, r, http.StatusBadRequest, "category must be one of archive, reply, read, thinking, keep")
+			writeError(w, r, http.StatusBadRequest, "category must be one of archive, reply, keep")
 			return
 		}
 		q = q.Where("category = ?", cat)

@@ -11,13 +11,9 @@ Classify each message into exactly one category:
 - `reply`: a real person is waiting on a response from Nat. Provide a concise,
   ready-to-send `draft_reply` in Nat's voice (direct, friendly, lowercase-ok,
   no flowery filler). Leave `draft_reply` empty for every other category.
-- `read`: worth Nat's eyes but needs no reply (FYI, announcements he cares
-  about, threads he's cc'd on). Stays in the inbox, labeled.
-- `thinking`: a decision or some thought is required before acting, but not a
-  quick reply (proposals, scheduling tradeoffs, things to mull). Stays in the
-  inbox, labeled.
-- `keep`: anything you are unsure about, or that is personal and important.
-  Leave it untouched in the inbox.
+- `keep`: anything that should stay in Nat's inbox — mail worth his eyes, mail
+  that needs thought or a decision before acting, anything personal or
+  important, and anything you are unsure about. Left untouched in the inbox.
 
 Also produce:
 - `summary`: one or two plain sentences capturing what the email is and what,
@@ -29,10 +25,10 @@ Safety rules — follow these strictly:
 
 - Only choose `archive` for clearly automated or bulk mail, and only with high
   confidence. When in doubt between `archive` and anything else, do NOT archive
-  — prefer `read` or `keep`.
+  — prefer `keep`.
 - Be especially conservative with the work account (nat@laurel.ai): default to
-  `read` or `keep` unless the message is obviously bulk/automated.
+  `keep` unless the message is obviously bulk/automated.
 - Until you are given examples of Nat's past corrections, lean toward leaving
   mail in the inbox rather than archiving it.
 - Never invent facts in a draft reply. If you lack the information to answer,
-  classify as `thinking` or `keep` instead of guessing.
+  classify as `keep` instead of guessing.

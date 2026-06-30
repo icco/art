@@ -50,7 +50,7 @@ type decision struct {
 }
 
 // decideAction maps a classification to concrete labels/actions. A low-
-// confidence archive is downgraded to read (label only) so art never
+// confidence archive is downgraded to keep (left untouched) so art never
 // auto-archives mail it is unsure about. Art/Triaged is always applied.
 func decideAction(cat models.EmailCategory, confidence, threshold float64) decision {
 	d := decision{AddLabels: []string{gmail.LabelTriaged}}
@@ -61,20 +61,13 @@ func decideAction(cat models.EmailCategory, confidence, threshold float64) decis
 			d.RemoveInbox = true
 			d.AddLabels = append(d.AddLabels, gmail.LabelArchived)
 		} else {
-			d.Action = models.ActionRead
-			d.AddLabels = append(d.AddLabels, gmail.LabelRead)
+			d.Action = models.ActionKeep
 		}
 	case models.EmailReply:
 		d.Action = models.ActionReply
 		d.AddLabels = append(d.AddLabels, gmail.LabelReply)
 		d.MakeDraft = true
-	case models.EmailRead:
-		d.Action = models.ActionRead
-		d.AddLabels = append(d.AddLabels, gmail.LabelRead)
-	case models.EmailThinking:
-		d.Action = models.ActionThinking
-		d.AddLabels = append(d.AddLabels, gmail.LabelThinking)
-	case models.EmailKeep:
+	default:
 		d.Action = models.ActionKeep
 	}
 	return d
