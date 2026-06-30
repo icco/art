@@ -134,7 +134,7 @@ func (p dashboardPage) renderProjects() string {
 			due = " due " + pr.Deadline.Format("Jan 2")
 		}
 		fmt.Fprintf(&b, "%s %s %.0f/%.0fh%s\n",
-			kindStyle(string(pr.Kind), false).Render(truncate(pr.Name, 14)),
+			kindStyle(pr.Kind, false).Render(truncate(pr.Name, 14)),
 			progressBar(frac, barW), pr.ScheduledHours, pr.TargetHours, faintStyle.Render(due))
 	}
 	return strings.TrimRight(b.String(), "\n")

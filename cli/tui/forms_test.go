@@ -29,8 +29,8 @@ func captureServer(t *testing.T, c *capturedReq, status int) *httptest.Server {
 }
 
 func TestProjectSubmitFormCreate(t *testing.T) {
-	var cap capturedReq
-	server := captureServer(t, &cap, http.StatusCreated)
+	var rec capturedReq
+	server := captureServer(t, &rec, http.StatusCreated)
 	defer server.Close()
 
 	p := projectsPage{
@@ -41,12 +41,12 @@ func TestProjectSubmitFormCreate(t *testing.T) {
 	if _, ok := msg.(errMsg); ok {
 		t.Fatalf("submit returned error: %v", msg)
 	}
-	if cap.method != http.MethodPost || cap.path != "/projects" {
-		t.Fatalf("expected POST /projects, got %s %s", cap.method, cap.path)
+	if rec.method != http.MethodPost || rec.path != "/projects" {
+		t.Fatalf("expected POST /projects, got %s %s", rec.method, rec.path)
 	}
 	var got Project
-	if err := json.Unmarshal(cap.body, &got); err != nil {
-		t.Fatalf("decode body: %v (%s)", err, cap.body)
+	if err := json.Unmarshal(rec.body, &got); err != nil {
+		t.Fatalf("decode body: %v (%s)", err, rec.body)
 	}
 	if got.Name != "Book" || got.Kind != "work" || got.TargetHours != 40 || got.Deadline == nil {
 		t.Fatalf("payload mismatch: %+v", got)
@@ -54,8 +54,8 @@ func TestProjectSubmitFormCreate(t *testing.T) {
 }
 
 func TestProjectSubmitFormEditPatches(t *testing.T) {
-	var cap capturedReq
-	server := captureServer(t, &cap, http.StatusOK)
+	var rec capturedReq
+	server := captureServer(t, &rec, http.StatusOK)
 	defer server.Close()
 
 	p := projectsPage{
@@ -66,14 +66,14 @@ func TestProjectSubmitFormEditPatches(t *testing.T) {
 	if _, ok := p.submitForm()().(errMsg); ok {
 		t.Fatal("edit submit errored")
 	}
-	if cap.method != http.MethodPatch || cap.path != "/projects/p1" {
-		t.Fatalf("expected PATCH /projects/p1, got %s %s", cap.method, cap.path)
+	if rec.method != http.MethodPatch || rec.path != "/projects/p1" {
+		t.Fatalf("expected PATCH /projects/p1, got %s %s", rec.method, rec.path)
 	}
 }
 
 func TestHabitSubmitFormCreate(t *testing.T) {
-	var cap capturedReq
-	server := captureServer(t, &cap, http.StatusCreated)
+	var rec capturedReq
+	server := captureServer(t, &rec, http.StatusCreated)
 	defer server.Close()
 
 	p := habitsPage{
@@ -83,12 +83,12 @@ func TestHabitSubmitFormCreate(t *testing.T) {
 	if _, ok := p.submitForm()().(errMsg); ok {
 		t.Fatal("habit submit errored")
 	}
-	if cap.method != http.MethodPost || cap.path != "/habits" {
-		t.Fatalf("expected POST /habits, got %s %s", cap.method, cap.path)
+	if rec.method != http.MethodPost || rec.path != "/habits" {
+		t.Fatalf("expected POST /habits, got %s %s", rec.method, rec.path)
 	}
 	var got Habit
-	if err := json.Unmarshal(cap.body, &got); err != nil {
-		t.Fatalf("decode: %v (%s)", err, cap.body)
+	if err := json.Unmarshal(rec.body, &got); err != nil {
+		t.Fatalf("decode: %v (%s)", err, rec.body)
 	}
 	if got.Name != "Run" || got.BlockDurationMinutes != 30 || got.Cadence.Count != 3 {
 		t.Fatalf("payload mismatch: %+v", got)
