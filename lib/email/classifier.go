@@ -19,11 +19,12 @@ import (
 //go:embed prompt.md
 var systemInstruction string
 
-// Classification is the structured output the model returns per message.
+// Classification is the structured output the model returns per message. Art
+// only ever labels or archives, so the model decides a category and explains
+// itself; it never writes reply text.
 type Classification struct {
 	Category   models.EmailCategory `json:"category"`
 	Summary    string               `json:"summary"`
-	DraftReply string               `json:"draft_reply"`
 	Reason     string               `json:"reason"`
 	Confidence float64              `json:"confidence"`
 }
@@ -82,10 +83,6 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 	if !out.Category.Valid() {
 		return Classification{}, fmt.Errorf("model returned invalid category %q", out.Category)
 	}
-	// draft_reply is only meaningful for replies.
-	if out.Category != models.EmailReply {
-		out.DraftReply = ""
-	}
 	return out, nil
 }
 
@@ -119,10 +116,9 @@ func classificationSchema() *genai.Schema {
 					string(models.EmailKeep),
 				},
 			},
-			"summary":     {Type: genai.TypeString},
-			"draft_reply": {Type: genai.TypeString},
-			"reason":      {Type: genai.TypeString},
-			"confidence":  {Type: genai.TypeNumber},
+			"summary":    {Type: genai.TypeString},
+			"reason":     {Type: genai.TypeString},
+			"confidence": {Type: genai.TypeNumber},
 		},
 		Required: []string{"category", "summary", "reason", "confidence"},
 	}

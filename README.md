@@ -4,9 +4,10 @@ Personal scheduling agent. Blocks focus time on your work + personal Google
 Calendars for **projects** (target hours toward a deadline) and **habits**
 (recurring practice) — writing new events only, never touching events you made.
 
-It also triages both Gmail inboxes with Gemini: archives bulk mail, drafts
-replies, and labels what needs reading or thought. Every action is reversible
-and recorded.
+It also triages both Gmail inboxes with Gemini: archives bulk mail and labels
+what needs a reply, reading, or thought. Its only actions are applying labels
+and archiving — it never drafts, sends, or deletes mail, and only ever reads the
+inbox. Every action is reversible and recorded.
 
 Single-user, self-hosted. *(Working on the code? See [AGENTS.md](AGENTS.md).)*
 
@@ -55,10 +56,12 @@ The TUI authenticates as *you* via `gcloud` — no stored secrets. `r` replans,
 
 ## Email triage
 
-Runs hourly after the planner. Archive removes `INBOX` and adds `Art/Archived`
-(mail stays in All Mail); replies are saved as **drafts** (Art never sends);
-`read`/`thinking`/`keep` are labeled in place. Reversals you make (un-archive,
-discard a draft) are detected and fed into the next run.
+Runs hourly after the planner over **inbox mail only**. Archive removes `INBOX`
+and adds `Art/Archived` (mail stays in All Mail); mail needing a response is
+labeled `Art/Reply` for you to handle (Art never writes the reply); `keep` is
+left in place with `Art/Triaged`. Labeling and archiving are the only actions
+Art takes — it never drafts, sends, or deletes mail. Decisions you reverse via
+the TUI are fed back into the next run as corrections.
 
 Gmail uses the `gmail.modify` **restricted scope**, so:
 

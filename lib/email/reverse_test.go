@@ -12,7 +12,6 @@ import (
 
 type fakeReverseGmail struct {
 	modifyCalls []modifyCall
-	deleted     []string
 }
 
 func (f *fakeReverseGmail) EnsureLabels(context.Context) (map[string]string, error) {
@@ -25,11 +24,6 @@ func (f *fakeReverseGmail) EnsureLabels(context.Context) (map[string]string, err
 
 func (f *fakeReverseGmail) ModifyLabels(_ context.Context, msgID string, add, remove []string) error {
 	f.modifyCalls = append(f.modifyCalls, modifyCall{msgID, add, remove})
-	return nil
-}
-
-func (f *fakeReverseGmail) DeleteDraft(_ context.Context, draftID string) error {
-	f.deleted = append(f.deleted, draftID)
 	return nil
 }
 
@@ -57,17 +51,16 @@ func TestReverseDecisionArchived(t *testing.T) {
 
 func TestReverseDecisionReply(t *testing.T) {
 	gm := &fakeReverseGmail{}
-	row := &models.EmailMessage{GmailMessageID: "m2", Action: models.ActionReply, Applied: true, DraftID: "d2"}
+	row := &models.EmailMessage{GmailMessageID: "m2", Action: models.ActionReply, Applied: true}
 	kind, err := reverseDecision(context.Background(), gm, row)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if kind != reversalDraftDeleted {
-		t.Errorf("kind = %q, want draft_deleted", kind)
+	if kind != reversalReplyDismissed {
+		t.Errorf("kind = %q, want reply_dismissed", kind)
 	}
-	if !slices.Contains(gm.deleted, "d2") {
-		t.Errorf("expected draft d2 deleted, got %v", gm.deleted)
-	}
+	// Reversing a reply only removes the Art/Reply label — there is no draft to
+	// delete, because art never created one.
 	if len(gm.modifyCalls) != 1 || !slices.Contains(gm.modifyCalls[0].remove, "L_REPLY") {
 		t.Errorf("expected Art/Reply removed, calls=%v", gm.modifyCalls)
 	}
@@ -83,8 +76,8 @@ func TestReverseDecisionKeepIsNoGmail(t *testing.T) {
 	if kind != reversalMiscategorized {
 		t.Errorf("kind = %q, want miscategorized", kind)
 	}
-	if len(gm.modifyCalls) != 0 || len(gm.deleted) != 0 {
-		t.Errorf("keep reversal must not touch Gmail: modify=%v delete=%v", gm.modifyCalls, gm.deleted)
+	if len(gm.modifyCalls) != 0 {
+		t.Errorf("keep reversal must not touch Gmail: modify=%v", gm.modifyCalls)
 	}
 }
 

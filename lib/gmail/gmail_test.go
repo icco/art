@@ -2,12 +2,9 @@ package gmail
 
 import (
 	"encoding/base64"
-	"errors"
-	"strings"
 	"testing"
 
 	"google.golang.org/api/gmail/v1"
-	"google.golang.org/api/googleapi"
 )
 
 func TestDecodeBody(t *testing.T) {
@@ -52,30 +49,5 @@ func TestExtractBody(t *testing.T) {
 
 	if got := extractBody(nil); got != "" {
 		t.Errorf("nil part, got %q", got)
-	}
-}
-
-func TestBuildReply(t *testing.T) {
-	out := buildReply(DraftInput{To: "a@b.com", Subject: "Hello", Body: "hi there", InReplyTo: "<msg-1>"})
-	for _, want := range []string{"To: a@b.com", "Subject: Re: Hello", "In-Reply-To: <msg-1>", "References: <msg-1>", "hi there"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("reply missing %q in:\n%s", want, out)
-		}
-	}
-	// An existing Re: prefix is not duplicated.
-	if got := buildReply(DraftInput{Subject: "Re: Hello"}); strings.Count(got, "Re:") != 1 {
-		t.Errorf("Re: prefix duplicated:\n%s", got)
-	}
-}
-
-func TestIsNotFound(t *testing.T) {
-	if !isNotFound(&googleapi.Error{Code: 404}) {
-		t.Error("404 should be not-found")
-	}
-	if isNotFound(&googleapi.Error{Code: 500}) {
-		t.Error("500 should not be not-found")
-	}
-	if isNotFound(errors.New("plain")) {
-		t.Error("plain error should not be not-found")
 	}
 }

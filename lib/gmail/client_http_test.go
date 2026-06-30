@@ -33,14 +33,6 @@ func fakeGmailServer(t *testing.T) *httptest.Server {
 			var in gmail.Label
 			_ = json.NewDecoder(r.Body).Decode(&in)
 			write(w, &gmail.Label{Id: "NEW_" + in.Name, Name: in.Name})
-		case strings.HasSuffix(p, "/drafts") && r.Method == http.MethodPost:
-			write(w, &gmail.Draft{Id: "DRAFT1"})
-		case strings.Contains(p, "/drafts/"):
-			if strings.Contains(p, "missing") {
-				http.Error(w, `{"error":{"code":404}}`, http.StatusNotFound)
-				return
-			}
-			write(w, &gmail.Draft{Id: "d1"})
 		case strings.HasSuffix(p, "/messages"):
 			write(w, &gmail.ListMessagesResponse{Messages: []*gmail.Message{{Id: "m1"}, {Id: "m2"}}})
 		case strings.Contains(p, "/messages/"):
@@ -109,21 +101,5 @@ func TestClientMethods(t *testing.T) {
 	}
 	if err := c.ModifyLabels(ctx, "m1", nil, nil); err != nil {
 		t.Errorf("ModifyLabels no-op: %v", err)
-	}
-
-	draftID, err := c.CreateDraft(ctx, DraftInput{ThreadID: "t1", To: "a@b.com", Subject: "Hi", Body: "reply"})
-	if err != nil || draftID != "DRAFT1" {
-		t.Errorf("CreateDraft: id=%q err=%v", draftID, err)
-	}
-
-	if ok, err := c.GetDraft(ctx, "d1"); err != nil || !ok {
-		t.Errorf("GetDraft existing: ok=%v err=%v", ok, err)
-	}
-	if ok, err := c.GetDraft(ctx, "missing"); err != nil || ok {
-		t.Errorf("GetDraft missing: ok=%v err=%v (want false,nil)", ok, err)
-	}
-
-	if in, err := c.HasInboxLabel(ctx, "m1"); err != nil || !in {
-		t.Errorf("HasInboxLabel: in=%v err=%v", in, err)
 	}
 }
