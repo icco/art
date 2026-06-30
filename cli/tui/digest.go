@@ -61,6 +61,9 @@ func newDigestPage(c *Client, isDark bool) digestPage {
 
 func (p digestPage) Title() string   { return "digest" }
 func (p digestPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
+func (p digestPage) bindings() []key.Binding {
+	return []key.Binding{p.keys.Archive, p.keys.Reject}
+}
 
 func (p digestPage) Init() tea.Cmd { return loadEmails(p.client) }
 

@@ -56,16 +56,26 @@ func defaultKeyMap() keyMap {
 	}
 }
 
-// ShortHelp implements help.KeyMap.
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Dashboard, k.Calendar, k.Projects, k.Habits, k.Digest, k.Help, k.Quit}
+// pageHelp adapts the global navigation keys plus the current page's own action
+// keys into a help.KeyMap, so the footer and full help show what the active
+// page can actually do instead of a fixed global list.
+type pageHelp struct {
+	keys keyMap
+	page []key.Binding
 }
 
-// FullHelp implements help.KeyMap.
-func (k keyMap) FullHelp() [][]key.Binding {
+// ShortHelp implements help.KeyMap: the page's actions, then help and quit.
+func (h pageHelp) ShortHelp() []key.Binding {
+	out := append([]key.Binding{}, h.page...)
+	return append(out, h.keys.Help, h.keys.Quit)
+}
+
+// FullHelp implements help.KeyMap: navigation, the page's actions, then the
+// global run/back/help/quit keys.
+func (h pageHelp) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{k.Dashboard, k.Calendar, k.Projects, k.Habits, k.Digest},
-		{k.PrevWeek, k.NextWeek, k.Add, k.Edit, k.Delete, k.Reject},
-		{k.Replan, k.Sync, k.Triage, k.Back, k.Help, k.Quit},
+		{h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits, h.keys.Digest},
+		h.page,
+		{h.keys.Replan, h.keys.Sync, h.keys.Triage, h.keys.Back, h.keys.Help, h.keys.Quit},
 	}
 }

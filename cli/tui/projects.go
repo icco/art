@@ -52,6 +52,9 @@ func newProjectsPage(c *Client, isDark bool) projectsPage {
 
 func (p projectsPage) Title() string  { return "projects" }
 func (p projectsPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
+func (p projectsPage) bindings() []key.Binding {
+	return []key.Binding{p.keys.Add, p.keys.Edit, p.keys.Delete}
+}
 
 func (p projectsPage) Init() tea.Cmd { return loadProjects(p.client) }
 
@@ -142,6 +145,9 @@ func (p projectsPage) submitForm() tea.Cmd {
 func (p projectsPage) View() string {
 	if p.form != nil {
 		return p.form.View()
+	}
+	if len(p.list.Items()) == 0 {
+		return strings.TrimRight(p.list.View(), "\n") + "\n\n" + faintStyle.Render("No projects yet — press a to add.")
 	}
 	return p.list.View()
 }

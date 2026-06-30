@@ -1,6 +1,9 @@
 package tui
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
+)
 
 // pageID identifies a top-level screen.
 type pageID int
@@ -45,4 +48,8 @@ type Page interface {
 	// FullInput reports that the page is capturing raw keystrokes (an open
 	// form or an active list filter), so the root must not steal global keys.
 	FullInput() bool
+	// bindings returns the page's own action keys, which the root merges with
+	// the global navigation keys to render contextual help. Returns nil for a
+	// page with no actions of its own.
+	bindings() []key.Binding
 }

@@ -238,5 +238,6 @@ func (m rootModel) renderFooter(width int) string {
 		status = subtleStyle.Render(status)
 	}
 	m.help.SetWidth(width)
-	return status + "\n" + m.help.View(m.keys)
+	h := pageHelp{keys: m.keys, page: m.pages[m.current()].bindings()}
+	return status + "\n" + m.help.View(h)
 }
