@@ -13,8 +13,9 @@ import (
 
 // Reversal kinds recorded on EmailMessage.ReversalKind.
 const (
-	reversalUnarchived   = "unarchived"
-	reversalDraftDeleted = "draft_deleted"
+	reversalUnarchived     = "unarchived"
+	reversalDraftDeleted   = "draft_deleted"
+	reversalMiscategorized = "miscategorized"
 )
 
 // reconcileGmailer is the subset of gmail.Client the reconcile pass needs.
@@ -118,6 +119,8 @@ func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, limit int) (
 			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'read' or 'keep'.\n", r.FromAddr, r.Subject)
 		case reversalDraftDeleted:
 			fmt.Fprintf(&b, "- You drafted a reply to %q (subject %q); Nat discarded it without sending. Be more cautious drafting replies to similar mail.\n", r.FromAddr, r.Subject)
+		case reversalMiscategorized:
+			fmt.Fprintf(&b, "- You categorized mail from %q (subject %q) as %s; Nat marked that decision wrong — reconsider similar mail.\n", r.FromAddr, r.Subject, r.Category)
 		}
 	}
 	return b.String(), nil

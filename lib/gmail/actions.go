@@ -47,6 +47,16 @@ func (c *Client) CreateDraft(ctx context.Context, in DraftInput) (string, error)
 	return created.Id, nil
 }
 
+// DeleteDraft removes a reply draft. A missing draft (already sent or deleted)
+// is treated as success so reversal stays idempotent.
+func (c *Client) DeleteDraft(ctx context.Context, draftID string) error {
+	err := c.Service.Users.Drafts.Delete(User, draftID).Context(ctx).Do()
+	if isNotFound(err) {
+		return nil
+	}
+	return err
+}
+
 // GetDraft reports whether a draft still exists. Used by the reconcile pass to
 // detect drafts Nat sent or deleted.
 func (c *Client) GetDraft(ctx context.Context, draftID string) (bool, error) {
