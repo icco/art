@@ -21,7 +21,7 @@ brew install icco/tap/art        # the `art` TUI
 ```sh
 docker compose up -d db          # Postgres
 cp .env.example .env             # fill in — every var is documented inline
-make run
+task run
 ```
 
 Link each Google account (browser-consent personal, then work):
