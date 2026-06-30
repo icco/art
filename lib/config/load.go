@@ -46,7 +46,7 @@ type OAuthConfig struct {
 
 // VertexModel is hardcoded to the latest GA Gemini model on Vertex AI.
 // Update here when Google ships a newer GA release.
-const VertexModel = "gemini-3.1-pro"
+const VertexModel = "gemini-2.5-pro"
 
 // VertexConfig holds Vertex AI project and region settings for the LLM.
 type VertexConfig struct {
