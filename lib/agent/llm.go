@@ -340,9 +340,6 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	}
 
 	calID := client.Account.PrimaryCalendarID
-	if client.Account.ArtCalendarID != nil && *client.Account.ArtCalendarID != "" {
-		calID = *client.Account.ArtCalendarID
-	}
 	ev, err := client.CreateFocus(ctx, calendar.FocusBlock{
 		CalendarID:  calID,
 		Start:       start,

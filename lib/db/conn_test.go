@@ -78,3 +78,27 @@ func TestMigrateEmailCategories(t *testing.T) {
 		t.Fatalf("second migrate: %v", err)
 	}
 }
+
+func TestDropArtCalendarColumn(t *testing.T) {
+	db := testdb.Open(t)
+
+	// Simulate a pre-migration database that still has the retired column.
+	if err := db.Exec(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS art_calendar_id varchar(255)`).Error; err != nil {
+		t.Fatalf("add legacy column: %v", err)
+	}
+	if !db.Migrator().HasColumn(&models.Account{}, "art_calendar_id") {
+		t.Fatal("setup: expected art_calendar_id to exist")
+	}
+
+	if err := dropArtCalendarColumn(db); err != nil {
+		t.Fatalf("drop: %v", err)
+	}
+	if db.Migrator().HasColumn(&models.Account{}, "art_calendar_id") {
+		t.Error("art_calendar_id should be dropped")
+	}
+
+	// Idempotent: a second run on a database without the column is a no-op.
+	if err := dropArtCalendarColumn(db); err != nil {
+		t.Fatalf("second drop: %v", err)
+	}
+}

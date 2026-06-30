@@ -130,7 +130,6 @@ type Account struct {
 	Email                 string      `gorm:"type:varchar(255);not null" json:"email"`
 	RefreshTokenEncrypted []byte      `gorm:"type:bytea;not null" json:"-"`
 	PrimaryCalendarID     string      `gorm:"type:varchar(255);not null" json:"primary_calendar_id"`
-	ArtCalendarID         *string     `gorm:"type:varchar(255)" json:"art_calendar_id,omitempty"`
 }
 
 // WorkingHour is one allowed-time window for a given slot kind and weekday.
