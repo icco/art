@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/httprate v0.15.0
 	github.com/google/uuid v1.6.0
-	github.com/icco/gutil v0.0.0-20260623135256-358767fad415
+	github.com/icco/gutil v0.0.0-20260630032459-de9e83f7fbb2
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.36.0
@@ -65,7 +65,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
-	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mattn/go-runewidth v0.0.24 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
@@ -73,7 +73,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.69.0 // indirect
-	github.com/prometheus/procfs v0.21.0 // indirect
+	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.3 // indirect
 	github.com/unrolled/render v1.7.0 // indirect
@@ -92,7 +92,7 @@ require (
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d // indirect
-	google.golang.org/grpc v1.81.1 // indirect
+	google.golang.org/grpc v1.82.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 	rsc.io/omap v1.2.0 // indirect
