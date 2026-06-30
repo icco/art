@@ -3,9 +3,6 @@
 Date: 2026-06-30
 Branch: `email-triage-refinements`
 
-## Background
-
-Email triage (`lib/email`, `lib/gmail`) classifies inbox mail with Gemini and applies reversible Gmail actions. An investigation into "emails get labeled archived but stay in the inbox" found the triage logic is correct: Gmail's inbox is thread-keyed, so a conversation stays visible while a sibling message keeps `INBOX`. No bug. This spec covers four follow-on improvements.
 
 ## A. Seven-day window, both accounts
 
@@ -35,13 +32,10 @@ Changes:
 - `lib/email/triager.go` `decideAction`: remove the `read` and `thinking` cases. Low-confidence archive downgrades to `ActionKeep` (no label) instead of `ActionRead`. Add a `default: d.Action = models.ActionKeep` guard so any unmapped category is treated as keep.
 - `lib/gmail/labels.go`: remove `LabelRead` and `LabelThinking` consts and drop them from `ArtLabels` → `[LabelTriaged, LabelArchived, LabelReply]`.
 
-Kept deliberately (no DB migration, historical rows stay valid):
+Clean up the now-unused constants and migrate the database to the new taxonomy:
 
-- `models.EmailRead`, `EmailThinking`, `ActionRead`, `ActionThinking` constants, marked deprecated.
-- `EmailCategory.Valid()` keeps `read`/`thinking` (so category filters on historical rows still validate).
-- The Postgres `CHECK` constraints on `category`/`action` are unchanged.
-
-Existing `Art/Read` / `Art/Thinking` Gmail labels and already-tagged messages are left untouched (harmless orphans). `EnsureLabels` simply stops managing them.
+- Remove `models.EmailRead`, `EmailThinking`, `ActionRead`, `ActionThinking`. Update `EmailCategory.Valid()` to accept only `archive`/`reply`/`keep`, and change the `category` `check:` tag to `IN ('archive','reply','keep')`.
+- Add an idempotent migration step in `lib/db/conn.go`, run after `AutoMigrate` (which won't alter an existing constraint on its own): first `UPDATE email_messages SET category='keep', action='keep' WHERE category IN ('read','thinking')` to remap historical rows (preserving their audit detail), then drop and recreate the `category` CHECK constraint with the new set. `action` has no DB constraint, so only `category` is migrated. The step must be safe to run on every startup (no-op once applied) and on a fresh DB.
 
 ## D. Mark-bad / undo a decision (TUI)
 
@@ -55,11 +49,11 @@ Reverse the Gmail side-effect by action, keep `Art/Triaged` (so it is not re-tri
 |---|---|---|
 | `archived` | re-add `INBOX`, remove `Art/Archived` | `unarchived` |
 | `reply` | delete the draft (if `DraftID` set), remove `Art/Reply` | `draft_deleted` |
-| `read` / `thinking` / `keep` / other | none — record correction only | `miscategorized` (new) |
+| `keep` / other | none — record correction only | `miscategorized` (new) |
 
 `unarchived` and `draft_deleted` reuse the existing `buildCorrections` phrasings. Add one `miscategorized` case: "You categorized mail from %q (subject %q) as %s; Nat marked that wrong — reconsider similar mail." (uses the row's `Category`). Idempotent: a row already `reversed` is a no-op.
 
-Only `archived` and `reply` touch Gmail, and both their labels (`Art/Archived`, `Art/Reply`) remain in `ArtLabels`, so their IDs come from `EnsureLabels`. Historical `read`/`thinking` rows keep their now-orphaned label (harmless); the reversal just records the correction.
+Only `archived` and `reply` touch Gmail, and both their labels (`Art/Archived`, `Art/Reply`) remain in `ArtLabels`, so their IDs come from `EnsureLabels`. Everything else records the correction only — no Gmail call. (The migration remaps old `read`/`thinking` rows to `keep`; their orphaned `Art/Read`/`Art/Thinking` Gmail labels are left untouched.)
 
 ### Components
 
@@ -74,16 +68,17 @@ Only `archived` and `reply` touch Gmail, and both their labels (`Art/Archived`, 
 ## Out of scope
 
 - No re-triage loop after reversal (matches existing reconcile behavior).
-- No bulk reverse, no new DB columns, no constraint migration.
+- No bulk reverse, no new DB columns (the `category` CHECK constraint is migrated, but no schema columns change).
 
 ## Commit plan (one branch)
 
 1. config defaults (window + cap)
 2. reconcile/runner failure logging
-3. taxonomy simplification (prompt, schema, decideAction, labels)
-4. gmail `DeleteDraft` + `email.Runner.Reverse` + tests
-5. `POST /emails/{id}/reverse` API + TUI `x`-to-reverse
+3. taxonomy simplification (prompt, schema, decideAction, labels, constants + `Valid()`)
+4. db migration: remap `read`/`thinking` rows → `keep` + swap the `category` CHECK constraint
+5. gmail `DeleteDraft` + `email.Runner.Reverse` + tests
+6. `POST /emails/{id}/reverse` API + TUI `x`-to-reverse
 
 ## Tests touched
 
-`load_test.go`, `triager_test.go` (decideAction cases + apply), classifier expectations, new reversal tests, handler tests, `api_client` tests.
+`load_test.go`, `triager_test.go` (decideAction cases + apply), classifier expectations, `models` `Valid()`, the `conn.go` migration (remap + constraint swap, exercised by inserting legacy rows before the swap), new reversal tests, handler tests, `api_client` tests.
