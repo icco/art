@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/icco/art/lib/api/handlers"
@@ -28,6 +29,7 @@ func newRouter(h *handlers.Handlers) http.Handler {
 	r.Get("/events", h.EventsList)
 	r.Get("/sessions", h.SessionsList)
 	r.Get("/emails", h.EmailsList)
+	r.Get("/agent-runs", h.AgentRunsList)
 	r.Post("/triage/run", h.TriageRun)
 	return r
 }
@@ -177,6 +179,55 @@ func TestWorkingHoursReplaceList(t *testing.T) {
 	})
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad day_of_week should 400: %d", w.Code)
+	}
+}
+
+func TestAgentRunsList(t *testing.T) {
+	db := testdb.Open(t)
+	h := &handlers.Handlers{DB: db}
+	r := newRouter(h)
+
+	// Seed one planner run and two triage runs (the newer triage run is latest).
+	runs := []models.AgentRun{
+		{Kind: models.AgentRunPlanner, Status: models.AgentRunSucceeded, StartedAt: time.Unix(1000, 0)},
+		{Kind: models.AgentRunTriage, Status: models.AgentRunSucceeded, StartedAt: time.Unix(2000, 0)},
+		{Kind: models.AgentRunTriage, Status: models.AgentRunFailed, StartedAt: time.Unix(3000, 0)},
+	}
+	if err := db.Create(&runs).Error; err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// Default: newest first.
+	w := do(t, r, "GET", "/agent-runs", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list: %d %s", w.Code, w.Body)
+	}
+	var all []models.AgentRun
+	if err := json.Unmarshal(w.Body.Bytes(), &all); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(all) != 3 {
+		t.Fatalf("expected 3 runs, got %d", len(all))
+	}
+	if all[0].StartedAt.Unix() != 3000 {
+		t.Fatalf("expected newest first, got %d", all[0].StartedAt.Unix())
+	}
+
+	// kind filter + limit.
+	w = do(t, r, "GET", "/agent-runs?kind=triage&limit=1", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("filtered list: %d %s", w.Code, w.Body)
+	}
+	var triage []models.AgentRun
+	_ = json.Unmarshal(w.Body.Bytes(), &triage)
+	if len(triage) != 1 || triage[0].Kind != models.AgentRunTriage || triage[0].Status != models.AgentRunFailed {
+		t.Fatalf("expected newest triage run only, got %+v", triage)
+	}
+
+	// invalid kind -> 400.
+	w = do(t, r, "GET", "/agent-runs?kind=bogus", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("bad kind should 400: %d", w.Code)
 	}
 }
 
