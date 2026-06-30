@@ -1,148 +1,161 @@
 package tui
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 )
 
-func newTestApp() *App {
-	return &App{
-		cfg:        Config{APIURL: "http://localhost:8080"},
-		client:     NewClient(Config{APIURL: "http://localhost:8080"}),
-		screen:     screenWeek,
-		weekAnchor: startOfWeekLocal(time.Now()),
+// testModel builds a root model backed by a stubbed client pointed at server.
+func testModel(t *testing.T, server *httptest.Server) *teatest.TestModel {
+	t.Helper()
+	root := newRootWithClient(Config{APIURL: server.URL}, stubClient(server), false)
+	return teatest.NewTestModel(t, root, teatest.WithInitialTermSize(100, 40))
+}
+
+func waitForContains(t *testing.T, tm *teatest.TestModel, want string) {
+	t.Helper()
+	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
+		return bytes.Contains(b, []byte(want))
+	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(25*time.Millisecond))
+}
+
+// emptyAPI serves empty JSON lists for every GET so pages render without data.
+func emptyAPI() *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("[]"))
+	}))
+}
+
+func TestNavigationRendersEachPage(t *testing.T) {
+	server := emptyAPI()
+	defer server.Close()
+	tm := testModel(t, server)
+
+	// Dashboard is the home screen.
+	waitForContains(t, tm, "TODAY")
+
+	tm.Type("3") // projects
+	waitForContains(t, tm, "Projects")
+
+	tm.Type("4") // habits
+	waitForContains(t, tm, "Habits")
+
+	tm.Type("5") // digest
+	waitForContains(t, tm, "Press t to run triage")
+
+	tm.Type("2") // calendar
+	waitForContains(t, tm, "Week of")
+
+	tm.Type("q")
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
+// TestCalendarWeekNav exercises week navigation at the model level
+// (deterministic; teatest alt-screen matching on a full date string is flaky).
+func TestCalendarWeekNav(t *testing.T) {
+	now := time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local)
+	orig := timeNow
+	timeNow = func() time.Time { return now }
+	defer func() { timeNow = orig }()
+
+	weekOf := func(base time.Time) string { return "Week of " + base.Format("Mon Jan 2 2006") }
+	base := startOfWeek(now)
+
+	var p Page = newCalendarPage(nil)
+	p, _ = p.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if !strings.Contains(p.View(), weekOf(base)) {
+		t.Fatalf("calendar should open on current week:\n%s", p.View())
+	}
+
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'l'}) // next week
+	if !strings.Contains(p.View(), weekOf(base.AddDate(0, 0, 7))) {
+		t.Fatalf("expected next week:\n%s", p.View())
+	}
+
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'h'}) // back to current
+	p, _ = p.Update(tea.KeyPressMsg{Code: 'h'}) // prev week
+	if !strings.Contains(p.View(), weekOf(base.AddDate(0, 0, -7))) {
+		t.Fatalf("expected previous week:\n%s", p.View())
 	}
 }
 
-func TestTabSwitching(t *testing.T) {
-	a := newTestApp()
-	cases := []struct {
-		key  string
-		want screen
-	}{
-		{"1", screenWeek},
-		{"2", screenProjects},
-		{"3", screenHabits},
-	}
-	for _, c := range cases {
-		_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(c.key)})
-		if a.screen != c.want {
-			t.Errorf("key %s: got screen %v want %v", c.key, a.screen, c.want)
+func TestAddProjectFormOpens(t *testing.T) {
+	server := emptyAPI()
+	defer server.Close()
+	tm := testModel(t, server)
+
+	tm.Type("3") // projects
+	waitForContains(t, tm, "Projects")
+	tm.Type("a") // open the add form
+	waitForContains(t, tm, "Target hours")
+
+	_ = tm.Quit() // the form captures keys, so force-quit
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}
+
+// Note: the full huh add-submit-reload loop is covered deterministically by
+// TestAddProjectFormOpens (form opens/renders) plus the submitForm unit tests
+// in forms_test.go (build + POST/PATCH payload + pointer readback). Driving the
+// multi-field form via teatest keystrokes proved timing-flaky, so it is omitted.
+
+// TestDeleteReloadsList proves the bug that motivated the rebuild is fixed:
+// a mutation (delete) is followed by a reload, so the server sees a second
+// GET /projects after the DELETE.
+func TestDeleteReloadsList(t *testing.T) {
+	var mu sync.Mutex
+	projects := []Project{{ID: "p1", Name: "Alpha", Kind: "work"}, {ID: "p2", Name: "Beta", Kind: "work"}}
+	var projectGets, deletes int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/projects":
+			atomic.AddInt32(&projectGets, 1)
+			mu.Lock()
+			defer mu.Unlock()
+			_ = json.NewEncoder(w).Encode(projects)
+		case r.Method == http.MethodDelete:
+			atomic.AddInt32(&deletes, 1)
+			mu.Lock()
+			projects = projects[1:] // drop Alpha
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			_, _ = w.Write([]byte("[]"))
 		}
-	}
-}
+	}))
+	defer server.Close()
 
-func TestCursorMovement(t *testing.T) {
-	a := newTestApp()
-	a.screen = screenProjects
-	a.projects = []Project{{ID: "1"}, {ID: "2"}, {ID: "3"}}
-	for range 2 {
-		_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("j")})
-	}
-	if a.projCursor != 2 {
-		t.Fatalf("projCursor: %d", a.projCursor)
-	}
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("k")})
-	if a.projCursor != 1 {
-		t.Fatalf("projCursor after up: %d", a.projCursor)
-	}
-}
+	tm := testModel(t, server)
+	tm.Type("3") // projects
+	waitForContains(t, tm, "Alpha")
 
-func TestAddOpensForm(t *testing.T) {
-	a := newTestApp()
-	a.screen = screenProjects
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if a.screen != screenAddProject {
-		t.Fatalf("expected screenAddProject, got %v", a.screen)
+	tm.Type("d") // delete the selected (first) project
+
+	// The reload after delete means a second GET /projects must arrive.
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&projectGets) >= 2 && atomic.LoadInt32(&deletes) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
-	if a.form.kind != formKindProject || len(a.form.fields) == 0 {
-		t.Fatalf("form not initialized: %+v", a.form)
+	if got := atomic.LoadInt32(&deletes); got != 1 {
+		t.Fatalf("expected 1 DELETE, got %d", got)
+	}
+	if got := atomic.LoadInt32(&projectGets); got < 2 {
+		t.Fatalf("expected reload (>=2 GET /projects), got %d — mutation did not refresh", got)
 	}
 
-	a = newTestApp()
-	a.screen = screenHabits
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	if a.screen != screenAddHabit || a.form.kind != formKindHabit {
-		t.Fatalf("expected habit form, got screen %v kind %s", a.screen, a.form.kind)
-	}
-}
-
-func TestFormEscapes(t *testing.T) {
-	a := newTestApp()
-	a.screen = screenAddProject
-	a.form = formState{kind: formKindProject, fields: []formField{{label: "name"}}}
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
-	if a.screen != screenProjects {
-		t.Fatalf("esc should return to projects, got %v", a.screen)
-	}
-}
-
-func TestFormTypingAndBackspace(t *testing.T) {
-	a := newTestApp()
-	a.screen = screenAddProject
-	a.form = formState{kind: formKindProject, fields: []formField{{label: "name"}}}
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
-	if a.form.fields[0].value != "ab" {
-		t.Fatalf("typed value: %q", a.form.fields[0].value)
-	}
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyBackspace})
-	if a.form.fields[0].value != "a" {
-		t.Fatalf("after backspace: %q", a.form.fields[0].value)
-	}
-}
-
-func TestWeekNav(t *testing.T) {
-	a := newTestApp()
-	start := a.weekAnchor
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyRight})
-	if !a.weekAnchor.Equal(start.AddDate(0, 0, 7)) {
-		t.Fatalf("right arrow didn't advance")
-	}
-	_, _ = a.handleKey(tea.KeyMsg{Type: tea.KeyLeft})
-	if !a.weekAnchor.Equal(start) {
-		t.Fatalf("left arrow didn't go back")
-	}
-}
-
-func TestUpdateMessages(t *testing.T) {
-	a := newTestApp()
-	_, _ = a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	if a.width != 80 || a.height != 24 {
-		t.Fatalf("window size not stored")
-	}
-	_, _ = a.Update(eventsLoadedMsg{{ID: "e1"}})
-	if len(a.events) != 1 {
-		t.Fatalf("events not stored")
-	}
-	_, _ = a.Update(projectsLoadedMsg{{ID: "p1"}})
-	if len(a.projects) != 1 {
-		t.Fatalf("projects not stored")
-	}
-	_, _ = a.Update(habitsLoadedMsg{{ID: "h1"}})
-	if len(a.habits) != 1 {
-		t.Fatalf("habits not stored")
-	}
-	_, _ = a.Update(statusMsg("hello"))
-	if a.status != "hello" {
-		t.Fatalf("status: %q", a.status)
-	}
-}
-
-func TestView(t *testing.T) {
-	a := newTestApp()
-	a.screen = screenWeek
-	if a.View() == "" {
-		t.Fatal("View should not be empty")
-	}
-	a.screen = screenProjects
-	if a.View() == "" {
-		t.Fatal("View should not be empty")
-	}
-	a.screen = screenHabits
-	if a.View() == "" {
-		t.Fatal("View should not be empty")
-	}
+	tm.Type("q")
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }

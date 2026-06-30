@@ -124,10 +124,11 @@ type Project struct {
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
-	Kind        string     `json:"kind"`
-	TargetHours float64    `json:"target_hours"`
-	Deadline    *time.Time `json:"deadline,omitempty"`
-	Status      string     `json:"status"`
+	Kind           string     `json:"kind"`
+	TargetHours    float64    `json:"target_hours"`
+	ScheduledHours float64    `json:"scheduled_hours"`
+	Deadline       *time.Time `json:"deadline,omitempty"`
+	Status         string     `json:"status"`
 }
 
 // Habit mirrors the API habit resource.
@@ -160,12 +161,26 @@ type Event struct {
 	IsArtManaged bool      `json:"is_art_managed"`
 }
 
-// AgentRun summarises a planner or sync run reported by the API.
+// AgentRun summarises a planner or triage run reported by the API.
 type AgentRun struct {
-	ID      string          `json:"id"`
-	Status  string          `json:"status"`
-	Summary json.RawMessage `json:"summary"`
-	Error   string          `json:"error"`
+	ID        string          `json:"id"`
+	Kind      string          `json:"kind"`
+	Status    string          `json:"status"`
+	StartedAt time.Time       `json:"started_at"`
+	EndedAt   *time.Time      `json:"ended_at,omitempty"`
+	Summary   json.RawMessage `json:"summary"`
+	Error     string          `json:"error"`
+}
+
+// Session mirrors a planner-scheduled focus block (project or habit).
+type Session struct {
+	ID             string    `json:"id"`
+	Source         string    `json:"source"` // "project" or "habit"
+	SourceID       string    `json:"source_id"`
+	AccountKind    string    `json:"account_kind"`
+	ScheduledStart time.Time `json:"scheduled_start"`
+	ScheduledEnd   time.Time `json:"scheduled_end"`
+	Status         string    `json:"status"` // planned|happened|skipped|moved
 }
 
 // Email mirrors the API triaged-message resource.
@@ -194,6 +209,12 @@ func (c *Client) CreateProject(ctx context.Context, p Project) (Project, error) 
 	return out, c.do(ctx, "POST", "/projects", p, &out)
 }
 
+// UpdateProject patches the project with the given id.
+func (c *Client) UpdateProject(ctx context.Context, id string, p Project) (Project, error) {
+	var out Project
+	return out, c.do(ctx, "PATCH", "/projects/"+id, p, &out)
+}
+
 // DeleteProject removes the project with the given id.
 func (c *Client) DeleteProject(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/projects/"+id, nil, nil)
@@ -211,6 +232,12 @@ func (c *Client) CreateHabit(ctx context.Context, h Habit) (Habit, error) {
 	return out, c.do(ctx, "POST", "/habits", h, &out)
 }
 
+// UpdateHabit patches the habit with the given id.
+func (c *Client) UpdateHabit(ctx context.Context, id string, h Habit) (Habit, error) {
+	var out Habit
+	return out, c.do(ctx, "PATCH", "/habits/"+id, h, &out)
+}
+
 // DeleteHabit removes the habit with the given id.
 func (c *Client) DeleteHabit(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/habits/"+id, nil, nil)
@@ -221,6 +248,24 @@ func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, e
 	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	var out []Event
 	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
+}
+
+// ListSessions returns planner-scheduled focus blocks between from and to.
+func (c *Client) ListSessions(ctx context.Context, from, to time.Time) ([]Session, error) {
+	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
+	var out []Session
+	return out, c.do(ctx, "GET", "/sessions"+q, nil, &out)
+}
+
+// ListRuns returns recent agent runs, newest first. kind is optional
+// ("planner" or "triage"); limit caps the count.
+func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentRun, error) {
+	q := fmt.Sprintf("?limit=%d", limit)
+	if kind != "" {
+		q += "&kind=" + kind
+	}
+	var out []AgentRun
+	return out, c.do(ctx, "GET", "/agent-runs"+q, nil, &out)
 }
 
 // Replan triggers a planner run on the server and returns its result.
