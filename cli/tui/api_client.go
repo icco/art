@@ -246,9 +246,10 @@ func (c *Client) DeleteHabit(ctx context.Context, id string) error {
 	return c.do(ctx, "DELETE", "/habits/"+id, nil, nil)
 }
 
-// ListEvents returns events between from and to (inclusive of from, exclusive of to).
+// ListEvents returns primary-calendar events between from and to (inclusive of
+// from, exclusive of to). The TUI only ever shows primary calendars.
 func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, error) {
-	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
+	q := fmt.Sprintf("?from=%s&to=%s&calendar=primary", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
 	var out []Event
 	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
 }

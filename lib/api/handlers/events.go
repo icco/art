@@ -23,6 +23,15 @@ func (h *Handlers) EventsList(w http.ResponseWriter, r *http.Request) {
 		}
 		q = q.Where("account_kind = ?", kind)
 	}
+	if r.URL.Query().Get("calendar") == "primary" {
+		// Keep only events on each account's primary calendar. The row-value
+		// subquery returns no rows when no account has a primary set, so the
+		// filter yields an empty list rather than silently matching everything.
+		primaries := h.DB.Model(&models.Account{}).
+			Select("kind", "primary_calendar_id").
+			Where("primary_calendar_id <> ''")
+		q = q.Where("(account_kind, calendar_id) IN (?)", primaries)
+	}
 	var out []models.Event
 	if err := q.Order("start_time ASC").Limit(2000).Find(&out).Error; err != nil {
 		writeServerError(w, r, "events list", err)

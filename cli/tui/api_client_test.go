@@ -115,6 +115,21 @@ func TestClientEventsReplanSync(t *testing.T) {
 	}
 }
 
+func TestClientListEventsPrimaryOnly(t *testing.T) {
+	var gotCalendar string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCalendar = r.URL.Query().Get("calendar")
+		_ = json.NewEncoder(w).Encode([]Event{{ID: "e1"}})
+	}))
+	defer server.Close()
+	if _, err := stubClient(server).ListEvents(context.Background(), time.Now(), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if gotCalendar != "primary" {
+		t.Fatalf("calendar param = %q, want primary", gotCalendar)
+	}
+}
+
 func TestClientErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusBadRequest)
