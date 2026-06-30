@@ -13,8 +13,8 @@ import (
 
 // Open connects to dsn, wires zap logging, and runs AutoMigrate.
 func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
-	// ErrRecordNotFound is an expected control-flow signal (e.g. a calendar's
-	// first sync has no prior state), not an error worth logging with a stack.
+	// ErrRecordNotFound is expected control flow (e.g. a calendar's first
+	// sync), not an error worth a stack trace.
 	gormLog := zapgorm2.New(log)
 	gormLog.IgnoreRecordNotFoundError = true
 	cfg := &gorm.Config{Logger: gormLog}

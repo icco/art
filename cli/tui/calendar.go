@@ -30,11 +30,8 @@ func (p calendarPage) Init() tea.Cmd {
 	return p.load()
 }
 
-// load fetches the visible week plus a day of padding on each side. All-day
-// events are stored at UTC midnight, so ones near the week boundary fall just
-// outside the server's start_time window when it's expressed in local time;
-// the padding keeps them from being dropped. dayKey then files each event
-// under the correct day.
+// load fetches the visible week plus a day of padding each side, so boundary
+// all-day events (stored at UTC midnight) aren't dropped by the start_time window.
 func (p calendarPage) load() tea.Cmd {
 	return loadEvents(p.client, p.anchor.AddDate(0, 0, -1), p.anchor.AddDate(0, 0, 8))
 }
@@ -82,10 +79,8 @@ func (p calendarPage) View() string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// dayKey returns the calendar day an event belongs under. All-day events are
-// stored at UTC midnight; converting them to local time would shift them onto
-// the previous (or next) day, so they're keyed by their UTC date. Timed events
-// use local time.
+// dayKey files all-day events by UTC date (they're stored at UTC midnight;
+// .Local() would shift the day) and timed events by local date.
 func dayKey(e Event) string {
 	if e.AllDay {
 		return e.StartTime.UTC().Format("2006-01-02")
