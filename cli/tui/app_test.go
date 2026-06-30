@@ -9,8 +9,8 @@ import (
 
 func newTestApp() *App {
 	return &App{
-		cfg:        Config{APIURL: "http://localhost:8080", Audience: "x"},
-		client:     NewClient(Config{APIURL: "http://localhost:8080", Audience: "x"}),
+		cfg:        Config{APIURL: "http://localhost:8080"},
+		client:     NewClient(Config{APIURL: "http://localhost:8080"}),
 		screen:     screenWeek,
 		weekAnchor: startOfWeekLocal(time.Now()),
 	}

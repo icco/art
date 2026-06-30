@@ -8,19 +8,9 @@ import (
 
 func TestLoadConfig(t *testing.T) {
 	t.Setenv("ART_API_URL", "http://example/api")
-	t.Setenv("ART_API_AUDIENCE", "aud")
 	c, err := LoadConfig()
-	if err != nil || c.APIURL != "http://example/api" || c.Audience != "aud" {
+	if err != nil || c.APIURL != "http://example/api" {
 		t.Fatalf("LoadConfig: %v %+v", err, c)
-	}
-}
-
-func TestLoadConfigAudienceFallback(t *testing.T) {
-	t.Setenv("ART_API_URL", "http://x/api")
-	t.Setenv("ART_API_AUDIENCE", "")
-	c, err := LoadConfig()
-	if err != nil || c.Audience != c.APIURL {
-		t.Fatalf("audience should fall back to APIURL: %+v %v", c, err)
 	}
 }
 
@@ -66,7 +56,7 @@ func TestRenderFormEmpty(t *testing.T) {
 }
 
 func TestNewAppInit(t *testing.T) {
-	a := NewApp(Config{APIURL: "http://localhost", Audience: "x"})
+	a := NewApp(Config{APIURL: "http://localhost"})
 	if a == nil || a.client == nil || a.screen != screenWeek {
 		t.Fatal("NewApp didn't initialize")
 	}
