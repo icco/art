@@ -7,13 +7,15 @@ import (
 	"time"
 
 	"github.com/icco/art/lib/models"
+	gutillog "github.com/icco/gutil/logging"
 	"gorm.io/gorm"
 )
 
 // Reversal kinds recorded on EmailMessage.ReversalKind.
 const (
-	reversalUnarchived   = "unarchived"
-	reversalDraftDeleted = "draft_deleted"
+	reversalUnarchived     = "unarchived"
+	reversalDraftDeleted   = "draft_deleted"
+	reversalMiscategorized = "miscategorized"
 )
 
 // reconcileGmailer is the subset of gmail.Client the reconcile pass needs.
@@ -29,7 +31,7 @@ type reconcileGmailer interface {
 // To keep hourly cost bounded it checks at most `cap` rows per call, oldest-
 // reconciled first, and stamps ReconciledAt on every row it checks so
 // successive runs round-robin across the window.
-func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm reconcileGmailer, withinDays, maxRows int) error {
+func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm reconcileGmailer, withinDays, maxRows int) (int, error) {
 	cutoff := time.Now().AddDate(0, 0, -withinDays)
 	var rows []models.EmailMessage
 	if err := db.WithContext(ctx).
@@ -38,15 +40,20 @@ func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm rec
 		Order("reconciled_at ASC NULLS FIRST").
 		Limit(maxRows).
 		Find(&rows).Error; err != nil {
-		return err
+		return 0, err
 	}
 
+	log := gutillog.FromContext(ctx)
 	now := time.Now()
+	errCount := 0
 	for i := range rows {
 		row := &rows[i]
 		reversalKind, err := detectReversal(ctx, gm, row)
 		if err != nil {
-			// Transient Gmail error: leave the row for a later run.
+			// Transient Gmail error: log it, count it, and leave the row for a
+			// later run rather than wedging the pass.
+			log.Warnw("reconcile: detect reversal failed", "account", kind, "id", row.GmailMessageID, "err", err)
+			errCount++
 			continue
 		}
 		updates := map[string]any{"reconciled_at": &now}
@@ -56,10 +63,10 @@ func Reconcile(ctx context.Context, db *gorm.DB, kind models.AccountKind, gm rec
 		}
 		if err := db.WithContext(ctx).Model(&models.EmailMessage{}).
 			Where("id = ?", row.ID).Updates(updates).Error; err != nil {
-			return err
+			return errCount, err
 		}
 	}
-	return nil
+	return errCount, nil
 }
 
 func detectReversal(ctx context.Context, gm reconcileGmailer, row *models.EmailMessage) (string, error) {
@@ -109,9 +116,11 @@ func buildCorrections(ctx context.Context, db *gorm.DB, withinDays, limit int) (
 	for _, r := range rows {
 		switch r.ReversalKind {
 		case reversalUnarchived:
-			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'read' or 'keep'.\n", r.FromAddr, r.Subject)
+			fmt.Fprintf(&b, "- You archived an email from %q (subject %q); Nat moved it back to the inbox. Do not archive similar mail — prefer 'keep'.\n", r.FromAddr, r.Subject)
 		case reversalDraftDeleted:
 			fmt.Fprintf(&b, "- You drafted a reply to %q (subject %q); Nat discarded it without sending. Be more cautious drafting replies to similar mail.\n", r.FromAddr, r.Subject)
+		case reversalMiscategorized:
+			fmt.Fprintf(&b, "- You categorized mail from %q (subject %q) as %s; Nat marked that decision wrong — reconsider similar mail.\n", r.FromAddr, r.Subject, r.Category)
 		}
 	}
 	return b.String(), nil

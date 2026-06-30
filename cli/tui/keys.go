@@ -21,6 +21,7 @@ type keyMap struct {
 	Replan key.Binding
 	Sync   key.Binding
 	Triage key.Binding
+	Reject key.Binding
 
 	Back key.Binding
 	Help key.Binding
@@ -45,6 +46,7 @@ func defaultKeyMap() keyMap {
 		Replan: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "replan")),
 		Sync:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Triage: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
+		Reject: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark bad")),
 
 		Back: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Help: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),
@@ -61,7 +63,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Dashboard, k.Calendar, k.Projects, k.Habits, k.Digest},
-		{k.PrevWeek, k.NextWeek, k.Add, k.Edit, k.Delete},
+		{k.PrevWeek, k.NextWeek, k.Add, k.Edit, k.Delete, k.Reject},
 		{k.Replan, k.Sync, k.Triage, k.Back, k.Help, k.Quit},
 	}
 }

@@ -23,6 +23,10 @@ func (f *fakeTriage) RunAll(context.Context) error {
 	return nil
 }
 
+func (f *fakeTriage) Reverse(context.Context, string) (models.EmailMessage, error) {
+	return models.EmailMessage{}, nil
+}
+
 func TestTriageRun(t *testing.T) {
 	db := testdb.Open(t)
 	ft := &fakeTriage{called: make(chan struct{}, 1)}

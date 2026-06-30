@@ -74,9 +74,11 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 		if !ok {
 			continue
 		}
-		if err := Reconcile(ctx, r.DB, kind, gm, r.Cfg.Triage.ReconcileDays, r.Cfg.Triage.MaxPerRun); err != nil {
+		n, err := Reconcile(ctx, r.DB, kind, gm, r.Cfg.Triage.ReconcileDays, r.Cfg.Triage.MaxPerRun)
+		if err != nil {
 			log.Warnw("reconcile failed", "account", kind, "err", err)
 		}
+		counts["reconcile_errors"] += n
 	}
 
 	corrections, err := buildCorrections(ctx, r.DB, r.Cfg.Triage.ReconcileDays, maxCorrections)

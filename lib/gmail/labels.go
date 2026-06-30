@@ -6,21 +6,18 @@ import (
 	"google.golang.org/api/gmail/v1"
 )
 
-// Art applies these labels so every triage action is attributable and
-// bulk-reversible (search a label, restore). Names are nested under "Art".
+// Art applies these labels so triage actions are attributable and bulk-reversible. Names are nested under "Art".
 const (
 	LabelTriaged  = "Art/Triaged"
 	LabelArchived = "Art/Archived"
 	LabelReply    = "Art/Reply"
-	LabelRead     = "Art/Read"
-	LabelThinking = "Art/Thinking"
 
 	// InboxLabel is Gmail's system INBOX label; removing it archives a message.
 	InboxLabel = "INBOX"
 )
 
 // ArtLabels is the full set of labels art manages, in creation order.
-var ArtLabels = []string{LabelTriaged, LabelArchived, LabelReply, LabelRead, LabelThinking}
+var ArtLabels = []string{LabelTriaged, LabelArchived, LabelReply}
 
 // EnsureLabels makes sure every Art/* label exists and returns a name->id map.
 // Creating a nested label ("Art/Triaged") auto-creates its parent.

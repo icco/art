@@ -2,6 +2,7 @@ package email
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -13,13 +14,20 @@ import (
 type fakeReconcileGmail struct {
 	inInbox     map[string]bool // message ID -> currently back in the inbox
 	draftExists map[string]bool // draft ID -> still present
+	err         error           // if set, both lookups return it
 }
 
 func (f *fakeReconcileGmail) HasInboxLabel(_ context.Context, id string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
 	return f.inInbox[id], nil
 }
 
 func (f *fakeReconcileGmail) GetDraft(_ context.Context, id string) (bool, error) {
+	if f.err != nil {
+		return false, f.err
+	}
 	return f.draftExists[id], nil
 }
 
@@ -56,7 +64,7 @@ func TestReconcileDetectsReversals(t *testing.T) {
 		inInbox:     map[string]bool{"g1": true, "g2": false, "g5": true},
 		draftExists: map[string]bool{"d3": false, "d4": true},
 	}
-	if err := Reconcile(ctx, db, models.AccountPersonal, gm, 14, 50); err != nil {
+	if _, err := Reconcile(ctx, db, models.AccountPersonal, gm, 14, 50); err != nil {
 		t.Fatal(err)
 	}
 
@@ -91,6 +99,9 @@ func TestReconcileDetectsReversals(t *testing.T) {
 	if !strings.Contains(corr, "moved it back") || !strings.Contains(corr, "discarded") {
 		t.Errorf("corrections missing expected guidance:\n%s", corr)
 	}
+	if strings.Contains(corr, "'read'") {
+		t.Errorf("corrections must not reference the removed 'read' category:\n%s", corr)
+	}
 }
 
 func TestBuildCorrectionsEmpty(t *testing.T) {
@@ -101,5 +112,22 @@ func TestBuildCorrectionsEmpty(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("no reversals should yield empty corrections, got %q", got)
+	}
+}
+
+func TestReconcileCountsErrors(t *testing.T) {
+	db := testdb.Open(t)
+	ctx := context.Background()
+
+	seedRow(t, db, "g1", models.ActionArchived, true, "", models.EmailArchive)
+	seedRow(t, db, "g2", models.ActionReply, true, "d2", models.EmailReply)
+
+	gm := &fakeReconcileGmail{err: errors.New("gmail unavailable")}
+	n, err := Reconcile(ctx, db, models.AccountPersonal, gm, 14, 50)
+	if err != nil {
+		t.Fatalf("transient per-row errors must not be fatal: %v", err)
+	}
+	if n != 2 {
+		t.Errorf("reconcile error count = %d, want 2", n)
 	}
 }

@@ -75,6 +75,17 @@ func loadEmails(c *Client) tea.Cmd {
 	}
 }
 
+func reverseEmail(c *Client, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		if _, err := c.ReverseEmail(ctx, id); err != nil {
+			return errMsg{err}
+		}
+		return statusMsg("decision reversed")
+	}
+}
+
 func loadRuns(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := bg()

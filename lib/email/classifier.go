@@ -116,8 +116,6 @@ func classificationSchema() *genai.Schema {
 				Enum: []string{
 					string(models.EmailArchive),
 					string(models.EmailReply),
-					string(models.EmailRead),
-					string(models.EmailThinking),
 					string(models.EmailKeep),
 				},
 			},

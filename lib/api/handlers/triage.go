@@ -2,11 +2,14 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/icco/art/lib/models"
 	gutillog "github.com/icco/gutil/logging"
+	"gorm.io/gorm"
 )
 
 // triageRunTimeout bounds a detached triage pass and doubles as the staleness
@@ -47,6 +50,22 @@ func (h *Handlers) TriageRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusAccepted, map[string]any{"status": "started"})
 }
 
+// EmailReverse marks a triaged decision wrong: it undoes the Gmail action and
+// records the reversal so the classifier learns. Returns the updated row.
+func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	msg, err := h.Triage.Reverse(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, r, http.StatusNotFound, "email not found")
+			return
+		}
+		writeServerError(w, r, "email reverse", err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, msg)
+}
+
 // EmailsList responds with triaged messages, newest first. Supports optional
 // account and category filters plus standard pagination.
 func (h *Handlers) EmailsList(w http.ResponseWriter, r *http.Request) {
@@ -64,7 +83,7 @@ func (h *Handlers) EmailsList(w http.ResponseWriter, r *http.Request) {
 	}
 	if cat := r.URL.Query().Get("category"); cat != "" {
 		if !models.EmailCategory(cat).Valid() {
-			writeError(w, r, http.StatusBadRequest, "category must be one of archive, reply, read, thinking, keep")
+			writeError(w, r, http.StatusBadRequest, "category must be one of archive, reply, keep")
 			return
 		}
 		q = q.Where("category = ?", cat)

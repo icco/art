@@ -73,10 +73,10 @@ func Load() (*Config, error) {
 		Triage: TriageConfig{
 			Enabled:             envBool("TRIAGE_ENABLED", true),
 			DryRun:              envBool("TRIAGE_DRY_RUN", false),
-			BackfillDays:        envInt("TRIAGE_BACKFILL_DAYS", 14),
-			MaxPerRun:           envInt("TRIAGE_MAX_PER_RUN", 50),
+			BackfillDays:        envInt("TRIAGE_BACKFILL_DAYS", 7),
+			MaxPerRun:           envInt("TRIAGE_MAX_PER_RUN", 1000),
 			ConfidenceThreshold: envFloat("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
-			ReconcileDays:       envInt("TRIAGE_RECONCILE_DAYS", 14),
+			ReconcileDays:       envInt("TRIAGE_RECONCILE_DAYS", 7),
 		},
 		RateLimitRPM: envInt("RATE_LIMIT_RPM", 120),
 	}

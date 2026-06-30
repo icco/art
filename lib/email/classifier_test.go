@@ -34,8 +34,7 @@ func TestClassificationSchema(t *testing.T) {
 		t.Fatal("missing category property")
 	}
 	for _, want := range []string{
-		string(models.EmailArchive), string(models.EmailReply),
-		string(models.EmailRead), string(models.EmailThinking), string(models.EmailKeep),
+		string(models.EmailArchive), string(models.EmailReply), string(models.EmailKeep),
 	} {
 		if !slices.Contains(cat.Enum, want) {
 			t.Errorf("category enum missing %q", want)

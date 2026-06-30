@@ -72,10 +72,6 @@ const (
 	EmailArchive EmailCategory = "archive"
 	// EmailReply marks mail that wants a response; art drafts one.
 	EmailReply EmailCategory = "reply"
-	// EmailRead marks FYI mail worth reading but needing no reply.
-	EmailRead EmailCategory = "read"
-	// EmailThinking marks mail that needs thought before any action.
-	EmailThinking EmailCategory = "thinking"
 	// EmailKeep marks mail art leaves untouched in the inbox.
 	EmailKeep EmailCategory = "keep"
 
@@ -83,10 +79,6 @@ const (
 	ActionArchived EmailAction = "archived"
 	// ActionReply means art labeled Art/Reply and created a draft.
 	ActionReply EmailAction = "reply"
-	// ActionRead means art labeled Art/Read.
-	ActionRead EmailAction = "read"
-	// ActionThinking means art labeled Art/Thinking.
-	ActionThinking EmailAction = "thinking"
 	// ActionKeep means art only labeled Art/Triaged.
 	ActionKeep EmailAction = "keep"
 	// ActionNone means art classified but applied nothing (dry run).
@@ -108,7 +100,7 @@ func (k AgentRunKind) Valid() bool { return k == AgentRunPlanner || k == AgentRu
 // Valid reports whether c is one of the recognised EmailCategory values.
 func (c EmailCategory) Valid() bool {
 	switch c {
-	case EmailArchive, EmailReply, EmailRead, EmailThinking, EmailKeep:
+	case EmailArchive, EmailReply, EmailKeep:
 		return true
 	}
 	return false
@@ -250,7 +242,7 @@ type EmailMessage struct {
 	Snippet        string      `gorm:"type:text;not null;default:''" json:"snippet"`
 	ReceivedAt     time.Time   `gorm:"index" json:"received_at"`
 
-	Category   EmailCategory `gorm:"type:varchar(16);not null;check:category IN ('archive','reply','read','thinking','keep')" json:"category"`
+	Category   EmailCategory `gorm:"type:varchar(16);not null;check:category IN ('archive','reply','keep')" json:"category"`
 	Summary    string        `gorm:"type:text;not null;default:''" json:"summary"`
 	DraftReply string        `gorm:"type:text;not null;default:''" json:"draft_reply"`
 	Reason     string        `gorm:"type:text;not null;default:''" json:"reason"`
