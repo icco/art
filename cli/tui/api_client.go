@@ -196,6 +196,7 @@ type Email struct {
 	Category    string    `json:"category"`
 	Action      string    `json:"action"`
 	Applied     bool      `json:"applied"`
+	Archived    bool      `json:"archived"`
 	Reversed    bool      `json:"reversed"`
 	ReceivedAt  time.Time `json:"received_at"`
 }
@@ -298,4 +299,10 @@ func (c *Client) Triage(ctx context.Context) error {
 func (c *Client) ReverseEmail(ctx context.Context, id string) (Email, error) {
 	var out Email
 	return out, c.do(ctx, "POST", "/emails/"+id+"/reverse", nil, &out)
+}
+
+// SetEmailArchived moves a triaged message between the inbox and the archive.
+func (c *Client) SetEmailArchived(ctx context.Context, id string, archived bool) (Email, error) {
+	var out Email
+	return out, c.do(ctx, "POST", "/emails/"+id+"/archive", map[string]bool{"archived": archived}, &out)
 }

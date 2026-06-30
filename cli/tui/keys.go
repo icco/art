@@ -18,10 +18,11 @@ type keyMap struct {
 	Edit   key.Binding
 	Delete key.Binding
 
-	Replan key.Binding
-	Sync   key.Binding
-	Triage key.Binding
-	Reject key.Binding
+	Replan  key.Binding
+	Sync    key.Binding
+	Triage  key.Binding
+	Reject  key.Binding
+	Archive key.Binding
 
 	Back key.Binding
 	Help key.Binding
@@ -43,10 +44,11 @@ func defaultKeyMap() keyMap {
 		Edit:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 		Delete: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
 
-		Replan: key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "replan")),
-		Sync:   key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
-		Triage: key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
-		Reject: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark bad")),
+		Replan:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "replan")),
+		Sync:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
+		Triage:  key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
+		Reject:  key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark bad")),
+		Archive: key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive ↔ inbox")),
 
 		Back: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "back")),
 		Help: key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "help")),

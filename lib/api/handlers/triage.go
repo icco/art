@@ -66,6 +66,30 @@ func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, r, http.StatusOK, msg)
 }
 
+// EmailSetArchived moves a triaged message between the inbox and the archive
+// (Gmail labels only, never writing mail) and records the change for learning.
+// Returns the updated row.
+func (h *Handlers) EmailSetArchived(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Archived bool `json:"archived"`
+	}
+	if err := decodeJSON(r, &body); err != nil {
+		writeError(w, r, http.StatusBadRequest, `body must be {"archived": bool}`)
+		return
+	}
+	msg, err := h.Triage.SetArchived(r.Context(), id, body.Archived)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, r, http.StatusNotFound, "email not found")
+			return
+		}
+		writeServerError(w, r, "email set archived", err)
+		return
+	}
+	writeJSON(w, r, http.StatusOK, msg)
+}
+
 // EmailsList responds with triaged messages, newest first. Supports optional
 // account and category filters plus standard pagination.
 func (h *Handlers) EmailsList(w http.ResponseWriter, r *http.Request) {

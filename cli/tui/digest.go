@@ -101,6 +101,14 @@ func (p digestPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 			return p, p.form.Init()
 		}
 	}
+	if key.Matches(m, p.keys.Archive) {
+		if it, ok := p.list.SelectedItem().(emailItem); ok {
+			// Toggle is instant and reversible: archive an inbox message, or
+			// move an archived one back to the inbox.
+			target := !it.e.Archived
+			return p, tea.Sequence(setEmailArchived(p.client, it.e.ID, target), loadEmails(p.client))
+		}
+	}
 	var cmd tea.Cmd
 	p.list, cmd = p.list.Update(m)
 	return p, cmd

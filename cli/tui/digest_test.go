@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -86,6 +89,47 @@ func TestDigestAbortClearsForm(t *testing.T) {
 		if cmd != nil {
 			t.Error("abort should not emit a command")
 		}
+	}
+}
+
+// TestDigestArchiveKeyIsInstant verifies that pressing "a" on a selected email
+// dispatches a toggle command without opening a confirm form.
+func TestDigestArchiveKeyIsInstant(t *testing.T) {
+	p := makeDigestWithEmail(t)
+
+	pg, cmd := p.Update(tea.KeyPressMsg{Code: 'a'})
+	dp := pg.(digestPage)
+
+	if dp.form != nil {
+		t.Error("archive toggle must not open a form")
+	}
+	if dp.FullInput() {
+		t.Error("archive toggle is instant; FullInput should stay false")
+	}
+	if cmd == nil {
+		t.Error("expected a command from the archive toggle")
+	}
+}
+
+// TestSetEmailArchivedCommand verifies the command posts the requested archived
+// state and reports success.
+func TestSetEmailArchivedCommand(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		_ = json.NewEncoder(w).Encode(Email{ID: "e1", Archived: false})
+	}))
+	defer server.Close()
+
+	msg := setEmailArchived(stubClient(server), "e1", false)()
+	if em, ok := msg.(errMsg); ok {
+		t.Fatalf("unexpected error: %v", em.err)
+	}
+	if _, ok := msg.(statusMsg); !ok {
+		t.Fatalf("expected statusMsg, got %T", msg)
+	}
+	if gotBody["archived"] != false {
+		t.Errorf("body archived = %v, want false", gotBody["archived"])
 	}
 }
 

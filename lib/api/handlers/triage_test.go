@@ -27,6 +27,10 @@ func (f *fakeTriage) Reverse(context.Context, string) (models.EmailMessage, erro
 	return models.EmailMessage{}, nil
 }
 
+func (f *fakeTriage) SetArchived(context.Context, string, bool) (models.EmailMessage, error) {
+	return models.EmailMessage{}, nil
+}
+
 func TestTriageRun(t *testing.T) {
 	db := testdb.Open(t)
 	ft := &fakeTriage{called: make(chan struct{}, 1)}
