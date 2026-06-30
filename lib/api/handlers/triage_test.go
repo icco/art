@@ -5,33 +5,55 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
 )
 
-type fakeTriage struct {
-	called bool
-	err    error
-}
+// fakeTriage signals that RunAll was invoked without doing any work.
+type fakeTriage struct{ called chan struct{} }
 
 func (f *fakeTriage) RunAll(context.Context) error {
-	f.called = true
-	return f.err
+	select {
+	case f.called <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 func TestTriageRun(t *testing.T) {
-	ft := &fakeTriage{}
-	h := &handlers.Handlers{Triage: ft}
+	db := testdb.Open(t)
+	ft := &fakeTriage{called: make(chan struct{}, 1)}
+	h := &handlers.Handlers{DB: db, Triage: ft}
 	r := newRouter(h)
 
+	// Fresh trigger: returns 202 immediately and runs the pass detached.
 	w := do(t, r, "POST", "/triage/run", nil)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("triage run: %d %s", w.Code, w.Body)
 	}
-	if !ft.called {
-		t.Error("RunAll was not invoked")
+	select {
+	case <-ft.called:
+	case <-time.After(2 * time.Second):
+		t.Error("detached RunAll was not invoked")
+	}
+
+	// Guard: a recent running triage run makes a second trigger a no-op.
+	if err := db.Create(&models.AgentRun{
+		Kind: models.AgentRunTriage, Status: models.AgentRunRunning, StartedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	w = do(t, r, "POST", "/triage/run", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("guard: %d %s", w.Code, w.Body)
+	}
+	var resp map[string]string
+	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "running" {
+		t.Fatalf("expected status running, got %q", resp["status"])
 	}
 }
 
