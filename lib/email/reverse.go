@@ -9,11 +9,11 @@ import (
 	"gorm.io/gorm"
 )
 
-// reversalGmailer is the subset of *gmail.Client a manual reversal needs.
+// reversalGmailer is the subset of *gmail.Client a manual reversal needs. Like
+// the triager, it can only change labels — undoing an action never writes mail.
 type reversalGmailer interface {
 	EnsureLabels(ctx context.Context) (map[string]string, error)
 	ModifyLabels(ctx context.Context, msgID string, add, remove []string) error
-	DeleteDraft(ctx context.Context, draftID string) error
 }
 
 // reverseDecision undoes the Gmail side-effect of row's action and returns the
@@ -48,12 +48,7 @@ func reverseDecision(ctx context.Context, gm reversalGmailer, row *models.EmailM
 				return "", err
 			}
 		}
-		if row.DraftID != "" {
-			if err := gm.DeleteDraft(ctx, row.DraftID); err != nil {
-				return "", err
-			}
-		}
-		return reversalDraftDeleted, nil
+		return reversalReplyDismissed, nil
 	default:
 		return reversalMiscategorized, nil
 	}

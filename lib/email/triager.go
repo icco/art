@@ -13,13 +13,14 @@ import (
 )
 
 // Gmailer is the subset of gmail.Client the triager uses. Defining it here lets
-// tests substitute a fake without touching the Google API.
+// tests substitute a fake without touching the Google API. It deliberately
+// exposes only label/archive mutations — there is no draft or send method, so
+// the triager cannot write mail even by mistake.
 type Gmailer interface {
 	EnsureLabels(ctx context.Context) (map[string]string, error)
 	FetchMessageIDs(ctx context.Context, query string, limit int) ([]string, error)
 	GetMessage(ctx context.Context, id string) (*gmail.Message, error)
 	ModifyLabels(ctx context.Context, msgID string, add, remove []string) error
-	CreateDraft(ctx context.Context, in gmail.DraftInput) (string, error)
 }
 
 // messageClassifier is the classifier behaviour the triager depends on; *Classifier
@@ -39,19 +40,20 @@ type Triager struct {
 	DryRun              bool
 }
 
-// decision is the outcome of decideAction: which labels to add (by name),
-// whether to archive, and whether to draft a reply. It is pure data so the
-// policy can be unit-tested without any Gmail I/O.
+// decision is the outcome of decideAction: which labels to add (by name) and
+// whether to archive. Labeling and archiving are the only actions art takes; it
+// is pure data so the policy can be unit-tested without any Gmail I/O.
 type decision struct {
 	Action      models.EmailAction
 	AddLabels   []string
 	RemoveInbox bool
-	MakeDraft   bool
 }
 
 // decideAction maps a classification to concrete labels/actions. A low-
 // confidence archive is downgraded to keep (left untouched) so art never
-// auto-archives mail it is unsure about. Art/Triaged is always applied.
+// auto-archives mail it is unsure about. A reply is only flagged with the
+// Art/Reply label for Nat to act on — art never drafts the response.
+// Art/Triaged is always applied.
 func decideAction(cat models.EmailCategory, confidence, threshold float64) decision {
 	d := decision{AddLabels: []string{gmail.LabelTriaged}}
 	switch cat {
@@ -66,7 +68,6 @@ func decideAction(cat models.EmailCategory, confidence, threshold float64) decis
 	case models.EmailReply:
 		d.Action = models.ActionReply
 		d.AddLabels = append(d.AddLabels, gmail.LabelReply)
-		d.MakeDraft = true
 	default:
 		d.Action = models.ActionKeep
 	}
@@ -128,7 +129,6 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			ReceivedAt:     msg.ReceivedAt,
 			Category:       cls.Category,
 			Summary:        cls.Summary,
-			DraftReply:     cls.DraftReply,
 			Reason:         cls.Reason,
 			Confidence:     cls.Confidence,
 			Action:         d.Action,
@@ -156,11 +156,8 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 }
 
 // apply executes the decision against Gmail and records what was done on row.
-//
-// Labels are applied before the draft on purpose: it stamps Art/Triaged so the
-// message is not re-fetched next run, and means a draft is only ever created
-// after the message is marked done — so a later failure can't leave an orphan
-// draft that the next run would duplicate.
+// The only mutation is a label change (which, when it removes INBOX, archives
+// the message); art never drafts or sends mail.
 func (t *Triager) apply(ctx context.Context, gm Gmailer, labels map[string]string, msg *gmail.Message, d decision, row *models.EmailMessage) error {
 	add := make([]string, 0, len(d.AddLabels))
 	for _, name := range d.AddLabels {
@@ -176,20 +173,6 @@ func (t *Triager) apply(ctx context.Context, gm Gmailer, labels map[string]strin
 		return err
 	}
 	row.Archived = d.RemoveInbox
-
-	if d.MakeDraft {
-		draftID, err := gm.CreateDraft(ctx, gmail.DraftInput{
-			ThreadID:  msg.ThreadID,
-			To:        msg.From,
-			Subject:   msg.Subject,
-			Body:      row.DraftReply,
-			InReplyTo: msg.MessageIDHeader,
-		})
-		if err != nil {
-			return err
-		}
-		row.DraftID = draftID
-	}
 	return nil
 }
 
@@ -201,8 +184,8 @@ func (t *Triager) upsert(ctx context.Context, row *models.EmailMessage) error {
 		Columns: []clause.Column{{Name: "account_kind"}, {Name: "gmail_message_id"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"run_id", "thread_id", "from_addr", "to_addr", "subject", "snippet",
-			"received_at", "category", "summary", "draft_reply", "reason",
-			"confidence", "action", "applied", "draft_id", "archived", "updated_at",
+			"received_at", "category", "summary", "reason",
+			"confidence", "action", "applied", "archived", "updated_at",
 		}),
 	}).Create(row).Error
 }

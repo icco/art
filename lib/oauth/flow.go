@@ -20,9 +20,11 @@ import (
 
 // Scopes is the set of Google OAuth scopes art requests at account linking.
 //
-// gmail.GmailModifyScope is a Google "restricted" scope: it allows reading,
-// changing labels (archive), and creating drafts, but never sending or
-// permanent deletion. Adding it forces re-consent on every linked account.
+// gmail.GmailModifyScope is a Google "restricted" scope: it allows reading and
+// changing labels, which is the minimum Google offers that still permits
+// archiving (removing the INBOX label). Art uses it only to label and archive —
+// it never drafts, sends, or deletes mail. Adding it forces re-consent on every
+// linked account.
 var Scopes = []string{
 	calendar.CalendarScope,
 	gmail.GmailModifyScope,

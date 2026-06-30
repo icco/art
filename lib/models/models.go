@@ -70,14 +70,15 @@ const (
 
 	// EmailArchive marks bulk mail to remove from the inbox.
 	EmailArchive EmailCategory = "archive"
-	// EmailReply marks mail that wants a response; art drafts one.
+	// EmailReply marks mail that wants a response; art labels it Art/Reply for
+	// Nat to handle and never writes the reply itself.
 	EmailReply EmailCategory = "reply"
 	// EmailKeep marks mail art leaves untouched in the inbox.
 	EmailKeep EmailCategory = "keep"
 
 	// ActionArchived means art removed INBOX and added Art/Archived.
 	ActionArchived EmailAction = "archived"
-	// ActionReply means art labeled Art/Reply and created a draft.
+	// ActionReply means art labeled Art/Reply so Nat can respond.
 	ActionReply EmailAction = "reply"
 	// ActionKeep means art only labeled Art/Triaged.
 	ActionKeep EmailAction = "keep"
@@ -244,13 +245,11 @@ type EmailMessage struct {
 
 	Category   EmailCategory `gorm:"type:varchar(16);not null;check:category IN ('archive','reply','keep')" json:"category"`
 	Summary    string        `gorm:"type:text;not null;default:''" json:"summary"`
-	DraftReply string        `gorm:"type:text;not null;default:''" json:"draft_reply"`
 	Reason     string        `gorm:"type:text;not null;default:''" json:"reason"`
 	Confidence float64       `gorm:"type:numeric(4,3);not null;default:0" json:"confidence"`
 
 	Action   EmailAction `gorm:"type:varchar(16);not null;default:'none'" json:"action"`
 	Applied  bool        `gorm:"not null;default:false" json:"applied"`
-	DraftID  string      `gorm:"type:varchar(255);not null;default:''" json:"draft_id"`
 	Archived bool        `gorm:"not null;default:false" json:"archived"`
 
 	Reversed     bool       `gorm:"not null;default:false;index" json:"reversed"`

@@ -3,6 +3,7 @@ package email
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,13 +20,12 @@ func TestDecideAction(t *testing.T) {
 		conf        float64
 		wantAction  models.EmailAction
 		wantArchive bool
-		wantDraft   bool
 		wantLabel   string
 	}{
-		{"archive high confidence", models.EmailArchive, 0.95, models.ActionArchived, true, false, gmail.LabelArchived},
-		{"archive low confidence downgrades to keep", models.EmailArchive, 0.5, models.ActionKeep, false, false, ""},
-		{"reply drafts", models.EmailReply, 0.9, models.ActionReply, false, true, gmail.LabelReply},
-		{"keep is inert", models.EmailKeep, 0.9, models.ActionKeep, false, false, ""},
+		{"archive high confidence", models.EmailArchive, 0.95, models.ActionArchived, true, gmail.LabelArchived},
+		{"archive low confidence downgrades to keep", models.EmailArchive, 0.5, models.ActionKeep, false, ""},
+		{"reply labels only", models.EmailReply, 0.9, models.ActionReply, false, gmail.LabelReply},
+		{"keep is inert", models.EmailKeep, 0.9, models.ActionKeep, false, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -35,9 +35,6 @@ func TestDecideAction(t *testing.T) {
 			}
 			if d.RemoveInbox != c.wantArchive {
 				t.Errorf("removeInbox: got %v want %v", d.RemoveInbox, c.wantArchive)
-			}
-			if d.MakeDraft != c.wantDraft {
-				t.Errorf("makeDraft: got %v want %v", d.MakeDraft, c.wantDraft)
 			}
 			if !slices.Contains(d.AddLabels, gmail.LabelTriaged) {
 				t.Errorf("every action must add %q, got %v", gmail.LabelTriaged, d.AddLabels)
@@ -55,7 +52,7 @@ type fakeGmail struct {
 	ids         []string
 	msgs        map[string]*gmail.Message
 	modifyCalls []modifyCall
-	draftCalls  int
+	lastQuery   string
 }
 
 type modifyCall struct {
@@ -72,7 +69,8 @@ func (f *fakeGmail) EnsureLabels(context.Context) (map[string]string, error) {
 	}, nil
 }
 
-func (f *fakeGmail) FetchMessageIDs(context.Context, string, int) ([]string, error) {
+func (f *fakeGmail) FetchMessageIDs(_ context.Context, query string, _ int) ([]string, error) {
+	f.lastQuery = query
 	return f.ids, nil
 }
 
@@ -83,11 +81,6 @@ func (f *fakeGmail) GetMessage(_ context.Context, id string) (*gmail.Message, er
 func (f *fakeGmail) ModifyLabels(_ context.Context, msgID string, add, remove []string) error {
 	f.modifyCalls = append(f.modifyCalls, modifyCall{msgID, add, remove})
 	return nil
-}
-
-func (f *fakeGmail) CreateDraft(context.Context, gmail.DraftInput) (string, error) {
-	f.draftCalls++
-	return "DRAFT_1", nil
 }
 
 type fakeClassifier struct{ byID map[string]Classification }
@@ -120,7 +113,7 @@ func newTriager(t *testing.T, dryRun bool, byID map[string]Classification) (*Tri
 func TestRunAccountApplies(t *testing.T) {
 	byID := map[string]Classification{
 		"m1": {Category: models.EmailArchive, Confidence: 0.95, Summary: "junk"},
-		"m2": {Category: models.EmailReply, Confidence: 0.9, Summary: "needs reply", DraftReply: "ok"},
+		"m2": {Category: models.EmailReply, Confidence: 0.9, Summary: "needs reply"},
 	}
 	tr, gm := newTriager(t, false, byID)
 	counts := map[string]int{}
@@ -132,15 +125,22 @@ func TestRunAccountApplies(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("processed %d want 2", n)
 	}
-	if gm.draftCalls != 1 {
-		t.Errorf("draftCalls = %d, want 1 (reply only)", gm.draftCalls)
+
+	// Art only ever reads the inbox — the fetch query must stay inbox-scoped.
+	if !strings.Contains(gm.lastQuery, "in:inbox") {
+		t.Errorf("fetch query must be inbox-only, got %q", gm.lastQuery)
 	}
 
-	// The archived message must have INBOX removed; both must get Art/Triaged.
-	var sawArchive bool
+	// The archived message must have INBOX removed; both must get Art/Triaged;
+	// the reply gets Art/Reply but nothing is ever drafted (the Gmailer the
+	// triager holds has no way to create a draft).
+	var sawArchive, sawReplyLabel bool
 	for _, c := range gm.modifyCalls {
 		if slices.Contains(c.remove, gmail.InboxLabel) {
 			sawArchive = true
+		}
+		if slices.Contains(c.add, "L_REPLY") {
+			sawReplyLabel = true
 		}
 		if !slices.Contains(c.add, "L_TRIAGED") {
 			t.Errorf("modify %s missing Art/Triaged label, add=%v", c.msgID, c.add)
@@ -148,6 +148,9 @@ func TestRunAccountApplies(t *testing.T) {
 	}
 	if !sawArchive {
 		t.Error("expected one message to be archived (INBOX removed)")
+	}
+	if !sawReplyLabel {
+		t.Error("expected the reply message to get the Art/Reply label")
 	}
 
 	var rows []models.EmailMessage
@@ -164,24 +167,21 @@ func TestRunAccountApplies(t *testing.T) {
 		if r.Action == models.ActionArchived && !r.Archived {
 			t.Errorf("archived row %s missing Archived flag", r.GmailMessageID)
 		}
-		if r.Action == models.ActionReply && r.DraftID == "" {
-			t.Errorf("reply row %s missing DraftID", r.GmailMessageID)
-		}
 	}
 }
 
 func TestRunAccountDryRun(t *testing.T) {
 	byID := map[string]Classification{
 		"m1": {Category: models.EmailArchive, Confidence: 0.95},
-		"m2": {Category: models.EmailReply, Confidence: 0.9, DraftReply: "ok"},
+		"m2": {Category: models.EmailReply, Confidence: 0.9},
 	}
 	tr, gm := newTriager(t, true, byID)
 
 	if _, err := tr.RunAccount(context.Background(), uuid.NewString(), models.AccountPersonal, gm, map[string]int{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(gm.modifyCalls) != 0 || gm.draftCalls != 0 {
-		t.Errorf("dry run touched Gmail: modify=%d draft=%d", len(gm.modifyCalls), gm.draftCalls)
+	if len(gm.modifyCalls) != 0 {
+		t.Errorf("dry run touched Gmail: modify=%d", len(gm.modifyCalls))
 	}
 	var rows []models.EmailMessage
 	if err := tr.DB.Find(&rows).Error; err != nil {

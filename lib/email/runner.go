@@ -54,33 +54,9 @@ func (r *Runner) RunAll(ctx context.Context) error {
 func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[string]int, runErrs *[]string) (tokensIn, tokensOut int) {
 	log := gutillog.FromContext(ctx)
 
-	// Build a client per linked account once; both phases reuse it.
-	order := []models.AccountKind{models.AccountPersonal, models.AccountWork}
-	clients := map[models.AccountKind]*gmail.Client{}
-	for _, kind := range order {
-		gm, err := gmail.NewClient(ctx, r.OAuth, kind)
-		if err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				*runErrs = append(*runErrs, fmt.Sprintf("%s: client: %v", kind, err))
-			}
-			continue // not linked, or failed to build
-		}
-		clients[kind] = gm
-	}
-
-	// Phase 1: reconcile prior actions so the corrections block is current.
-	for _, kind := range order {
-		gm, ok := clients[kind]
-		if !ok {
-			continue
-		}
-		n, err := Reconcile(ctx, r.DB, kind, gm, r.Cfg.Triage.ReconcileDays, r.Cfg.Triage.MaxPerRun)
-		if err != nil {
-			log.Warnw("reconcile failed", "account", kind, "err", err)
-		}
-		counts["reconcile_errors"] += n
-	}
-
+	// Corrections come from decisions Nat has manually reversed. There is no
+	// autonomous reconcile pass: detecting reversals would mean inspecting mail
+	// Art has already moved out of the inbox, and Art only reads the inbox.
 	corrections, err := buildCorrections(ctx, r.DB, r.Cfg.Triage.ReconcileDays, maxCorrections)
 	if err != nil {
 		log.Warnw("building corrections failed", "err", err)
@@ -101,11 +77,14 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 		DryRun:              r.Cfg.Triage.DryRun,
 	}
 
-	// Phase 2: triage new mail.
-	for _, kind := range order {
-		gm, ok := clients[kind]
-		if !ok {
-			continue
+	// Triage new inbox mail for each linked account.
+	for _, kind := range []models.AccountKind{models.AccountPersonal, models.AccountWork} {
+		gm, err := gmail.NewClient(ctx, r.OAuth, kind)
+		if err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				*runErrs = append(*runErrs, fmt.Sprintf("%s: client: %v", kind, err))
+			}
+			continue // not linked, or failed to build
 		}
 		n, err := triager.RunAccount(ctx, runID, kind, gm, counts)
 		if err != nil {
