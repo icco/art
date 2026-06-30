@@ -142,7 +142,7 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Sequence(syncCalendars(m.client), m.refreshCmd())
 	case key.Matches(k, m.keys.Triage):
 		m.busy, m.status = true, "triaging…"
-		return m, tea.Sequence(triage(m.client), loadEmails(m.client))
+		return m, tea.Sequence(triage(m.client), tea.Batch(loadEmails(m.client), loadRuns(m.client)))
 	default:
 		return m.routeToCurrent(k)
 	}
