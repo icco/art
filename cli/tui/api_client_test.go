@@ -12,7 +12,7 @@ import (
 // stubClient builds a Client pointed at server with a pre-cached fake token so
 // idToken() doesn't try to shell out to gcloud.
 func stubClient(server *httptest.Server) *Client {
-	c := NewClient(Config{APIURL: server.URL, Audience: "test"})
+	c := NewClient(Config{APIURL: server.URL})
 	c.token = "test-token"
 	c.tokenExp = time.Now().Add(time.Hour)
 	return c
