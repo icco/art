@@ -27,10 +27,14 @@ make run
 Link each Google account (browser-consent personal, then work):
 
 ```sh
-TOKEN="$(gcloud auth print-identity-token --audiences=$OIDC_AUDIENCE)"
+TOKEN="$(gcloud auth print-identity-token)"
 curl -s -X POST "http://localhost:8080/oauth/start?account=personal" \
   -H "Authorization: Bearer $TOKEN" | jq -r .url   # open URL; repeat ?account=work
 ```
+
+`gcloud` user ID tokens carry gcloud's own OAuth client ID as their audience
+(a user token can't carry an arbitrary one), so set `OIDC_AUDIENCE` to that
+client ID — see `.env.example`.
 
 Set working hours (minutes past midnight in `ART_TIMEZONE`):
 
@@ -43,7 +47,7 @@ curl -s -X PUT http://localhost:8080/working-hours \
 ## Use the TUI
 
 ```sh
-ART_API_URL=https://art.example.com ART_API_AUDIENCE="$OIDC_AUDIENCE" art
+ART_API_URL=https://art.example.com art
 ```
 
 The TUI authenticates as *you* via `gcloud` — no stored secrets. `r` replans,
