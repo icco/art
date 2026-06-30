@@ -54,8 +54,11 @@ func migrateEmailCategories(db *gorm.DB) error {
 			Scan(&def).Error; err != nil {
 			return err
 		}
-		if !strings.Contains(def, "thinking") {
-			return nil // already narrowed
+		// Skip only when the constraint already enforces the new set; an empty
+		// or still-wide def falls through to drop + re-add rather than silently
+		// leaving a stale constraint.
+		if def != "" && !strings.Contains(def, "read") && !strings.Contains(def, "thinking") {
+			return nil
 		}
 		if err := m.DropConstraint(&models.EmailMessage{}, name); err != nil {
 			return err
