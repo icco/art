@@ -6,6 +6,7 @@ import (
 	"google.golang.org/api/gmail/v1"
 )
 
+// Art applies these labels so triage actions are attributable and bulk-reversible. Names are nested under "Art".
 const (
 	LabelTriaged  = "Art/Triaged"
 	LabelArchived = "Art/Archived"
