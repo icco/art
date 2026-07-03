@@ -16,6 +16,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// triageLockKey is the app-wide Postgres advisory-lock key for triage passes.
+const triageLockKey = 0x4152545f5452 // "ART_TR"
+
 // Runner executes an email-triage pass across all linked accounts and records
 // it as an AgentRun row (kind=triage). It mirrors calendar.Runner plus the
 // planner's run bookkeeping.
@@ -33,6 +36,28 @@ func (r *Runner) RunAll(ctx context.Context) error {
 		log.Infow("triage disabled, skipping")
 		return nil
 	}
+
+	// Advisory locks are session-scoped, so lock and unlock need one conn.
+	sqlDB, err := r.DB.DB()
+	if err != nil {
+		return err
+	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+	var locked bool
+	if err := conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1)", triageLockKey).Scan(&locked); err != nil {
+		return err
+	}
+	if !locked {
+		log.Infow("triage already running, skipping")
+		return nil
+	}
+	defer func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), "SELECT pg_advisory_unlock($1)", triageLockKey)
+	}()
 
 	run := models.AgentRun{
 		Kind:      models.AgentRunTriage,

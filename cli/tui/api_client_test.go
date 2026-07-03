@@ -95,7 +95,7 @@ func TestClientEventsReplanSync(t *testing.T) {
 		case "/events":
 			_ = json.NewEncoder(w).Encode([]Event{{ID: "e1"}})
 		case "/replan":
-			_ = json.NewEncoder(w).Encode(AgentRun{Status: "succeeded"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 		case "/sync":
 			w.WriteHeader(http.StatusOK)
 		}
@@ -106,9 +106,9 @@ func TestClientEventsReplanSync(t *testing.T) {
 	if _, err := c.ListEvents(ctx, time.Now(), time.Now().Add(time.Hour)); err != nil {
 		t.Fatal(err)
 	}
-	res, err := c.Replan(ctx)
-	if err != nil || res.Status != "succeeded" {
-		t.Fatalf("replan: %+v %v", res, err)
+	status, err := c.Replan(ctx)
+	if err != nil || status != "started" {
+		t.Fatalf("replan: %q %v", status, err)
 	}
 	if err := c.Sync(ctx); err != nil {
 		t.Fatal(err)

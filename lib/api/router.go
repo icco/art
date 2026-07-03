@@ -97,18 +97,20 @@ func secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// clientIPKey keys the rate limiter on the rightmost X-Forwarded-For hop (the
-// one the trusted proxy appends), not the spoofable leftmost entry.
+// clientIPKey keys the rate limiter. X-Forwarded-For is only trusted from the
+// reverse proxy (loopback/private); direct clients control the whole header.
 func clientIPKey(r *http.Request) (string, error) {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		parts := strings.Split(xff, ",")
-		if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
-			return canonicalIP(ip), nil
-		}
-	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
+	}
+	if remote := net.ParseIP(host); remote != nil && (remote.IsLoopback() || remote.IsPrivate()) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			parts := strings.Split(xff, ",")
+			if ip := strings.TrimSpace(parts[len(parts)-1]); ip != "" {
+				return canonicalIP(ip), nil
+			}
+		}
 	}
 	return canonicalIP(host), nil
 }

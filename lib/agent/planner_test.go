@@ -10,9 +10,6 @@ import (
 	"github.com/icco/art/lib/testdb"
 )
 
-// A run that times out must still be finalized: finish runs under the same
-// ctx that just got cancelled, and the row staying "running" forever is
-// exactly the failure being reported.
 func TestFinishSurvivesCancelledContext(t *testing.T) {
 	db := testdb.Open(t)
 	p := &Planner{DB: db}

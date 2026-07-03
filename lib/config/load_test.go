@@ -94,6 +94,41 @@ func TestLoadValidate(t *testing.T) {
 	}
 }
 
+func setValidEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("DATABASE_URL", "x")
+	t.Setenv("OWNER_EMAILS", "a@b.com")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_ID", "x")
+	t.Setenv("GOOGLE_OAUTH_CLIENT_SECRET", "x")
+	t.Setenv("VERTEX_PROJECT_ID", "x")
+	t.Setenv("TOKEN_ENCRYPTION_KEY", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	t.Setenv("OIDC_AUDIENCE", "x")
+}
+
+func TestLoadRejectsUnparseableEnv(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("TRIAGE_DRY_RUN", "yes")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRIAGE_DRY_RUN") {
+		t.Fatalf("want TRIAGE_DRY_RUN parse error, got %v", err)
+	}
+}
+
+func TestLoadRejectsUnparseableInt(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("TRIAGE_MAX_PER_RUN", "1,000")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRIAGE_MAX_PER_RUN") {
+		t.Fatalf("want TRIAGE_MAX_PER_RUN parse error, got %v", err)
+	}
+}
+
+func TestLoadRejectsOutOfRangeThreshold(t *testing.T) {
+	setValidEnv(t)
+	t.Setenv("TRIAGE_CONFIDENCE_THRESHOLD", "1.5")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRIAGE_CONFIDENCE_THRESHOLD") {
+		t.Fatalf("want TRIAGE_CONFIDENCE_THRESHOLD range error, got %v", err)
+	}
+}
+
 func TestLoadBadTimezone(t *testing.T) {
 	t.Setenv("ART_TIMEZONE", "Not/A/Zone")
 	t.Setenv("DATABASE_URL", "x")

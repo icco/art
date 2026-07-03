@@ -76,12 +76,20 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 		c.tokensOut += int(resp.UsageMetadata.CandidatesTokenCount)
 	}
 
+	return parseClassification(resp.Text())
+}
+
+func parseClassification(text string) (Classification, error) {
 	var out Classification
-	if err := json.Unmarshal([]byte(resp.Text()), &out); err != nil {
+	if err := json.Unmarshal([]byte(text), &out); err != nil {
 		return Classification{}, fmt.Errorf("decode classification: %w", err)
 	}
 	if !out.Category.Valid() {
 		return Classification{}, fmt.Errorf("model returned invalid category %q", out.Category)
+	}
+	// Out-of-range confidence would overflow numeric(4,3) at persist.
+	if out.Confidence < 0 || out.Confidence > 1 {
+		return Classification{}, fmt.Errorf("model returned confidence %v outside [0, 1]", out.Confidence)
 	}
 	return out, nil
 }

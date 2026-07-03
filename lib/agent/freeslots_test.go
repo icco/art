@@ -16,6 +16,16 @@ func mustTZ(t *testing.T) *time.Location {
 	return tz
 }
 
+func TestWithinWorkingHoursEndAtMidnight(t *testing.T) {
+	tz := mustTZ(t)
+	hours := []models.WorkingHour{{SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 20 * 60, EndMinute: 1440}}
+	start := time.Date(2026, 5, 25, 23, 0, 0, 0, tz) // Monday 23:00
+	end := time.Date(2026, 5, 26, 0, 0, 0, 0, tz)    // midnight
+	if !withinWorkingHours(start, end, hours, tz) {
+		t.Fatal("slot ending at midnight should fit a window ending at 1440")
+	}
+}
+
 func TestWithinWorkingHours(t *testing.T) {
 	tz := mustTZ(t)
 	// 2026-05-25 is a Monday in PT.

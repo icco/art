@@ -20,7 +20,7 @@ func TestEventTimesRFC3339(t *testing.T) {
 		Start: &calendar.EventDateTime{DateTime: "2026-05-25T10:00:00-07:00"},
 		End:   &calendar.EventDateTime{DateTime: "2026-05-25T11:00:00-07:00"},
 	}
-	s, e, allDay := eventTimes(ev)
+	s, e, allDay := eventTimes(ev, nil)
 	if s.IsZero() || e.IsZero() || allDay {
 		t.Fatalf("got %v %v allDay=%v", s, e, allDay)
 	}
@@ -31,7 +31,7 @@ func TestEventTimesAllDay(t *testing.T) {
 		Start: &calendar.EventDateTime{Date: "2026-05-25"},
 		End:   &calendar.EventDateTime{Date: "2026-05-26"},
 	}
-	s, e, allDay := eventTimes(ev)
+	s, e, allDay := eventTimes(ev, nil)
 	if s.IsZero() || e.IsZero() || !allDay {
 		t.Fatalf("expected all-day, got %v %v %v", s, e, allDay)
 	}
@@ -39,7 +39,7 @@ func TestEventTimesAllDay(t *testing.T) {
 
 func TestEventTimesEmpty(t *testing.T) {
 	ev := &calendar.Event{}
-	s, e, _ := eventTimes(ev)
+	s, e, _ := eventTimes(ev, nil)
 	if !s.IsZero() || !e.IsZero() {
 		t.Fatal("expected zero times for empty event")
 	}

@@ -49,6 +49,8 @@ func (p dashboardPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 		p.width, p.height = msg.Width, msg.Height
 	case eventsMsg:
 		p.events, p.loaded = msg.events, true
+	case errMsg:
+		p.loaded = true // a failed fetch must not leave "loading…" up forever
 	case projectsMsg:
 		p.projects = msg.projects
 	case habitsMsg:

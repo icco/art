@@ -108,6 +108,10 @@ func (p projectsPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 }
 
 func (p projectsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
+		p.form, p.fd, p.editID = nil, nil, ""
+		return p, nil
+	}
 	form, cmd := p.form.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		p.form = f
@@ -125,21 +129,35 @@ func (p projectsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
 }
 
 func (p projectsPage) submitForm() tea.Cmd {
-	hours, _ := strconv.ParseFloat(strings.TrimSpace(p.fd.hours), 64)
-	pr := Project{
-		Name:        strings.TrimSpace(p.fd.name),
-		Kind:        p.fd.kind,
-		TargetHours: hours,
-	}
-	if dl := strings.TrimSpace(p.fd.deadline); dl != "" {
-		if t, err := time.ParseInLocation("2006-01-02", dl, time.Local); err == nil {
-			pr.Deadline = &t
-		}
+	pr, err := p.fd.project()
+	if err != nil {
+		return func() tea.Msg { return errMsg{err} }
 	}
 	if p.editID != "" {
 		return updateProject(p.client, p.editID, pr)
 	}
 	return createProject(p.client, pr)
+}
+
+// project builds the request payload, rejecting unparseable values.
+func (fd *projectForm) project() (Project, error) {
+	hours, err := strconv.ParseFloat(strings.TrimSpace(fd.hours), 64)
+	if err != nil {
+		return Project{}, fmt.Errorf("target hours %q is not a number", fd.hours)
+	}
+	pr := Project{
+		Name:        strings.TrimSpace(fd.name),
+		Kind:        fd.kind,
+		TargetHours: hours,
+	}
+	if dl := strings.TrimSpace(fd.deadline); dl != "" {
+		t, err := time.ParseInLocation("2006-01-02", dl, time.Local)
+		if err != nil {
+			return Project{}, fmt.Errorf("deadline %q is not YYYY-MM-DD", dl)
+		}
+		pr.Deadline = &t
+	}
+	return pr, nil
 }
 
 func (p projectsPage) View() string {
@@ -174,10 +192,10 @@ func newProjectForm(pr *Project, w, h int) (*huh.Form, *projectForm, string) {
 		}
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Name").Value(&fd.name),
+		huh.NewInput().Title("Name").Value(&fd.name).Validate(huh.ValidateNotEmpty()),
 		huh.NewSelect[string]().Title("Kind").Options(huh.NewOptions("work", "personal")...).Value(&fd.kind),
-		huh.NewInput().Title("Target hours").Value(&fd.hours),
-		huh.NewInput().Title("Deadline (YYYY-MM-DD, optional)").Value(&fd.deadline),
+		huh.NewInput().Title("Target hours").Value(&fd.hours).Validate(validateFloat),
+		huh.NewInput().Title("Deadline (YYYY-MM-DD, optional)").Value(&fd.deadline).Validate(validateOptionalDate),
 	))
 	if w > 0 {
 		form = form.WithWidth(w).WithHeight(h)

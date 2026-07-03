@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +75,31 @@ func truncate(s string, n int) string {
 		return string(r[:n])
 	}
 	return string(r[:n-1]) + "…"
+}
+
+// Form field validators; huh blocks submission until these pass.
+func validateInt(s string) error {
+	if _, err := strconv.Atoi(strings.TrimSpace(s)); err != nil {
+		return errors.New("must be a whole number")
+	}
+	return nil
+}
+
+func validateFloat(s string) error {
+	if _, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err != nil {
+		return errors.New("must be a number")
+	}
+	return nil
+}
+
+func validateOptionalDate(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	if _, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(s), time.Local); err != nil {
+		return errors.New("must be YYYY-MM-DD")
+	}
+	return nil
 }
 
 // cadenceCounts tallies happened vs planned habit sessions for one habit.

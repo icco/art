@@ -42,8 +42,7 @@ func (h *Handlers) TriageRun(w http.ResponseWriter, r *http.Request) {
 	// pass survives the response returning.
 	ctx := context.WithoutCancel(r.Context())
 	go func() {
-		// Recover here: chi's Recoverer only covers request goroutines, so
-		// an unrecovered panic in this detached pass kills the process.
+		// chi's Recoverer only covers request goroutines.
 		defer func() {
 			if p := recover(); p != nil {
 				gutillog.FromContext(ctx).Errorw("triage run panicked",

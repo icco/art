@@ -14,6 +14,7 @@ require (
 	github.com/icco/gutil v0.0.0-20260630032459-de9e83f7fbb2
 	github.com/prometheus/client_golang v1.23.2
 	go.uber.org/zap v1.28.0
+	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/adk v1.4.0
 	google.golang.org/api v0.286.0
@@ -87,7 +88,6 @@ require (
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
 	golang.org/x/text v0.38.0 // indirect

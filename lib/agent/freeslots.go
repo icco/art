@@ -76,7 +76,7 @@ type busyRange struct {
 func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time) ([]busyRange, error) {
 	var events []models.Event
 	if err := db.WithContext(ctx).
-		Where("account_kind = ? AND status <> 'cancelled' AND all_day = false AND end_time > ? AND start_time < ?",
+		Where("account_kind = ? AND status <> 'cancelled' AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?",
 			kind, from, to).
 		Order("start_time").
 		Find(&events).Error; err != nil {
@@ -86,8 +86,7 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 	for _, e := range events {
 		out = append(out, busyRange{start: e.StartTime, end: e.EndTime})
 	}
-	// Planned sessions are busy too: a block committed earlier in the same
-	// planner run has no Event row until the next calendar sync.
+	// Planned sessions are busy too; they have no Event row until the next sync.
 	var sessions []models.Session
 	if err := db.WithContext(ctx).
 		Where("account_kind = ? AND status = ? AND scheduled_end > ? AND scheduled_start < ?",
@@ -105,7 +104,9 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 func withinWorkingHours(start, end time.Time, hours []models.WorkingHour, tz *time.Location) bool {
 	s := start.In(tz)
 	e := end.In(tz)
-	if s.YearDay() != e.YearDay() || s.Year() != e.Year() {
+	// An end at exactly midnight belongs to the previous day (endMin 1440).
+	last := e.Add(-time.Nanosecond)
+	if s.YearDay() != last.YearDay() || s.Year() != last.Year() {
 		return false // don't straddle midnight
 	}
 	day := int(s.Weekday())

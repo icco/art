@@ -92,3 +92,23 @@ func TestRouter_RateLimitNotBypassable(t *testing.T) {
 		t.Fatal("rate limit never tripped despite rotating spoofed X-Forwarded-For")
 	}
 }
+
+// A direct client controls the whole XFF header, including the rightmost hop.
+func TestRouter_RateLimitIgnoresXFFFromUntrustedRemote(t *testing.T) {
+	h := newTestRouter(2)
+	var got429 bool
+	for i := range 5 {
+		req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/healthz", nil)
+		req.RemoteAddr = "203.0.113.7:4444" // public address: not the proxy
+		req.Header.Set("X-Forwarded-For", fmt.Sprintf("10.0.0.%d", i))
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code == http.StatusTooManyRequests {
+			got429 = true
+			break
+		}
+	}
+	if !got429 {
+		t.Fatal("rotating rightmost XFF from an untrusted remote bypassed the rate limit")
+	}
+}

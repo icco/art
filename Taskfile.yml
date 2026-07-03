@@ -26,7 +26,8 @@ tasks:
   test:
     desc: Run the test suite
     cmds:
-      - go test ./...
+      # -p 1 serializes package test binaries; they share one Postgres schema.
+      - go test -p 1 ./...
   lint:
     desc: Vet and check formatting
     cmds:

@@ -19,7 +19,7 @@ func TestDashboardViewRendersTiles(t *testing.T) {
 	var page Page = newDashboardPage(nil)
 	msgs := []tea.Msg{
 		tea.WindowSizeMsg{Width: 100, Height: 30},
-		eventsMsg{[]Event{{Summary: "Standup", AccountKind: "work", StartTime: now.Add(time.Hour), EndTime: now.Add(90 * time.Minute)}}},
+		eventsMsg{events: []Event{{Summary: "Standup", AccountKind: "work", StartTime: now.Add(time.Hour), EndTime: now.Add(90 * time.Minute)}}},
 		projectsMsg{[]Project{{ID: "p1", Name: "Book", Kind: "work", TargetHours: 40, ScheduledHours: 12, Deadline: &dl, Status: "active"}}},
 		habitsMsg{[]Habit{{ID: "h1", Name: "Run", Active: true, Cadence: Cadence{Type: "per_week", Count: 3}}}},
 		sessionsMsg{[]Session{{Source: "habit", SourceID: "h1", Status: "happened"}, {Source: "habit", SourceID: "h1", Status: "planned"}}},

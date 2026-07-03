@@ -23,7 +23,7 @@ func loadEvents(c *Client, from, to time.Time) tea.Cmd {
 		if err != nil {
 			return errMsg{err}
 		}
-		return eventsMsg{ev}
+		return eventsMsg{events: ev, from: from, to: to}
 	}
 }
 
@@ -178,15 +178,10 @@ func deleteHabit(c *Client, id string) tea.Cmd {
 	}
 }
 
+// replan starts a detached planner pass and polls until it lands.
 func replan(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		run, err := c.Replan(ctx)
-		if err != nil {
-			return errMsg{err}
-		}
-		return statusMsg("replan: " + run.Status)
+		return startAndAwait(c, "planner", c.Replan, "replan")
 	}
 }
 
@@ -206,49 +201,66 @@ const (
 	triagePollTimeout  = 8 * time.Minute
 )
 
-// triage kicks off a detached server-side triage pass, then polls the runs
-// list until it lands. The work survives even if the TUI exits mid-poll.
+// triage starts a detached triage pass and polls until it lands.
 func triage(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		// Snapshot the latest finished triage run so we can tell the run we
-		// trigger apart from an earlier one.
-		baseline, err := latestTriageID(c)
-		if err != nil {
-			return errMsg{err}
-		}
-		startCtx, cancel := bg()
-		err = c.Triage(startCtx)
-		cancel()
-		if err != nil {
-			return errMsg{err}
-		}
-		deadline := timeNow().Add(triagePollTimeout)
-		for timeNow().Before(deadline) {
-			time.Sleep(triagePollInterval)
-			latest, err := latestTriageRun(c)
-			if err != nil {
-				continue
-			}
-			if settled(latest, baseline) {
-				if latest.Status == "failed" {
-					return errMsg{fmt.Errorf("triage failed: %s", latest.Error)}
-				}
-				return statusMsg("triage done")
-			}
-		}
-		return statusMsg("triage still running…")
+		return startAndAwait(c, "triage", c.Triage, "triage")
 	}
 }
 
-// settled reports whether a triage run distinct from baseline has finished.
+// startAndAwait triggers a detached pass and polls until a run past the
+// baseline settles.
+func startAndAwait(c *Client, kind string, start func(context.Context) (string, error), label string) tea.Msg {
+	latest, err := latestRunOf(c, kind)
+	if err != nil {
+		return errMsg{err}
+	}
+	startCtx, cancel := bg()
+	status, err := start(startCtx)
+	cancel()
+	if err != nil {
+		return errMsg{err}
+	}
+	baseline := pollBaseline(latest, status)
+
+	deadline := timeNow().Add(triagePollTimeout)
+	for timeNow().Before(deadline) {
+		time.Sleep(triagePollInterval)
+		latest, err := latestRunOf(c, kind)
+		if err != nil {
+			continue
+		}
+		if settled(latest, baseline) {
+			if latest.Status == "failed" {
+				return errMsg{fmt.Errorf("%s failed: %s", label, latest.Error)}
+			}
+			return statusMsg(label + " done")
+		}
+	}
+	return statusMsg(label + " still running…")
+}
+
+// settled reports whether a run distinct from baseline has finished.
 func settled(latest *AgentRun, baseline string) bool {
 	return latest != nil && latest.Status != "running" && latest.ID != baseline
 }
 
-func latestTriageRun(c *Client) (*AgentRun, error) {
+// pollBaseline picks the run whose completion should not count as ours:
+// "started" excludes whatever was latest; "running" awaits the in-flight run.
+func pollBaseline(latest *AgentRun, serverStatus string) string {
+	if latest == nil {
+		return ""
+	}
+	if serverStatus == "running" && latest.Status == "running" {
+		return ""
+	}
+	return latest.ID
+}
+
+func latestRunOf(c *Client, kind string) (*AgentRun, error) {
 	ctx, cancel := bg()
 	defer cancel()
-	runs, err := c.ListRuns(ctx, "triage", 1)
+	runs, err := c.ListRuns(ctx, kind, 1)
 	if err != nil {
 		return nil, err
 	}
@@ -256,17 +268,4 @@ func latestTriageRun(c *Client) (*AgentRun, error) {
 		return nil, nil
 	}
 	return &runs[0], nil
-}
-
-// latestTriageID returns the id of the most recent finished triage run, or ""
-// when the latest is still running or none exist — i.e. no baseline to exclude.
-func latestTriageID(c *Client) (string, error) {
-	latest, err := latestTriageRun(c)
-	if err != nil {
-		return "", err
-	}
-	if latest == nil || latest.Status == "running" {
-		return "", nil
-	}
-	return latest.ID, nil
 }

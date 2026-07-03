@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,9 +35,7 @@ var systemInstruction string
 // to the summary that gets persisted on the agent_runs row.
 //
 // ctx is the parent context; agent.ToolContext does not carry one.
-//
-// mu guards summary and clients: ADK executes parallel tool calls from a
-// single model response in separate goroutines.
+// mu guards summary and clients: ADK runs tool calls in parallel goroutines.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
@@ -225,9 +225,6 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		Find(&projects).Error; err != nil {
 		return out, err
 	}
-	// Hours already scheduled come from sessions, not Project.ScheduledHours:
-	// sessions are written on every commit, so each run sees prior bookings
-	// and doesn't re-book the full target.
 	scheduled, err := projectScheduledHours(ctx, c.p.DB)
 	if err != nil {
 		return out, err
@@ -253,12 +250,18 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 	}
 	for _, h := range habits {
 		var cad models.Cadence
-		_ = json.Unmarshal([]byte(h.Cadence), &cad)
+		if err := json.Unmarshal([]byte(h.Cadence), &cad); err != nil {
+			c.addErr(fmt.Sprintf("habit %s: bad cadence: %v", h.Name, err))
+			continue
+		}
 		var n int64
-		_ = c.p.DB.WithContext(ctx).Model(&models.Session{}).
+		if err := c.p.DB.WithContext(ctx).Model(&models.Session{}).
 			Where("source = ? AND source_id = ? AND scheduled_start >= ? AND scheduled_start < ? AND status <> ?",
 				models.SourceHabit, h.ID, weekStart, weekEnd, models.SessionSkipped).
-			Count(&n).Error
+			Count(&n).Error; err != nil {
+			c.addErr(fmt.Sprintf("habit %s: session count: %v", h.Name, err))
+			continue
+		}
 		out.Habits = append(out.Habits, habitInfo{
 			ID:                h.ID,
 			Name:              h.Name,
@@ -285,8 +288,13 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 	return out, nil
 }
 
-// projectScheduledHours sums session durations per project, excluding skipped
-// sessions so their hours return to the schedulable pool.
+// focusEventID derives a stable Google event ID so retries converge on one event.
+func focusEventID(source models.SourceKind, sourceID string, start, end time.Time) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s|%s|%d|%d", source, sourceID, start.Unix(), end.Unix()))
+	return hex.EncodeToString(sum[:16])
+}
+
+// projectScheduledHours sums non-skipped session durations per project.
 func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64, error) {
 	var rows []struct {
 		SourceID string
@@ -394,6 +402,7 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	calID := client.Account.PrimaryCalendarID
 	ev, err := client.CreateFocus(ctx, calendar.FocusBlock{
 		CalendarID:  calID,
+		EventID:     focusEventID(source, args.SourceID, start, end),
 		Start:       start,
 		End:         end,
 		Summary:     focusTitle(source, name),
@@ -416,6 +425,12 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		Status:         models.SessionPlanned,
 	}
 	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			var existing models.Session
+			if lookupErr := c.p.DB.WithContext(ctx).First(&existing, "google_event_id = ?", ev.Id).Error; lookupErr == nil {
+				return commitFocusBlockResult{SessionID: existing.ID, GoogleEventID: ev.Id}, nil
+			}
+		}
 		return commitFocusBlockResult{}, err
 	}
 

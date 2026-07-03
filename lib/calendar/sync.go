@@ -23,23 +23,37 @@ const (
 )
 
 // Syncer pulls events from a single calendar account into the database.
+// TZ anchors all-day event dates; nil means UTC.
 type Syncer struct {
 	Client *Client
 	DB     *gorm.DB
+	TZ     *time.Location
 }
 
 // Run performs an incremental sync, falling back to a bounded full sync.
+// A failing calendar doesn't block the rest; errors are joined.
 func (s *Syncer) Run(ctx context.Context) error {
-	list, err := s.Client.Service.CalendarList.List().Context(ctx).Do()
-	if err != nil {
-		return fmt.Errorf("calendarList: %w", err)
-	}
-	for _, item := range list.Items {
-		if err := s.syncCalendar(ctx, item.Id); err != nil {
-			return fmt.Errorf("sync calendar %q: %w", item.Id, err)
+	var errs []error
+	pageToken := ""
+	for {
+		call := s.Client.Service.CalendarList.List().Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
 		}
+		list, err := call.Do()
+		if err != nil {
+			return fmt.Errorf("calendarList: %w", err)
+		}
+		for _, item := range list.Items {
+			if err := s.syncCalendar(ctx, item.Id); err != nil {
+				errs = append(errs, fmt.Errorf("sync calendar %q: %w", item.Id, err))
+			}
+		}
+		if list.NextPageToken == "" {
+			return errors.Join(errs...)
+		}
+		pageToken = list.NextPageToken
 	}
-	return nil
 }
 
 func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
@@ -50,6 +64,7 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 
 	pageToken := ""
 	now := time.Now().UTC()
+	syncStart := time.Now()
 	for {
 		call := s.Client.Service.Events.List(calendarID).
 			Context(ctx).
@@ -113,6 +128,15 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 				return err
 			}
 		}
+		if fullSync {
+			// Rows untouched by the full walk no longer exist upstream.
+			if err := s.DB.WithContext(ctx).Where(
+				"account_kind = ? AND calendar_id = ? AND updated_at < ?",
+				string(s.Client.Account.Kind), calendarID, syncStart,
+			).Delete(&models.Event{}).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 }
@@ -142,7 +166,7 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 		).Delete(&models.Event{}).Error
 	}
 
-	start, end, allDay := eventTimes(ev)
+	start, end, allDay := eventTimes(ev, s.TZ)
 	if start.IsZero() || end.IsZero() {
 		return nil // unparseable; skip
 	}
@@ -197,12 +221,15 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 		Create(&row).Error
 }
 
-func eventTimes(ev *calendar.Event) (start, end time.Time, allDay bool) {
+func eventTimes(ev *calendar.Event, tz *time.Location) (start, end time.Time, allDay bool) {
+	if tz == nil {
+		tz = time.UTC
+	}
 	parse := func(s string) (time.Time, bool) {
 		if s == "" {
 			return time.Time{}, false
 		}
-		if t, err := time.Parse("2006-01-02", s); err == nil {
+		if t, err := time.ParseInLocation("2006-01-02", s, tz); err == nil {
 			return t, true
 		}
 		if t, err := time.Parse(time.RFC3339, s); err == nil {

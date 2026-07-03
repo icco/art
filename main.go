@@ -57,7 +57,7 @@ func run(log *zap.SugaredLogger) error {
 	oauthStore := &oauth.Store{DB: gdb, Sealer: sealer}
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
 
-	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow}
+	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow, TZ: cfg.Timezone}
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
@@ -98,6 +98,7 @@ func run(log *zap.SugaredLogger) error {
 		log.Infow("shutdown signal received")
 	case err := <-serveErr:
 		if err != nil {
+			stop() // cancel cron so scheduler.Stop() isn't stuck behind a pass
 			return err
 		}
 	}

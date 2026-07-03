@@ -48,8 +48,7 @@ func (p *Planner) finish(ctx context.Context, id string, summary map[string]any,
 	}
 	body, _ := json.Marshal(summary)
 	t := time.Now()
-	// Record the outcome even if ctx already timed out mid-run, so a started
-	// run never stays stuck "running".
+	// Record the outcome even if ctx timed out, so runs never stay "running".
 	if err := p.DB.WithContext(context.WithoutCancel(ctx)).Model(&models.AgentRun{}).Where("id = ?", id).Updates(map[string]any{
 		"ended_at": &t,
 		"status":   string(status),

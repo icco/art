@@ -49,6 +49,25 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 		Create(&a).Error
 }
 
+// UpdateRefreshToken reseals and stores a rotated refresh token for kind.
+func (s *Store) UpdateRefreshToken(ctx context.Context, kind models.AccountKind, refresh string) error {
+	if refresh == "" {
+		return errors.New("oauth: refresh token missing")
+	}
+	// #nosec G117 -- payload is sealed by AES-256-GCM before persistence.
+	payload, err := json.Marshal(&oauth2.Token{RefreshToken: refresh})
+	if err != nil {
+		return err
+	}
+	sealed, err := s.Sealer.Seal(payload)
+	if err != nil {
+		return err
+	}
+	return s.DB.WithContext(ctx).Model(&models.Account{}).
+		Where("kind = ?", kind).
+		Update("refresh_token_encrypted", sealed).Error
+}
+
 // Load returns the decrypted oauth2.Token and Account row for kind.
 func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Token, models.Account, error) {
 	var a models.Account

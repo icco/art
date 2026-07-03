@@ -96,6 +96,45 @@ func TestFindFreeSlotsHonorsBusy(t *testing.T) {
 	}
 }
 
+func TestFindFreeSlotsAllDayEvents(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	for _, d := range []int{1, 2} {
+		if err := db.Create(&models.WorkingHour{
+			SlotKind: models.SlotWork, DayOfWeek: d, StartMinute: 9 * 60, EndMinute: 18 * 60,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	monday := time.Date(2026, 5, 25, 0, 0, 0, 0, tz)
+	tuesday := monday.AddDate(0, 0, 1)
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "ooo1",
+		StartTime: monday, EndTime: tuesday, AllDay: true, EventType: "outOfOffice", Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "bday1",
+		StartTime: tuesday, EndTime: tuesday.AddDate(0, 0, 1), AllDay: true, EventType: "default", Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60,
+		monday, tuesday.AddDate(0, 0, 1), 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) == 0 {
+		t.Fatal("expected Tuesday slots despite the all-day birthday")
+	}
+	for _, s := range slots {
+		if s.Start.Before(tuesday) {
+			t.Fatalf("slot %v-%v booked over an all-day out-of-office", s.Start, s.End)
+		}
+	}
+}
+
 func TestFindFreeSlotsHonorsPlannedSessions(t *testing.T) {
 	db := testdb.Open(t)
 	tz, _ := time.LoadLocation("America/Los_Angeles")

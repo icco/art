@@ -23,9 +23,10 @@ type Scheduler struct {
 	Planner *agent.Planner
 	Triage  *email.Runner
 
-	tick *time.Ticker
-	stop chan struct{}
-	wg   sync.WaitGroup
+	tick     *time.Ticker
+	stop     chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 }
 
 // New returns a Scheduler ready to be Start()ed.
@@ -58,12 +59,11 @@ func (s *Scheduler) Stop() {
 	if s.tick != nil {
 		s.tick.Stop()
 	}
-	close(s.stop)
+	s.stopOnce.Do(func() { close(s.stop) })
 	s.wg.Wait()
 }
 
-// runJob runs fn, logging any panic instead of propagating it: an
-// unrecovered panic here kills the scheduler goroutine and the process.
+// runJob runs fn, recovering panics so one bad job can't kill the process.
 func runJob(ctx context.Context, name string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {

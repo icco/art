@@ -273,10 +273,12 @@ func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentR
 	return out, c.do(ctx, "GET", "/agent-runs"+q, nil, &out)
 }
 
-// Replan triggers a planner run on the server and returns its result.
-func (c *Client) Replan(ctx context.Context) (AgentRun, error) {
-	var out AgentRun
-	return out, c.do(ctx, "POST", "/replan", nil, &out)
+// Replan triggers a detached planner run and returns "started" or "running".
+func (c *Client) Replan(ctx context.Context) (string, error) {
+	var out struct {
+		Status string `json:"status"`
+	}
+	return out.Status, c.do(ctx, "POST", "/replan", nil, &out)
 }
 
 // Sync triggers a sync of upstream calendars on the server.
@@ -290,9 +292,12 @@ func (c *Client) ListEmails(ctx context.Context) ([]Email, error) {
 	return out, c.do(ctx, "GET", "/emails?limit=200", nil, &out)
 }
 
-// Triage triggers an email-triage pass on the server.
-func (c *Client) Triage(ctx context.Context) error {
-	return c.do(ctx, "POST", "/triage/run", nil, nil)
+// Triage triggers a detached triage pass and returns "started" or "running".
+func (c *Client) Triage(ctx context.Context) (string, error) {
+	var out struct {
+		Status string `json:"status"`
+	}
+	return out.Status, c.do(ctx, "POST", "/triage/run", nil, &out)
 }
 
 // ReverseEmail marks a triaged decision bad and undoes it server-side.

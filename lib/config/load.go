@@ -56,6 +56,7 @@ type VertexConfig struct {
 
 // Load reads configuration from the process environment and validates it.
 func Load() (*Config, error) {
+	p := &envParser{}
 	c := &Config{
 		Port:           envOr("PORT", "8080"),
 		DatabaseURL:    os.Getenv("DATABASE_URL"),
@@ -71,14 +72,17 @@ func Load() (*Config, error) {
 			Location:  envOr("VERTEX_LOCATION", "us-central1"),
 		},
 		Triage: TriageConfig{
-			Enabled:             envBool("TRIAGE_ENABLED", true),
-			DryRun:              envBool("TRIAGE_DRY_RUN", false),
-			BackfillDays:        envInt("TRIAGE_BACKFILL_DAYS", 7),
-			MaxPerRun:           envInt("TRIAGE_MAX_PER_RUN", 1000),
-			ConfidenceThreshold: envFloat("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
-			ReconcileDays:       envInt("TRIAGE_RECONCILE_DAYS", 7),
+			Enabled:             p.boolVar("TRIAGE_ENABLED", true),
+			DryRun:              p.boolVar("TRIAGE_DRY_RUN", false),
+			BackfillDays:        p.intVar("TRIAGE_BACKFILL_DAYS", 7),
+			MaxPerRun:           p.intVar("TRIAGE_MAX_PER_RUN", 1000),
+			ConfidenceThreshold: p.floatVar("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
+			ReconcileDays:       p.intVar("TRIAGE_RECONCILE_DAYS", 7),
 		},
-		RateLimitRPM: envInt("RATE_LIMIT_RPM", 120),
+		RateLimitRPM: p.intVar("RATE_LIMIT_RPM", 120),
+	}
+	if err := errors.Join(p.errs...); err != nil {
+		return nil, err
 	}
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {
@@ -129,6 +133,9 @@ func (c *Config) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))
 	}
+	if t := c.Triage.ConfidenceThreshold; t < 0 || t > 1 {
+		return fmt.Errorf("TRIAGE_CONFIDENCE_THRESHOLD must be in [0, 1], got %v", t)
+	}
 	return nil
 }
 
@@ -144,31 +151,48 @@ func envOr(key, def string) string {
 	return def
 }
 
-func envBool(key string, def bool) bool {
-	if v := os.Getenv(key); v != "" {
-		if b, err := strconv.ParseBool(v); err == nil {
-			return b
-		}
-	}
-	return def
+// envParser parses typed env vars, erroring when a set value is unparseable.
+type envParser struct {
+	errs []error
 }
 
-func envInt(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+func (p *envParser) boolVar(key string, def bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
 	}
-	return def
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid bool", key, v))
+		return def
+	}
+	return b
 }
 
-func envFloat(key string, def float64) float64 {
-	if v := os.Getenv(key); v != "" {
-		if f, err := strconv.ParseFloat(v, 64); err == nil {
-			return f
-		}
+func (p *envParser) intVar(key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
 	}
-	return def
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid integer", key, v))
+		return def
+	}
+	return n
+}
+
+func (p *envParser) floatVar(key string, def float64) float64 {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	f, err := strconv.ParseFloat(v, 64)
+	if err != nil {
+		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid number", key, v))
+		return def
+	}
+	return f
 }
 
 func decodeKey(raw string) ([]byte, error) {

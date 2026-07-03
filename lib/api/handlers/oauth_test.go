@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/icco/art/lib/api/handlers"
@@ -74,5 +75,19 @@ func TestOAuthCallbackCompleteErr(t *testing.T) {
 	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("code: %d", w.Code)
+	}
+}
+
+func TestOAuthCallbackDoesNotLeakInternalErrors(t *testing.T) {
+	h := &handlers.Handlers{OAuth: &fakeOAuth{
+		compErr: errors.New(`oauth: save: pq: duplicate key value violates "accounts_pkey"`),
+	}}
+	w := httptest.NewRecorder()
+	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("code: %d", w.Code)
+	}
+	if body := w.Body.String(); strings.Contains(body, "accounts_pkey") || strings.Contains(body, "pq:") {
+		t.Fatalf("internal error detail leaked to public page:\n%s", body)
 	}
 }

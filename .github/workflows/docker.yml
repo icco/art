@@ -103,14 +103,10 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Create manifest list (dry-run on PRs)
+      - name: Create manifest list
         working-directory: ${{ runner.temp }}/digests
         run: |
-          dryrun=""
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            dryrun="--dry-run"
-          fi
-          docker buildx imagetools create $dryrun \
+          docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
       - name: Inspect image and capture digest

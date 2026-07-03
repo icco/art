@@ -32,6 +32,41 @@ func TestRunAllDisabled(t *testing.T) {
 	}
 }
 
+func TestRunAllSkipsWhenLockHeld(t *testing.T) {
+	db := testdb.Open(t)
+	log, err := gutillog.NewLogger("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := gutillog.NewContext(context.Background(), log)
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := sqlDB.Conn(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	var locked bool
+	if err := conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1)", triageLockKey).Scan(&locked); err != nil || !locked {
+		t.Fatalf("test could not take lock: %v %v", locked, err)
+	}
+
+	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{Enabled: true}}, DB: db}
+	if err := r.RunAll(ctx); err != nil {
+		t.Fatalf("locked RunAll should skip cleanly: %v", err)
+	}
+	var n int64
+	if err := db.Model(&models.AgentRun{}).Count(&n).Error; err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Errorf("RunAll did work while another pass held the lock (%d runs)", n)
+	}
+}
+
 func TestFinishRecordsSummary(t *testing.T) {
 	db := testdb.Open(t)
 	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{DryRun: true}}, DB: db}

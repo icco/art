@@ -17,6 +17,22 @@ func TestWeekWindow(t *testing.T) {
 	}
 }
 
+func TestWeekWindowDST(t *testing.T) {
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	// Spring-forward week: 167 wall hours.
+	spring := time.Date(2026, 3, 4, 12, 0, 0, 0, tz)
+	_, end := WeekWindow(spring, tz)
+	if want := time.Date(2026, 3, 9, 0, 0, 0, 0, tz); !end.Equal(want) {
+		t.Fatalf("spring week end = %v, want %v", end, want)
+	}
+	// Fall-back week: 169 wall hours.
+	fall := time.Date(2026, 10, 28, 12, 0, 0, 0, tz)
+	_, end = WeekWindow(fall, tz)
+	if want := time.Date(2026, 11, 2, 0, 0, 0, 0, tz); !end.Equal(want) {
+		t.Fatalf("fall week end = %v, want %v", end, want)
+	}
+}
+
 func TestNextHour(t *testing.T) {
 	in := time.Date(2026, 5, 27, 14, 17, 30, 0, time.UTC)
 	got := NextHour(in)
