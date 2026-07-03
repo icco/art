@@ -31,6 +31,40 @@ func (f *fakeTriage) SetArchived(context.Context, string, bool) (models.EmailMes
 	return models.EmailMessage{}, nil
 }
 
+// panickyTriage signals RunAll was invoked, then panics.
+type panickyTriage struct{ fakeTriage }
+
+func (p *panickyTriage) RunAll(context.Context) error {
+	select {
+	case p.called <- struct{}{}:
+	default:
+	}
+	panic("triage kaboom")
+}
+
+// A panic in the detached triage goroutine must be recovered: chi's
+// Recoverer only protects request goroutines, so an unrecovered panic here
+// kills the whole process.
+func TestTriageRunRecoversPanic(t *testing.T) {
+	db := testdb.Open(t)
+	pt := &panickyTriage{fakeTriage{called: make(chan struct{}, 1)}}
+	h := &handlers.Handlers{DB: db, Triage: pt}
+	r := newRouter(h)
+
+	w := do(t, r, "POST", "/triage/run", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("triage run: %d %s", w.Code, w.Body)
+	}
+	select {
+	case <-pt.called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("detached RunAll was not invoked")
+	}
+	// Let the goroutine unwind; without recovery the panic crashes the
+	// test process right here.
+	time.Sleep(50 * time.Millisecond)
+}
+
 func TestTriageRun(t *testing.T) {
 	db := testdb.Open(t)
 	ft := &fakeTriage{called: make(chan struct{}, 1)}

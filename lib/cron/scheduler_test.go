@@ -11,6 +11,12 @@ import (
 	"github.com/icco/art/lib/email"
 )
 
+// A panicking job must not propagate: it would kill the scheduler goroutine
+// and with it the whole process.
+func TestRunJobRecoversPanic(t *testing.T) {
+	runJob(context.Background(), "boom", func() { panic("kaboom") })
+}
+
 // We can't easily exercise Start without a real DB + Google client; cover the
 // constructor + Stop happy path.
 func TestNewAndStop(t *testing.T) {
