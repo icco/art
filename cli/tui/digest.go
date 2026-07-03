@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
@@ -118,6 +117,12 @@ func (p digestPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 }
 
 func (p digestPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
+	// huh's only abort binding is ctrl+c, which root intercepts to quit;
+	// esc is the cancel path.
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
+		p.form, p.cf, p.reverseID = nil, nil, ""
+		return p, nil
+	}
 	form, cmd := p.form.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		p.form = f
@@ -142,7 +147,10 @@ func (p digestPage) View() string {
 		return p.form.View()
 	}
 	if len(p.list.Items()) == 0 {
-		return strings.TrimRight(p.list.View(), "\n") + "\n\n" + faintStyle.Render("No triaged mail. Press t to run triage.")
+		// Render only the title so bubbles' default "No items." doesn't stack
+		// above the hint (matches the projects/habits empty states).
+		title := p.list.Styles.Title.Render(p.list.Title)
+		return title + "\n\n" + faintStyle.Render("No triaged mail. Press t to run triage.")
 	}
 	return p.list.View()
 }

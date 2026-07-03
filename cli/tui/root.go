@@ -135,12 +135,21 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case key.Matches(k, m.keys.Replan):
+		if m.busy {
+			return m, nil
+		}
 		m.busy, m.status = true, "replanning…"
 		return m, tea.Sequence(replan(m.client), m.refreshCmd())
 	case key.Matches(k, m.keys.Sync):
+		if m.busy {
+			return m, nil
+		}
 		m.busy, m.status = true, "syncing…"
 		return m, tea.Sequence(syncCalendars(m.client), m.refreshCmd())
 	case key.Matches(k, m.keys.Triage):
+		if m.busy {
+			return m, nil
+		}
 		m.busy, m.status = true, "triaging…"
 		return m, tea.Sequence(triage(m.client), tea.Batch(loadEmails(m.client), loadRuns(m.client)))
 	default:
@@ -154,12 +163,23 @@ func (m rootModel) refreshCmd() tea.Cmd {
 	return tea.Batch(loadEvents(m.client, from, to), loadSessions(m.client, from, to), loadProjects(m.client), loadRuns(m.client))
 }
 
+// navigate switches pages without emitting a synthetic WindowSizeMsg: pages
+// already receive every real resize via broadcast, and a synthetic one would
+// re-enter Update as authoritative and shrink the UI by chromeHeight again.
 func (m rootModel) navigate(to pageID) (tea.Model, tea.Cmd) {
 	if m.current() == to {
 		return m, nil
 	}
+	// Keep the stack a set: revisiting a page moves it to the top instead of
+	// growing the stack (and the esc trail) without bound.
+	for i, id := range m.stack {
+		if id == to {
+			m.stack = append(m.stack[:i], m.stack[i+1:]...)
+			break
+		}
+	}
 	m.stack = append(m.stack, to)
-	return m, tea.Batch(m.pages[to].Init(), sizeCmd(m.pageSize()))
+	return m, m.pages[to].Init()
 }
 
 func (m rootModel) pop() (tea.Model, tea.Cmd) {
@@ -167,7 +187,7 @@ func (m rootModel) pop() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.stack = m.stack[:len(m.stack)-1]
-	return m, sizeCmd(m.pageSize())
+	return m, nil
 }
 
 func (m rootModel) routeToCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -194,10 +214,6 @@ func (m rootModel) broadcast(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m rootModel) pageSize() tea.WindowSizeMsg {
 	h := max(m.height-chromeHeight, 1)
 	return tea.WindowSizeMsg{Width: m.width, Height: h}
-}
-
-func sizeCmd(sz tea.WindowSizeMsg) tea.Cmd {
-	return func() tea.Msg { return sz }
 }
 
 func (m rootModel) View() tea.View {

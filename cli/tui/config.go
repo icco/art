@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"fmt"
 	"os"
+	"strings"
 )
 
 // Config holds runtime configuration for the TUI client.
@@ -11,15 +11,12 @@ type Config struct {
 }
 
 // LoadConfig builds a Config from environment variables, falling back to a
-// sensible default when ART_API_URL is not set.
+// sensible default when ART_API_URL is not set. A trailing slash would break
+// every request path ("//projects" 404s in chi), so it's trimmed.
 func LoadConfig() (Config, error) {
-	c := Config{
-		APIURL: envOr("ART_API_URL", "http://localhost:8080"),
-	}
-	if c.APIURL == "" {
-		return c, fmt.Errorf("ART_API_URL is empty")
-	}
-	return c, nil
+	return Config{
+		APIURL: strings.TrimRight(envOr("ART_API_URL", "http://localhost:8080"), "/"),
+	}, nil
 }
 
 func envOr(key, def string) string {

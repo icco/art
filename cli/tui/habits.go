@@ -13,6 +13,7 @@ import (
 
 type habitForm struct {
 	name, kind, minutes, perWeek string
+	active                       bool
 }
 
 type habitItem struct{ h Habit }
@@ -106,6 +107,12 @@ func (p habitsPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 }
 
 func (p habitsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
+	// huh's only abort binding is ctrl+c, which root intercepts to quit;
+	// esc is the cancel path.
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
+		p.form, p.fd, p.editID = nil, nil, ""
+		return p, nil
+	}
 	form, cmd := p.form.Update(msg)
 	if f, ok := form.(*huh.Form); ok {
 		p.form = f
@@ -123,19 +130,35 @@ func (p habitsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
 }
 
 func (p habitsPage) submitForm() tea.Cmd {
-	mins, _ := strconv.Atoi(strings.TrimSpace(p.fd.minutes))
-	count, _ := strconv.Atoi(strings.TrimSpace(p.fd.perWeek))
-	h := Habit{
-		Name:                 strings.TrimSpace(p.fd.name),
-		Kind:                 p.fd.kind,
-		BlockDurationMinutes: mins,
-		Cadence:              Cadence{Type: "per_week", Count: count},
-		Active:               true,
+	h, err := p.fd.habit()
+	if err != nil {
+		return func() tea.Msg { return errMsg{err} }
 	}
 	if p.editID != "" {
 		return updateHabit(p.client, p.editID, h)
 	}
 	return createHabit(p.client, h)
+}
+
+// habit builds the request payload, rejecting values the field validators
+// should have caught rather than silently zeroing them. Active carries the
+// edited habit's state through: editing a paused habit must not reactivate it.
+func (fd *habitForm) habit() (Habit, error) {
+	mins, err := strconv.Atoi(strings.TrimSpace(fd.minutes))
+	if err != nil {
+		return Habit{}, fmt.Errorf("block minutes %q is not a number", fd.minutes)
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(fd.perWeek))
+	if err != nil {
+		return Habit{}, fmt.Errorf("per-week count %q is not a number", fd.perWeek)
+	}
+	return Habit{
+		Name:                 strings.TrimSpace(fd.name),
+		Kind:                 fd.kind,
+		BlockDurationMinutes: mins,
+		Cadence:              Cadence{Type: "per_week", Count: count},
+		Active:               fd.active,
+	}, nil
 }
 
 func (p habitsPage) View() string {
@@ -158,7 +181,7 @@ func habitItems(habits []Habit) []list.Item {
 }
 
 func newHabitForm(h *Habit, w, ht int) (*huh.Form, *habitForm, string) {
-	fd := &habitForm{kind: "personal", minutes: "30", perWeek: "3"}
+	fd := &habitForm{kind: "personal", minutes: "30", perWeek: "3", active: true}
 	editID := ""
 	if h != nil {
 		editID = h.ID
@@ -166,12 +189,14 @@ func newHabitForm(h *Habit, w, ht int) (*huh.Form, *habitForm, string) {
 		fd.kind = h.Kind
 		fd.minutes = strconv.Itoa(h.BlockDurationMinutes)
 		fd.perWeek = strconv.Itoa(h.Cadence.Count)
+		fd.active = h.Active
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Name").Value(&fd.name),
+		huh.NewInput().Title("Name").Value(&fd.name).Validate(huh.ValidateNotEmpty()),
 		huh.NewSelect[string]().Title("Kind").Options(huh.NewOptions("work", "personal")...).Value(&fd.kind),
-		huh.NewInput().Title("Block minutes").Value(&fd.minutes),
-		huh.NewInput().Title("Per-week count").Value(&fd.perWeek),
+		huh.NewInput().Title("Block minutes").Value(&fd.minutes).Validate(validateInt),
+		huh.NewInput().Title("Per-week count").Value(&fd.perWeek).Validate(validateInt),
+		huh.NewConfirm().Title("Active").Affirmative("active").Negative("paused").Value(&fd.active),
 	))
 	if w > 0 {
 		form = form.WithWidth(w).WithHeight(ht)

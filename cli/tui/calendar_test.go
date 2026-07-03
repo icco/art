@@ -22,15 +22,18 @@ func TestCalendarAllDayPlacement(t *testing.T) {
 	defer func() { timeNow = orig }()
 
 	var page Page = newCalendarPage(nil)
+	anchor := startOfWeek(now)
 	page, _ = page.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	page, _ = page.Update(eventsMsg{[]Event{
-		{Summary: "Canada Day", AccountKind: "personal", AllDay: true,
-			StartTime: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-			EndTime:   time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)},
-		{Summary: "Standup", AccountKind: "work",
-			StartTime: time.Date(2026, 7, 1, 15, 0, 0, 0, time.UTC),
-			EndTime:   time.Date(2026, 7, 1, 15, 30, 0, 0, time.UTC)},
-	}})
+	page, _ = page.Update(eventsMsg{
+		from: anchor.AddDate(0, 0, -1), to: anchor.AddDate(0, 0, 8),
+		events: []Event{
+			{Summary: "Canada Day", AccountKind: "personal", AllDay: true,
+				StartTime: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+				EndTime:   time.Date(2026, 7, 2, 0, 0, 0, 0, time.UTC)},
+			{Summary: "Standup", AccountKind: "work",
+				StartTime: time.Date(2026, 7, 1, 15, 0, 0, 0, time.UTC),
+				EndTime:   time.Date(2026, 7, 1, 15, 30, 0, 0, time.UTC)},
+		}})
 
 	view := page.View()
 	if !strings.Contains(view, "all day") {

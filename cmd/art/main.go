@@ -48,8 +48,7 @@ Usage:
   art --version  print the version
 
 Configuration (environment):
-  ART_API_URL       art server base URL (default http://localhost:8080)
-  ART_API_AUDIENCE  OIDC audience for the ID token (default: ART_API_URL)
+  ART_API_URL  art server base URL (default http://localhost:8080)
 
 Authentication:
   Requests are authenticated as you via a Google ID token minted with
