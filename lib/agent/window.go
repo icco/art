@@ -3,10 +3,11 @@ package agent
 import "time"
 
 // WeekWindow returns [start, end) of the calendar week containing t (tz-aware).
-// Start is Monday 00:00; end is the following Monday 00:00.
+// Start is Monday 00:00; end is the following Monday 00:00. AddDate keeps the
+// end on midnight across DST weeks (167/169 wall hours).
 func WeekWindow(t time.Time, tz *time.Location) (time.Time, time.Time) {
 	start := startOfWeek(t, tz)
-	return start, start.Add(7 * 24 * time.Hour)
+	return start, start.AddDate(0, 0, 7)
 }
 
 // NextHour rounds t up to the next whole hour. The planner never schedules

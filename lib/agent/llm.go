@@ -253,12 +253,18 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 	}
 	for _, h := range habits {
 		var cad models.Cadence
-		_ = json.Unmarshal([]byte(h.Cadence), &cad)
+		if err := json.Unmarshal([]byte(h.Cadence), &cad); err != nil {
+			c.addErr(fmt.Sprintf("habit %s: bad cadence: %v", h.Name, err))
+			continue
+		}
 		var n int64
-		_ = c.p.DB.WithContext(ctx).Model(&models.Session{}).
+		if err := c.p.DB.WithContext(ctx).Model(&models.Session{}).
 			Where("source = ? AND source_id = ? AND scheduled_start >= ? AND scheduled_start < ? AND status <> ?",
 				models.SourceHabit, h.ID, weekStart, weekEnd, models.SessionSkipped).
-			Count(&n).Error
+			Count(&n).Error; err != nil {
+			c.addErr(fmt.Sprintf("habit %s: session count: %v", h.Name, err))
+			continue
+		}
 		out.Habits = append(out.Habits, habitInfo{
 			ID:                h.ID,
 			Name:              h.Name,

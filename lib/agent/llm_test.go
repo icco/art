@@ -182,6 +182,26 @@ func TestCommitFocusBlockValidation(t *testing.T) {
 
 // The prompt tells the model to respect these invariants, but tools are the
 // source of truth: a hallucinated commit must not reach the calendar.
+func TestListStateBadCadenceSurfaced(t *testing.T) {
+	c := newCycle(t)
+	if err := c.p.DB.Create(&models.Habit{
+		Name: "Bad", Kind: models.SlotPersonal, BlockDurationMinutes: 30,
+		Cadence: datatypes.JSON("[]"), Active: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	got, err := c.listState(nil, listStateArgs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Habits) != 0 {
+		t.Fatalf("habit with malformed cadence should be skipped, got %+v", got.Habits)
+	}
+	if errs, _ := c.summary["errors"].([]string); len(errs) == 0 {
+		t.Fatal("expected cadence error in run summary")
+	}
+}
+
 func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
 	c := newCycle(t)
 	c.ctx = context.Background()
