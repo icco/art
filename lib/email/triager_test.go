@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/icco/art/lib/gmail"
@@ -108,6 +109,38 @@ func newTriager(t *testing.T, dryRun bool, byID map[string]Classification) (*Tri
 		DryRun:              dryRun,
 	}
 	return tr, gm
+}
+
+// Re-triaging a previously-reversed message is a fresh decision: stale
+// reversal state made Reverse a permanent no-op and poisoned corrections.
+func TestUpsertClearsReversalState(t *testing.T) {
+	db := testdb.Open(t)
+	tr := &Triager{DB: db}
+	now := time.Now()
+	old := models.EmailMessage{
+		RunID: "00000000-0000-0000-0000-000000000001", AccountKind: models.AccountPersonal,
+		GmailMessageID: "g1", Category: models.EmailKeep, Applied: false,
+		Reversed: true, ReversalKind: reversalMiscategorized, ReconciledAt: &now,
+	}
+	if err := db.Create(&old).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	fresh := models.EmailMessage{
+		RunID: "00000000-0000-0000-0000-000000000002", AccountKind: models.AccountPersonal,
+		GmailMessageID: "g1", Category: models.EmailArchive, Applied: true,
+	}
+	if err := tr.upsert(context.Background(), &fresh); err != nil {
+		t.Fatal(err)
+	}
+
+	var got models.EmailMessage
+	if err := db.First(&got, "gmail_message_id = ?", "g1").Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Reversed || got.ReversalKind != "" || got.ReconciledAt != nil {
+		t.Fatalf("reversal state must reset on re-triage: %+v", got)
+	}
 }
 
 func TestRunAccountApplies(t *testing.T) {

@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"golang.org/x/net/html"
 	"google.golang.org/api/gmail/v1"
 )
 
@@ -24,8 +26,6 @@ type Message struct {
 	Body       string
 	ReceivedAt time.Time
 	LabelIDs   []string
-	// MessageIDHeader is the RFC822 Message-ID, used to thread draft replies.
-	MessageIDHeader string
 }
 
 // FetchMessageIDs returns up to max message IDs matching the Gmail search
@@ -35,7 +35,7 @@ func (c *Client) FetchMessageIDs(ctx context.Context, query string, limit int) (
 	var ids []string
 	pageToken := ""
 	for len(ids) < limit {
-		call := c.Service.Users.Messages.List(User).Q(query).Context(ctx)
+		call := c.svc.Users.Messages.List(User).Q(query).Context(ctx)
 		remaining := min(int64(limit-len(ids)), 500)
 		call = call.MaxResults(remaining)
 		if pageToken != "" {
@@ -63,7 +63,7 @@ func (c *Client) FetchMessageIDs(ctx context.Context, query string, limit int) (
 // triager needs. ReceivedAt comes from InternalDate (epoch ms), which is more
 // reliable than parsing the Date header.
 func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
-	m, err := c.Service.Users.Messages.Get(User, id).Format("full").Context(ctx).Do()
+	m, err := c.svc.Users.Messages.Get(User, id).Format("full").Context(ctx).Do()
 	if err != nil {
 		return nil, err
 	}
@@ -85,26 +85,28 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
 				out.To = h.Value
 			case "subject":
 				out.Subject = h.Value
-			case "message-id":
-				out.MessageIDHeader = h.Value
 			}
 		}
 		out.Body = extractBody(m.Payload)
 	}
 	if len(out.Body) > maxBodyChars {
-		out.Body = out.Body[:maxBodyChars]
+		cut := maxBodyChars
+		for cut > 0 && !utf8.RuneStart(out.Body[cut]) {
+			cut--
+		}
+		out.Body = out.Body[:cut]
 	}
 	return out, nil
 }
 
-// extractBody walks the MIME tree preferring text/plain, falling back to a
-// crudely de-tagged text/html part.
+// extractBody walks the MIME tree preferring text/plain, falling back to the
+// visible text of a text/html part.
 func extractBody(part *gmail.MessagePart) string {
 	if plain := findPart(part, "text/plain"); plain != "" {
 		return plain
 	}
-	if html := findPart(part, "text/html"); html != "" {
-		return stripTags(html)
+	if raw := findPart(part, "text/html"); raw != "" {
+		return htmlToText(raw)
 	}
 	return ""
 }
@@ -135,24 +137,37 @@ func decodeBody(data string) string {
 	return ""
 }
 
-// stripTags removes HTML tags for a rough plaintext approximation. The result
-// only ever feeds the classifier, so fidelity is not important.
-func stripTags(s string) string {
+// htmlToText extracts visible text for the classifier: entities decoded,
+// style/script/head contents dropped, whitespace collapsed.
+func htmlToText(s string) string {
+	tok := html.NewTokenizer(strings.NewReader(s))
 	var b strings.Builder
-	depth := 0
-	for _, r := range s {
-		switch r {
-		case '<':
-			depth++
-		case '>':
-			if depth > 0 {
-				depth--
+	skip := 0
+	for {
+		switch tok.Next() {
+		case html.ErrorToken:
+			return strings.Join(strings.Fields(b.String()), " ")
+		case html.StartTagToken:
+			if name, _ := tok.TagName(); skipTag(string(name)) {
+				skip++
 			}
-		default:
-			if depth == 0 {
-				b.WriteRune(r)
+		case html.EndTagToken:
+			if name, _ := tok.TagName(); skipTag(string(name)) && skip > 0 {
+				skip--
+			}
+		case html.TextToken:
+			if skip == 0 {
+				b.Write(tok.Text())
+				b.WriteByte(' ')
 			}
 		}
 	}
-	return strings.TrimSpace(b.String())
+}
+
+func skipTag(name string) bool {
+	switch name {
+	case "script", "style", "head", "title", "template":
+		return true
+	}
+	return false
 }

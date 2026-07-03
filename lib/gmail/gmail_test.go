@@ -19,11 +19,11 @@ func TestDecodeBody(t *testing.T) {
 	}
 }
 
-func TestStripTags(t *testing.T) {
-	if got := stripTags("<p>hi <b>there</b></p>"); got != "hi there" {
+func TestHTMLToText(t *testing.T) {
+	if got := htmlToText("<p>hi <b>there</b></p>"); got != "hi there" {
 		t.Errorf("got %q", got)
 	}
-	if got := stripTags("  plain  "); got != "plain" {
+	if got := htmlToText("  plain  "); got != "plain" {
 		t.Errorf("trim: got %q", got)
 	}
 }

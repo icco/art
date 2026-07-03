@@ -14,10 +14,12 @@ import (
 // User is the special userId Gmail accepts for the authenticated account.
 const User = "me"
 
-// Client is a Gmail client bound to a single linked account.
+// Client is a Gmail client bound to a single linked account. The service
+// handle stays unexported so this package's label/archive methods are the
+// only mailbox surface — nothing outside can reach Drafts or Send.
 type Client struct {
 	Account models.Account
-	Service *gmail.Service
+	svc     *gmail.Service
 }
 
 // NewClient constructs a Gmail Client for the given account kind, using the
@@ -31,5 +33,5 @@ func NewClient(ctx context.Context, flow *oauth.Flow, kind models.AccountKind) (
 	if err != nil {
 		return nil, err
 	}
-	return &Client{Account: acct, Service: svc}, nil
+	return &Client{Account: acct, svc: svc}, nil
 }

@@ -14,7 +14,7 @@ func (c *Client) ModifyLabels(ctx context.Context, msgID string, add, remove []s
 	if len(add) == 0 && len(remove) == 0 {
 		return nil
 	}
-	_, err := c.Service.Users.Messages.Modify(User, msgID, &gmail.ModifyMessageRequest{
+	_, err := c.svc.Users.Messages.Modify(User, msgID, &gmail.ModifyMessageRequest{
 		AddLabelIds:    add,
 		RemoveLabelIds: remove,
 	}).Context(ctx).Do()

@@ -24,6 +24,25 @@ func TestUserPrompt(t *testing.T) {
 	}
 }
 
+// An out-of-range confidence (e.g. percent-style 85) previously overflowed the
+// numeric(4,3) column, and the persist error aborted the whole account's run.
+func TestParseClassification(t *testing.T) {
+	good, err := parseClassification(`{"category":"keep","summary":"s","reason":"r","confidence":0.9}`)
+	if err != nil || good.Confidence != 0.9 {
+		t.Fatalf("valid classification rejected: %v", err)
+	}
+	for _, bad := range []string{
+		`{"category":"keep","summary":"s","reason":"r","confidence":85}`,
+		`{"category":"keep","summary":"s","reason":"r","confidence":-0.1}`,
+		`{"category":"burn","summary":"s","reason":"r","confidence":0.5}`,
+		`not json`,
+	} {
+		if _, err := parseClassification(bad); err == nil {
+			t.Errorf("parseClassification(%q) should fail", bad)
+		}
+	}
+}
+
 func TestClassificationSchema(t *testing.T) {
 	s := classificationSchema()
 	if s.Type != genai.TypeObject {
