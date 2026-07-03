@@ -142,8 +142,7 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 	return string(p.kind), email, nil
 }
 
-// revoke best-effort invalidates a refresh token that won't be persisted, so
-// a failed link doesn't leave a live grant nothing tracks.
+// revoke best-effort invalidates a refresh token that won't be persisted.
 func (f *Flow) revoke(ctx context.Context, token string) {
 	if token == "" || f.RevokeURL == "" {
 		return
@@ -160,8 +159,7 @@ func (f *Flow) revoke(ctx context.Context, token string) {
 }
 
 // TokenSource returns a cached, self-refreshing oauth2.TokenSource for the
-// linked account. Caching avoids a refresh grant per client build, and the
-// wrapper persists rotated refresh tokens so restarts keep working.
+// linked account, persisting rotated refresh tokens.
 func (f *Flow) TokenSource(ctx context.Context, kind models.AccountKind) (oauth2.TokenSource, models.Account, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -172,8 +170,7 @@ func (f *Flow) TokenSource(ctx context.Context, kind models.AccountKind) (oauth2
 	if err != nil {
 		return nil, acct, err
 	}
-	// context.WithoutCancel: the source outlives this call, so refresh HTTP
-	// requests must not die with the triggering request's context.
+	// The source outlives this call; don't tie refreshes to the request ctx.
 	ts := &persistingSource{
 		inner: f.OAuth.TokenSource(context.WithoutCancel(ctx), tok),
 		store: f.Store,
@@ -190,8 +187,7 @@ func (f *Flow) dropSource(kind models.AccountKind) {
 	delete(f.sources, kind)
 }
 
-// persistingSource saves the refresh token whenever Google rotates it; the
-// inner source already caches access tokens between calls.
+// persistingSource saves the refresh token whenever Google rotates it.
 type persistingSource struct {
 	inner oauth2.TokenSource
 	store *Store

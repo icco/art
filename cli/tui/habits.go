@@ -107,8 +107,6 @@ func (p habitsPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 }
 
 func (p habitsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
-	// huh's only abort binding is ctrl+c, which root intercepts to quit;
-	// esc is the cancel path.
 	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
 		p.form, p.fd, p.editID = nil, nil, ""
 		return p, nil
@@ -140,9 +138,8 @@ func (p habitsPage) submitForm() tea.Cmd {
 	return createHabit(p.client, h)
 }
 
-// habit builds the request payload, rejecting values the field validators
-// should have caught rather than silently zeroing them. Active carries the
-// edited habit's state through: editing a paused habit must not reactivate it.
+// habit builds the request payload, rejecting unparseable values. Active
+// carries through so editing a paused habit doesn't reactivate it.
 func (fd *habitForm) habit() (Habit, error) {
 	mins, err := strconv.Atoi(strings.TrimSpace(fd.minutes))
 	if err != nil {

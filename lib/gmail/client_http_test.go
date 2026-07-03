@@ -67,8 +67,6 @@ func testClient(t *testing.T, srv *httptest.Server) *Client {
 	return &Client{svc: svc}
 }
 
-// Gmail label names are case-insensitively unique: an existing "art/triaged"
-// must be reused, not re-created (which would 409 on every run forever).
 func TestEnsureLabelsCaseInsensitive(t *testing.T) {
 	creates := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,8 +99,6 @@ func TestEnsureLabelsCaseInsensitive(t *testing.T) {
 	}
 }
 
-// A 409 on create (concurrent creation) must resolve by re-listing, not fail
-// the whole run.
 func TestEnsureLabelsCreateConflict(t *testing.T) {
 	lists := 0
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

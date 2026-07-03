@@ -23,9 +23,8 @@ func testModel(t *testing.T, server *httptest.Server) *teatest.TestModel {
 	return teatest.NewTestModel(t, root, teatest.WithInitialTermSize(100, 40))
 }
 
-// ansiRE matches CSI/OSC escape sequences. The renderer's diffing can split
-// literal text mid-string (e.g. "run\x1b[4h triage"), so matches must run on
-// the stripped stream.
+// ansiRE strips escape sequences; the renderer's diffing can split literal
+// text mid-string (e.g. "run\x1b[4h triage").
 var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\a]*\a`)
 
 func waitForContains(t *testing.T, tm *teatest.TestModel, want string) {

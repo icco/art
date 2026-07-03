@@ -182,8 +182,7 @@ func (t *Triager) apply(ctx context.Context, gm Gmailer, labels map[string]strin
 func (t *Triager) upsert(ctx context.Context, row *models.EmailMessage) error {
 	return t.DB.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "account_kind"}, {Name: "gmail_message_id"}},
-		// Reversal state resets too: a re-triage is a fresh decision, and
-		// stale reversed=true made Reverse a permanent no-op.
+		// A re-triage is a fresh decision, so reversal state resets too.
 		DoUpdates: clause.AssignmentColumns([]string{
 			"run_id", "thread_id", "from_addr", "to_addr", "subject", "snippet",
 			"received_at", "category", "summary", "reason",

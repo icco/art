@@ -24,8 +24,6 @@ func TestUserPrompt(t *testing.T) {
 	}
 }
 
-// An out-of-range confidence (e.g. percent-style 85) previously overflowed the
-// numeric(4,3) column, and the persist error aborted the whole account's run.
 func TestParseClassification(t *testing.T) {
 	good, err := parseClassification(`{"category":"keep","summary":"s","reason":"r","confidence":0.9}`)
 	if err != nil || good.Confidence != 0.9 {

@@ -38,8 +38,6 @@ func replanRouter(h *handlers.Handlers) http.Handler {
 	return r
 }
 
-// A planner pass takes minutes; the request must detach like TriageRun does
-// instead of dying on the server's 30s write timeout.
 func TestReplanRunDetaches(t *testing.T) {
 	db := testdb.Open(t)
 	fp := &fakePlanner{called: make(chan struct{}, 1)}

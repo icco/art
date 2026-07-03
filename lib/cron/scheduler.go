@@ -54,8 +54,7 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}()
 }
 
-// Stop halts the ticker and waits for any in-flight tick to return. Safe to
-// call more than once.
+// Stop halts the ticker and waits for any in-flight tick to return.
 func (s *Scheduler) Stop() {
 	if s.tick != nil {
 		s.tick.Stop()
@@ -64,8 +63,7 @@ func (s *Scheduler) Stop() {
 	s.wg.Wait()
 }
 
-// runJob runs fn, logging any panic instead of propagating it: an
-// unrecovered panic here kills the scheduler goroutine and the process.
+// runJob runs fn, recovering panics so one bad job can't kill the process.
 func runJob(ctx context.Context, name string, fn func()) {
 	defer func() {
 		if r := recover(); r != nil {

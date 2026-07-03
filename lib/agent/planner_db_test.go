@@ -108,8 +108,6 @@ func TestFindFreeSlotsAllDayEvents(t *testing.T) {
 	}
 	monday := time.Date(2026, 5, 25, 0, 0, 0, 0, tz)
 	tuesday := monday.AddDate(0, 0, 1)
-	// All-day OOO on Monday blocks the day; an all-day birthday on Tuesday
-	// does not.
 	if err := db.Create(&models.Event{
 		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "ooo1",
 		StartTime: monday, EndTime: tuesday, AllDay: true, EventType: "outOfOffice", Status: "confirmed",

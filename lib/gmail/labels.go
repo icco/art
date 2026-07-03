@@ -24,8 +24,7 @@ const (
 var ArtLabels = []string{LabelTriaged, LabelArchived, LabelReply}
 
 // EnsureLabels makes sure every Art/* label exists and returns a name->id map.
-// Gmail label names are case-insensitively unique, so matching and conflict
-// recovery are case-insensitive too.
+// Gmail label names are case-insensitively unique.
 func (c *Client) EnsureLabels(ctx context.Context) (map[string]string, error) {
 	existing, err := c.labelsByLowerName(ctx)
 	if err != nil {

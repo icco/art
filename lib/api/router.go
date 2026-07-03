@@ -97,10 +97,8 @@ func secureHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// clientIPKey keys the rate limiter. X-Forwarded-For is only trusted when the
-// connection comes from the reverse proxy (loopback/private address, per the
-// docker deployment); a direct client controls the whole header, including
-// the rightmost hop.
+// clientIPKey keys the rate limiter. X-Forwarded-For is only trusted from the
+// reverse proxy (loopback/private); direct clients control the whole header.
 func clientIPKey(r *http.Request) (string, error) {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

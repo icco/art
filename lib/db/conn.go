@@ -24,8 +24,7 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gorm open: %w", err)
 	}
-	// The Postgres on rope is shared with other services; don't let a burst
-	// exhaust its connection slots.
+	// Bound the pool; the Postgres instance is shared with other services.
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("sql db: %w", err)
@@ -49,8 +48,8 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 }
 
 // dropSessionGlobalEventIndex retires the table-global unique index on
-// sessions.google_event_id, replaced by the per-(account, calendar) index.
-// AutoMigrate never drops indexes, so this is explicit and idempotent.
+// sessions.google_event_id (now unique per account+calendar). AutoMigrate
+// never drops indexes, so this is explicit. Idempotent.
 func dropSessionGlobalEventIndex(db *gorm.DB) error {
 	m := db.Migrator()
 	if !m.HasIndex(&models.Session{}, "idx_session_google_event") {

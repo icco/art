@@ -81,8 +81,6 @@ func Load() (*Config, error) {
 		},
 		RateLimitRPM: p.intVar("RATE_LIMIT_RPM", 120),
 	}
-	// A set-but-unparseable value must not silently become the default:
-	// TRIAGE_DRY_RUN=yes falling back to false runs triage live.
 	if err := errors.Join(p.errs...); err != nil {
 		return nil, err
 	}
@@ -153,8 +151,7 @@ func envOr(key, def string) string {
 	return def
 }
 
-// envParser parses typed env vars, collecting an error for any variable that
-// is set but unparseable instead of silently using the default.
+// envParser parses typed env vars, erroring when a set value is unparseable.
 type envParser struct {
 	errs []error
 }

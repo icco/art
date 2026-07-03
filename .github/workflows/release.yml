@@ -16,7 +16,6 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      # Triggers are schedule/workflow_dispatch only; there is no tag-push path.
       - name: Determine next version
         id: versioning
         uses: PaulHatch/semantic-version@v6.0.2

@@ -54,8 +54,7 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 	}
 	created, err := c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
 	if err != nil {
-		// 409 on a caller-supplied ID means a previous attempt already
-		// landed; resolve to the existing event so retries are idempotent.
+		// 409 on a caller-supplied ID: a prior attempt landed; return it.
 		var gerr *googleapi.Error
 		if fb.EventID != "" && errors.As(err, &gerr) && gerr.Code == http.StatusConflict {
 			return c.Service.Events.Get(fb.CalendarID, fb.EventID).Context(ctx).Do()

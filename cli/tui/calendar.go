@@ -44,8 +44,7 @@ func (p calendarPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		p.width, p.height = msg.Width, msg.Height
 	case eventsMsg:
-		// Ignore loads that don't cover the visible week (e.g. a current-week
-		// refresh while paging through another week).
+		// Ignore loads that don't cover the visible week.
 		if !msg.from.After(p.anchor) && !msg.to.Before(p.anchor.AddDate(0, 0, 7)) {
 			p.events = msg.events
 		}

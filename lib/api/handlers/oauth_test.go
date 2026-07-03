@@ -78,8 +78,6 @@ func TestOAuthCallbackCompleteErr(t *testing.T) {
 	}
 }
 
-// The callback is a public route: internal error detail (GORM/pq messages,
-// table names) must never render to the browser.
 func TestOAuthCallbackDoesNotLeakInternalErrors(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{
 		compErr: errors.New(`oauth: save: pq: duplicate key value violates "accounts_pkey"`),

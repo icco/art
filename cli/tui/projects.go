@@ -108,8 +108,6 @@ func (p projectsPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 }
 
 func (p projectsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
-	// huh's only abort binding is ctrl+c, which root intercepts to quit;
-	// esc is the cancel path.
 	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "esc" {
 		p.form, p.fd, p.editID = nil, nil, ""
 		return p, nil
@@ -141,8 +139,7 @@ func (p projectsPage) submitForm() tea.Cmd {
 	return createProject(p.client, pr)
 }
 
-// project builds the request payload, rejecting values the field validators
-// should have caught rather than silently zeroing them.
+// project builds the request payload, rejecting unparseable values.
 func (fd *projectForm) project() (Project, error) {
 	hours, err := strconv.ParseFloat(strings.TrimSpace(fd.hours), 64)
 	if err != nil {

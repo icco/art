@@ -103,7 +103,6 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # The merge job only runs on main, so no dry-run branch is needed.
       - name: Create manifest list
         working-directory: ${{ runner.temp }}/digests
         run: |

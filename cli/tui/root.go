@@ -163,15 +163,13 @@ func (m rootModel) refreshCmd() tea.Cmd {
 	return tea.Batch(loadEvents(m.client, from, to), loadSessions(m.client, from, to), loadProjects(m.client), loadRuns(m.client))
 }
 
-// navigate switches pages without emitting a synthetic WindowSizeMsg: pages
-// already receive every real resize via broadcast, and a synthetic one would
-// re-enter Update as authoritative and shrink the UI by chromeHeight again.
+// navigate switches pages, keeping the stack a set. No synthetic
+// WindowSizeMsg: broadcast already sizes pages, and a fake one would re-enter
+// Update and shrink the UI by chromeHeight again.
 func (m rootModel) navigate(to pageID) (tea.Model, tea.Cmd) {
 	if m.current() == to {
 		return m, nil
 	}
-	// Keep the stack a set: revisiting a page moves it to the top instead of
-	// growing the stack (and the esc trail) without bound.
 	for i, id := range m.stack {
 		if id == to {
 			m.stack = append(m.stack[:i], m.stack[i+1:]...)

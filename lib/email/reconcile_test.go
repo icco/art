@@ -84,8 +84,6 @@ func TestBuildCorrectionsRespectsLimit(t *testing.T) {
 	}
 }
 
-// Subjects/senders are attacker-controlled text landing in the system
-// instruction: they must be delimited as data and length-bounded.
 func TestBuildCorrectionsDelimitsAndTruncates(t *testing.T) {
 	db := testdb.Open(t)
 	now := time.Now()

@@ -9,8 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
-// deadClient builds a Client for a URL nothing listens on: requests fail
-// fast, and the fake token keeps idToken() from shelling out to gcloud.
+// deadClient points at a closed port so requests fail fast without gcloud.
 func deadClient() *Client {
 	c := NewClient(Config{APIURL: "http://127.0.0.1:1"})
 	c.token = "test-token"
@@ -34,9 +33,7 @@ func execCmds(cmd tea.Cmd) []tea.Msg {
 	return []tea.Msg{msg}
 }
 
-// Root broadcasts real resizes to every page, so navigation must not emit
-// synthetic WindowSizeMsgs: each one re-enters Update as authoritative and
-// shrinks the UI by chromeHeight again.
+// A synthetic WindowSizeMsg re-enters Update and shrinks the UI by chromeHeight.
 func TestNavigationDoesNotEmitResize(t *testing.T) {
 	m := newRootWithClient(Config{}, deadClient(), true)
 	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -58,7 +55,6 @@ func TestNavigationDoesNotEmitResize(t *testing.T) {
 	}
 }
 
-// r/s/t while an agent action is in flight must not stack another run.
 func TestBusyGuardsAgentKeys(t *testing.T) {
 	m := newRootWithClient(Config{}, deadClient(), true)
 	m.busy = true
@@ -70,8 +66,7 @@ func TestBusyGuardsAgentKeys(t *testing.T) {
 	}
 }
 
-// huh's only abort binding is ctrl+c, which root intercepts to quit: esc must
-// close the form, or there is no way out except submitting it.
+// huh's only abort binding is ctrl+c, which root intercepts to quit the app.
 func TestProjectFormEscCancels(t *testing.T) {
 	p := newProjectsPage(deadClient(), true)
 	page, _ := p.Update(tea.KeyPressMsg{Code: 'a'})
@@ -109,8 +104,6 @@ func TestDigestConfirmEscCancels(t *testing.T) {
 	}
 }
 
-// Editing a paused habit must not silently reactivate it, and non-numeric
-// input must not silently become zero.
 func TestHabitFormPayload(t *testing.T) {
 	_, fd, _ := newHabitForm(&Habit{Active: false, Kind: "personal", BlockDurationMinutes: 30, Cadence: Cadence{Type: "per_week", Count: 3}}, 0, 0)
 	h, err := fd.habit()
@@ -147,8 +140,6 @@ func TestProjectFormPayload(t *testing.T) {
 	}
 }
 
-// A refresh for the current week must not clobber a calendar showing a
-// different week.
 func TestCalendarIgnoresStaleWindow(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.Local)
 	orig := timeNow
@@ -198,8 +189,6 @@ func TestLoadConfigTrimsTrailingSlash(t *testing.T) {
 	}
 }
 
-// The run to await depends on what the server said: "started" means a new run
-// distinct from whatever was latest; "running" means the in-flight run itself.
 func TestPollBaseline(t *testing.T) {
 	running := &AgentRun{ID: "r1", Status: "running"}
 	done := &AgentRun{ID: "r0", Status: "succeeded"}

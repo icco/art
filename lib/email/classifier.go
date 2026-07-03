@@ -87,8 +87,7 @@ func parseClassification(text string) (Classification, error) {
 	if !out.Category.Valid() {
 		return Classification{}, fmt.Errorf("model returned invalid category %q", out.Category)
 	}
-	// Out-of-range confidence (e.g. percent-style 85) would overflow the
-	// numeric(4,3) column and abort the account's whole run at persist.
+	// Out-of-range confidence would overflow numeric(4,3) at persist.
 	if out.Confidence < 0 || out.Confidence > 1 {
 		return Classification{}, fmt.Errorf("model returned confidence %v outside [0, 1]", out.Confidence)
 	}

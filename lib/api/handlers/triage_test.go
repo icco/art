@@ -42,9 +42,7 @@ func (p *panickyTriage) RunAll(context.Context) error {
 	panic("triage kaboom")
 }
 
-// A panic in the detached triage goroutine must be recovered: chi's
-// Recoverer only protects request goroutines, so an unrecovered panic here
-// kills the whole process.
+// chi's Recoverer only protects request goroutines.
 func TestTriageRunRecoversPanic(t *testing.T) {
 	db := testdb.Open(t)
 	pt := &panickyTriage{fakeTriage{called: make(chan struct{}, 1)}}

@@ -32,8 +32,6 @@ func TestRunAllDisabled(t *testing.T) {
 	}
 }
 
-// The HTTP trigger's check-then-act guard and cron's hourly pass can overlap;
-// the advisory lock makes RunAll itself mutually exclusive.
 func TestRunAllSkipsWhenLockHeld(t *testing.T) {
 	db := testdb.Open(t)
 	log, err := gutillog.NewLogger("test")

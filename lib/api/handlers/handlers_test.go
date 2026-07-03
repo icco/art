@@ -51,8 +51,6 @@ func do(t *testing.T, h http.Handler, method, path string, body any) *httptest.R
 	return w
 }
 
-// Unknown cadence types silently fell into count-per-week semantics in the
-// planner; validate on both create and update.
 func TestHabitCadenceTypeValidated(t *testing.T) {
 	db := testdb.Open(t)
 	h := &handlers.Handlers{DB: db}

@@ -178,8 +178,7 @@ func deleteHabit(c *Client, id string) tea.Cmd {
 	}
 }
 
-// replan kicks off a detached server-side planner pass, then polls the runs
-// list until it lands, mirroring triage.
+// replan starts a detached planner pass and polls until it lands.
 func replan(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		return startAndAwait(c, "planner", c.Replan, "replan")
@@ -202,16 +201,15 @@ const (
 	triagePollTimeout  = 8 * time.Minute
 )
 
-// triage kicks off a detached server-side triage pass, then polls the runs
-// list until it lands. The work survives even if the TUI exits mid-poll.
+// triage starts a detached triage pass and polls until it lands.
 func triage(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		return startAndAwait(c, "triage", c.Triage, "triage")
 	}
 }
 
-// startAndAwait snapshots the latest run of kind, triggers a detached pass
-// via start, and polls until a run past the baseline settles.
+// startAndAwait triggers a detached pass and polls until a run past the
+// baseline settles.
 func startAndAwait(c *Client, kind string, start func(context.Context) (string, error), label string) tea.Msg {
 	latest, err := latestRunOf(c, kind)
 	if err != nil {
@@ -247,10 +245,8 @@ func settled(latest *AgentRun, baseline string) bool {
 	return latest != nil && latest.Status != "running" && latest.ID != baseline
 }
 
-// pollBaseline picks the run whose completion should NOT count as ours:
-// "started" means a fresh run is coming, so exclude whatever was latest;
-// "running" means the in-flight run is the one to await, so exclude only a
-// finished predecessor.
+// pollBaseline picks the run whose completion should not count as ours:
+// "started" excludes whatever was latest; "running" awaits the in-flight run.
 func pollBaseline(latest *AgentRun, serverStatus string) string {
 	if latest == nil {
 		return ""

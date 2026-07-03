@@ -8,8 +8,7 @@ import (
 	"github.com/icco/art/lib/testdb"
 )
 
-// Google event IDs are unique per calendar, not globally: the same invite on
-// both accounts shares an ID and must be storable twice.
+// Google event IDs are unique per calendar, not globally.
 func TestSessionEventIDUniquePerCalendar(t *testing.T) {
 	db := testdb.Open(t)
 	id := "evshared"

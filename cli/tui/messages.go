@@ -7,8 +7,7 @@ import "time"
 // stays fresh (this is what makes mutations reflect immediately). Status and
 // error messages are handled by the root chrome.
 
-// eventsMsg carries the queried window so pages showing a different week can
-// ignore loads that don't cover it.
+// eventsMsg carries the queried window so pages can ignore stale loads.
 type eventsMsg struct {
 	events   []Event
 	from, to time.Time

@@ -10,13 +10,11 @@ import (
 	gutillog "github.com/icco/gutil/logging"
 )
 
-// plannerRunTimeout bounds a detached planner pass and doubles as the
-// staleness window for the in-flight guard, mirroring triage.
+// plannerRunTimeout bounds a detached pass and the in-flight guard window.
 const plannerRunTimeout = 30 * time.Minute
 
-// ReplanRun starts a planner pass and returns immediately. A pass is a
-// multi-turn LLM run that outlives the server's write timeout, so it runs
-// detached; clients poll /agent-runs (kind=planner) for the outcome.
+// ReplanRun starts a detached planner pass, mirroring TriageRun; clients poll
+// /agent-runs for the outcome.
 func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
 	var running int64
 	if err := h.DB.WithContext(r.Context()).Model(&models.AgentRun{}).
@@ -34,6 +32,7 @@ func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
 
 	ctx := context.WithoutCancel(r.Context())
 	go func() {
+		// chi's Recoverer only covers request goroutines.
 		defer func() {
 			if p := recover(); p != nil {
 				gutillog.FromContext(ctx).Errorw("planner run panicked",

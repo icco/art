@@ -99,8 +99,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
 	return out, nil
 }
 
-// extractBody walks the MIME tree preferring text/plain, falling back to the
-// visible text of a text/html part.
+// extractBody walks the MIME tree preferring text/plain over text/html.
 func extractBody(part *gmail.MessagePart) string {
 	if plain := findPart(part, "text/plain"); plain != "" {
 		return plain
@@ -137,8 +136,7 @@ func decodeBody(data string) string {
 	return ""
 }
 
-// htmlToText extracts visible text for the classifier: entities decoded,
-// style/script/head contents dropped, whitespace collapsed.
+// htmlToText extracts visible text: style/script dropped, entities decoded.
 func htmlToText(s string) string {
 	tok := html.NewTokenizer(strings.NewReader(s))
 	var b strings.Builder

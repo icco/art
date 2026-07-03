@@ -273,8 +273,7 @@ func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentR
 	return out, c.do(ctx, "GET", "/agent-runs"+q, nil, &out)
 }
 
-// Replan triggers a detached planner run; the response says whether it
-// started or one was already running.
+// Replan triggers a detached planner run and returns "started" or "running".
 func (c *Client) Replan(ctx context.Context) (string, error) {
 	var out struct {
 		Status string `json:"status"`
@@ -293,8 +292,7 @@ func (c *Client) ListEmails(ctx context.Context) ([]Email, error) {
 	return out, c.do(ctx, "GET", "/emails?limit=200", nil, &out)
 }
 
-// Triage triggers a detached email-triage pass; the response says whether it
-// started or one was already running.
+// Triage triggers a detached triage pass and returns "started" or "running".
 func (c *Client) Triage(ctx context.Context) (string, error) {
 	var out struct {
 		Status string `json:"status"`

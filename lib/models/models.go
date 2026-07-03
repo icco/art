@@ -160,8 +160,7 @@ type Cadence struct {
 	PreferredWindows []string `json:"preferred_windows,omitempty"`
 }
 
-// Valid reports whether the cadence uses a type the planner understands and a
-// positive count; anything else silently degrades to wrong scheduling.
+// Valid reports whether the cadence type and count are usable by the planner.
 func (c Cadence) Valid() bool {
 	switch c.Type {
 	case "per_week", "per_day":

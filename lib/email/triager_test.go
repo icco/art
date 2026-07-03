@@ -111,8 +111,6 @@ func newTriager(t *testing.T, dryRun bool, byID map[string]Classification) (*Tri
 	return tr, gm
 }
 
-// Re-triaging a previously-reversed message is a fresh decision: stale
-// reversal state made Reverse a permanent no-op and poisoned corrections.
 func TestUpsertClearsReversalState(t *testing.T) {
 	db := testdb.Open(t)
 	tr := &Triager{DB: db}

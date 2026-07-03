@@ -77,8 +77,7 @@ func truncate(s string, n int) string {
 	return string(r[:n-1]) + "…"
 }
 
-// Form field validators: huh blocks submission until these pass, so typos
-// can't silently become zero values in the request payload.
+// Form field validators; huh blocks submission until these pass.
 func validateInt(s string) error {
 	if _, err := strconv.Atoi(strings.TrimSpace(s)); err != nil {
 		return errors.New("must be a whole number")

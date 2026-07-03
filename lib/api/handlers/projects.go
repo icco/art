@@ -11,8 +11,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// projectReq uses pointers so updates can distinguish "absent" from "clear";
-// Deadline is raw JSON so an explicit null clears it.
+// Pointer fields distinguish "absent" from "clear" on updates; raw Deadline
+// lets an explicit null clear it.
 type projectReq struct {
 	Name        *string         `json:"name"`
 	Description *string         `json:"description"`

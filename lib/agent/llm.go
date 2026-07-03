@@ -35,9 +35,7 @@ var systemInstruction string
 // to the summary that gets persisted on the agent_runs row.
 //
 // ctx is the parent context; agent.ToolContext does not carry one.
-//
-// mu guards summary and clients: ADK executes parallel tool calls from a
-// single model response in separate goroutines.
+// mu guards summary and clients: ADK runs tool calls in parallel goroutines.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
@@ -227,9 +225,6 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		Find(&projects).Error; err != nil {
 		return out, err
 	}
-	// Hours already scheduled come from sessions, not Project.ScheduledHours:
-	// sessions are written on every commit, so each run sees prior bookings
-	// and doesn't re-book the full target.
 	scheduled, err := projectScheduledHours(ctx, c.p.DB)
 	if err != nil {
 		return out, err
@@ -293,15 +288,13 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 	return out, nil
 }
 
-// focusEventID derives a stable Google event ID for a commit so retries of
-// the same block converge on one event (charset [a-v0-9]; hex fits).
+// focusEventID derives a stable Google event ID so retries converge on one event.
 func focusEventID(source models.SourceKind, sourceID string, start, end time.Time) string {
 	sum := sha256.Sum256(fmt.Appendf(nil, "%s|%s|%d|%d", source, sourceID, start.Unix(), end.Unix()))
 	return hex.EncodeToString(sum[:16])
 }
 
-// projectScheduledHours sums session durations per project, excluding skipped
-// sessions so their hours return to the schedulable pool.
+// projectScheduledHours sums non-skipped session durations per project.
 func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64, error) {
 	var rows []struct {
 		SourceID string
@@ -432,8 +425,6 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		Status:         models.SessionPlanned,
 	}
 	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
-		// A duplicate means a prior attempt at this exact block already
-		// committed; return it so retries converge.
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			var existing models.Session
 			if lookupErr := c.p.DB.WithContext(ctx).First(&existing, "google_event_id = ?", ev.Id).Error; lookupErr == nil {

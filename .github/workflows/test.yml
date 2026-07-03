@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        # Matches the compose/prod major version.
         image: postgres:17
         env:
           POSTGRES_USER: art

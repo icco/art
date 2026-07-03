@@ -14,9 +14,7 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// Refresh grants happen per client build today; the source must be cached per
-// account, and a rotated refresh token must land in the DB or the next
-// restart hits permanent invalid_grant.
+// A rotated refresh token must land in the DB or a restart hits invalid_grant.
 func TestTokenSourceCachesAndPersistsRotation(t *testing.T) {
 	db := testdb.Open(t)
 	sealer, err := NewSealer(make([]byte, 32))

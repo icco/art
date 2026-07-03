@@ -37,9 +37,7 @@ func (r *Runner) RunAll(ctx context.Context) error {
 		return nil
 	}
 
-	// One pass at a time across cron and HTTP triggers. The lock lives on a
-	// dedicated connection: advisory locks are session-scoped, and a pooled
-	// unlock could land on the wrong session.
+	// Advisory locks are session-scoped, so lock and unlock need one conn.
 	sqlDB, err := r.DB.DB()
 	if err != nil {
 		return err

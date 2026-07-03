@@ -93,8 +93,7 @@ func TestRouter_RateLimitNotBypassable(t *testing.T) {
 	}
 }
 
-// A direct (non-proxied) client controls the whole XFF header, including the
-// rightmost hop; its bucket must key on RemoteAddr instead.
+// A direct client controls the whole XFF header, including the rightmost hop.
 func TestRouter_RateLimitIgnoresXFFFromUntrustedRemote(t *testing.T) {
 	h := newTestRouter(2)
 	var got429 bool

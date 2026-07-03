@@ -129,9 +129,7 @@ func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
 			}
 		}
 		if fullSync {
-			// Rows not touched by the full walk no longer exist upstream
-			// (or left the sync window); drop them so ghost events can't
-			// block free slots forever.
+			// Rows untouched by the full walk no longer exist upstream.
 			if err := s.DB.WithContext(ctx).Where(
 				"account_kind = ? AND calendar_id = ? AND updated_at < ?",
 				string(s.Client.Account.Kind), calendarID, syncStart,

@@ -114,8 +114,7 @@ func TestListStateProjectHoursFromSessions(t *testing.T) {
 	}
 }
 
-// ADK executes parallel tool calls from one model response in separate
-// goroutines, so the per-run state mutations must be safe under -race.
+// ADK runs tool calls in parallel goroutines; run this with -race.
 func TestLLMCycleConcurrentToolState(t *testing.T) {
 	c := &llmCycle{summary: map[string]any{
 		"projects_scheduled": 0,
@@ -182,8 +181,6 @@ func TestCommitFocusBlockValidation(t *testing.T) {
 	}
 }
 
-// The prompt tells the model to respect these invariants, but tools are the
-// source of truth: a hallucinated commit must not reach the calendar.
 func TestFocusEventID(t *testing.T) {
 	t1 := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
 	t2 := t1.Add(time.Hour)
@@ -205,8 +202,6 @@ func TestFocusEventID(t *testing.T) {
 	}
 }
 
-// Duplicate-key errors must translate to gorm.ErrDuplicatedKey so
-// commitFocusBlock can treat a replayed insert as success.
 func TestSessionDuplicateKeyTranslated(t *testing.T) {
 	db := testdb.Open(t)
 	id := "deadbeef01"
@@ -271,9 +266,7 @@ func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
 		})
 		return err
 	}
-	// Every rejection must name the violated invariant: an unlinked test
-	// account makes even un-validated commits error, so err != nil alone
-	// proves nothing.
+	// The unlinked test account makes any commit error, so match the message.
 	wantErr := func(start, end time.Time, substr string) {
 		t.Helper()
 		if err := commit(start, end); err == nil || !contains(err.Error(), substr) {

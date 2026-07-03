@@ -105,8 +105,6 @@ func setValidEnv(t *testing.T) {
 	t.Setenv("OIDC_AUDIENCE", "x")
 }
 
-// A set-but-unparseable env var must fail Load, not silently fall back:
-// TRIAGE_DRY_RUN=yes previously became false and ran triage live.
 func TestLoadRejectsUnparseableEnv(t *testing.T) {
 	setValidEnv(t)
 	t.Setenv("TRIAGE_DRY_RUN", "yes")

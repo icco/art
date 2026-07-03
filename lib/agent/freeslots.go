@@ -74,8 +74,6 @@ type busyRange struct {
 }
 
 func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time) ([]busyRange, error) {
-	// All-day events don't block (birthdays, holidays) unless they mark
-	// out-of-office time.
 	var events []models.Event
 	if err := db.WithContext(ctx).
 		Where("account_kind = ? AND status <> 'cancelled' AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?",
@@ -88,8 +86,7 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 	for _, e := range events {
 		out = append(out, busyRange{start: e.StartTime, end: e.EndTime})
 	}
-	// Planned sessions are busy too: a block committed earlier in the same
-	// planner run has no Event row until the next calendar sync.
+	// Planned sessions are busy too; they have no Event row until the next sync.
 	var sessions []models.Session
 	if err := db.WithContext(ctx).
 		Where("account_kind = ? AND status = ? AND scheduled_end > ? AND scheduled_start < ?",

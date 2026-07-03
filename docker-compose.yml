@@ -7,7 +7,6 @@ services:
       POSTGRES_PASSWORD: art
       POSTGRES_DB: art
     ports:
-      # Loopback only: trivial credentials must not be reachable from the LAN.
       - 127.0.0.1:5432:5432
     volumes:
       - art_pgdata:/var/lib/postgresql/data

@@ -14,9 +14,8 @@ import (
 // User is the special userId Gmail accepts for the authenticated account.
 const User = "me"
 
-// Client is a Gmail client bound to a single linked account. The service
-// handle stays unexported so this package's label/archive methods are the
-// only mailbox surface — nothing outside can reach Drafts or Send.
+// Client is a Gmail client bound to a single linked account. svc stays
+// unexported so the label/archive methods are the only mailbox surface.
 type Client struct {
 	Account models.Account
 	svc     *gmail.Service
