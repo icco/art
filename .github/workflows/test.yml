@@ -1,12 +1,15 @@
 name: Test Go
 on:
   - push
+permissions:
+  contents: read
 jobs:
   build:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16
+        # Matches the compose/prod major version.
+        image: postgres:17
         env:
           POSTGRES_USER: art
           POSTGRES_PASSWORD: art

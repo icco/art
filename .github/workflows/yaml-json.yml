@@ -18,6 +18,9 @@ jobs:
           reporter: github-pr-check
   format:
     runs-on: ubuntu-latest
+    # Same-repo refs only: head_ref on a fork PR is attacker-chosen and the
+    # push would fail regardless.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: write
     steps:
@@ -25,6 +28,9 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
+          # git-auto-commit-action needs a branch checkout, not the detached
+          # PR merge commit. Empty on push (default branch).
+          ref: ${{ github.head_ref }}
       - name: Install yq
         uses: dcarbone/install-yq-action@v1.3.1
       - name: Format YAML files with yq
