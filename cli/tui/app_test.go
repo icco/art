@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,10 +23,15 @@ func testModel(t *testing.T, server *httptest.Server) *teatest.TestModel {
 	return teatest.NewTestModel(t, root, teatest.WithInitialTermSize(100, 40))
 }
 
+// ansiRE matches CSI/OSC escape sequences. The renderer's diffing can split
+// literal text mid-string (e.g. "run\x1b[4h triage"), so matches must run on
+// the stripped stream.
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\a]*\a`)
+
 func waitForContains(t *testing.T, tm *teatest.TestModel, want string) {
 	t.Helper()
 	teatest.WaitFor(t, tm.Output(), func(b []byte) bool {
-		return bytes.Contains(b, []byte(want))
+		return bytes.Contains(ansiRE.ReplaceAll(b, nil), []byte(want))
 	}, teatest.WithDuration(3*time.Second), teatest.WithCheckInterval(25*time.Millisecond))
 }
 
