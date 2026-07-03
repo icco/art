@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -32,9 +33,13 @@ var systemInstruction string
 // to the summary that gets persisted on the agent_runs row.
 //
 // ctx is the parent context; agent.ToolContext does not carry one.
+//
+// mu guards summary and clients: ADK executes parallel tool calls from a
+// single model response in separate goroutines.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
+	mu      sync.Mutex
 	summary map[string]any
 	clients map[models.AccountKind]*calendar.Client
 }
@@ -91,7 +96,7 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 			continue
 		}
 		if ev != nil && ev.ErrorMessage != "" {
-			appendErr(summary, "agent: "+ev.ErrorMessage)
+			cycle.addErr("agent: " + ev.ErrorMessage)
 		}
 	}
 	return lastErr
@@ -396,13 +401,25 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		return commitFocusBlockResult{}, err
 	}
 
+	c.recordScheduled(source)
+	return commitFocusBlockResult{SessionID: sess.ID, GoogleEventID: ev.Id}, nil
+}
+
+func (c *llmCycle) recordScheduled(source models.SourceKind) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	switch source {
 	case models.SourceProject:
 		c.summary["projects_scheduled"] = intVal(c.summary["projects_scheduled"]) + 1
 	case models.SourceHabit:
 		c.summary["habits_scheduled"] = intVal(c.summary["habits_scheduled"]) + 1
 	}
-	return commitFocusBlockResult{SessionID: sess.ID, GoogleEventID: ev.Id}, nil
+}
+
+func (c *llmCycle) addErr(s string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	appendErr(c.summary, s)
 }
 
 func (c *llmCycle) resolveSource(ctx context.Context, source models.SourceKind, id string) (string, models.SlotKind, error) {
@@ -424,6 +441,8 @@ func (c *llmCycle) resolveSource(ctx context.Context, source models.SourceKind, 
 }
 
 func (c *llmCycle) clientFor(ctx context.Context, acct models.AccountKind) (*calendar.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if cl, ok := c.clients[acct]; ok {
 		return cl, nil
 	}

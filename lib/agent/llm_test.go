@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -107,6 +108,36 @@ func TestListStateProjectHoursFromSessions(t *testing.T) {
 	}
 	if hr := got.Projects[0].HoursRemaining; hr != 5 {
 		t.Fatalf("hours_remaining = %v, want 5 (10 target - 2 planned - 3 happened; skipped excluded)", hr)
+	}
+}
+
+// ADK executes parallel tool calls from one model response in separate
+// goroutines, so the per-run state mutations must be safe under -race.
+func TestLLMCycleConcurrentToolState(t *testing.T) {
+	c := &llmCycle{summary: map[string]any{
+		"projects_scheduled": 0,
+		"habits_scheduled":   0,
+		"errors":             []string{},
+	}}
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.recordScheduled(models.SourceProject)
+			c.recordScheduled(models.SourceHabit)
+			c.addErr("x")
+		}()
+	}
+	wg.Wait()
+	if got := intVal(c.summary["projects_scheduled"]); got != 50 {
+		t.Fatalf("projects_scheduled = %d, want 50", got)
+	}
+	if got := intVal(c.summary["habits_scheduled"]); got != 50 {
+		t.Fatalf("habits_scheduled = %d, want 50", got)
+	}
+	if errs, _ := c.summary["errors"].([]string); len(errs) != 50 {
+		t.Fatalf("errors = %d, want 50", len(errs))
 	}
 }
 
