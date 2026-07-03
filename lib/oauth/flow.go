@@ -6,6 +6,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,9 +39,19 @@ var Scopes = []string{
 // Flow runs the Google OAuth authorization code exchange and persists the
 // resulting refresh token via Store.
 type Flow struct {
-	OAuth   *oauth2.Config
-	Store   *Store
-	pending sync.Map // state -> pendingState
+	OAuth *oauth2.Config
+	Store *Store
+	// RevokeURL is Google's token revocation endpoint; overridable in tests.
+	RevokeURL string
+	pending   sync.Map // state -> pendingState
+
+	mu      sync.Mutex
+	sources map[models.AccountKind]*accountSource
+}
+
+type accountSource struct {
+	ts   oauth2.TokenSource
+	acct models.Account
 }
 
 type pendingState struct {
@@ -56,7 +69,9 @@ func NewFlow(clientID, clientSecret, redirectURL string, store *Store) *Flow {
 			Scopes:       Scopes,
 			Endpoint:     googleoauth.Endpoint,
 		},
-		Store: store,
+		Store:     store,
+		RevokeURL: "https://oauth2.googleapis.com/revoke",
+		sources:   map[models.AccountKind]*accountSource{},
 	}
 }
 
@@ -111,25 +126,95 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 	ts := f.OAuth.TokenSource(ctx, tok)
 	email, err := fetchEmail(ctx, ts)
 	if err != nil {
+		f.revoke(ctx, tok.RefreshToken)
 		return "", "", fmt.Errorf("oauth: userinfo: %w", err)
 	}
 	primary, err := fetchPrimaryCalendar(ctx, ts)
 	if err != nil {
+		f.revoke(ctx, tok.RefreshToken)
 		return "", "", fmt.Errorf("oauth: primary calendar: %w", err)
 	}
 	if err := f.Store.Save(ctx, p.kind, email, primary, tok); err != nil {
+		f.revoke(ctx, tok.RefreshToken)
 		return "", "", fmt.Errorf("oauth: save: %w", err)
 	}
+	f.dropSource(p.kind)
 	return string(p.kind), email, nil
 }
 
-// TokenSource returns a refreshing oauth2.TokenSource for the linked account.
+// revoke best-effort invalidates a refresh token that won't be persisted, so
+// a failed link doesn't leave a live grant nothing tracks.
+func (f *Flow) revoke(ctx context.Context, token string) {
+	if token == "" || f.RevokeURL == "" {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, f.RevokeURL,
+		strings.NewReader(url.Values{"token": {token}}.Encode()))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if resp, err := http.DefaultClient.Do(req); err == nil {
+		_ = resp.Body.Close()
+	}
+}
+
+// TokenSource returns a cached, self-refreshing oauth2.TokenSource for the
+// linked account. Caching avoids a refresh grant per client build, and the
+// wrapper persists rotated refresh tokens so restarts keep working.
 func (f *Flow) TokenSource(ctx context.Context, kind models.AccountKind) (oauth2.TokenSource, models.Account, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if s, ok := f.sources[kind]; ok {
+		return s.ts, s.acct, nil
+	}
 	tok, acct, err := f.Store.Load(ctx, kind)
 	if err != nil {
 		return nil, acct, err
 	}
-	return f.OAuth.TokenSource(ctx, tok), acct, nil
+	// context.WithoutCancel: the source outlives this call, so refresh HTTP
+	// requests must not die with the triggering request's context.
+	ts := &persistingSource{
+		inner: f.OAuth.TokenSource(context.WithoutCancel(ctx), tok),
+		store: f.Store,
+		kind:  kind,
+		last:  tok.RefreshToken,
+	}
+	f.sources[kind] = &accountSource{ts: ts, acct: acct}
+	return ts, acct, nil
+}
+
+func (f *Flow) dropSource(kind models.AccountKind) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.sources, kind)
+}
+
+// persistingSource saves the refresh token whenever Google rotates it; the
+// inner source already caches access tokens between calls.
+type persistingSource struct {
+	inner oauth2.TokenSource
+	store *Store
+	kind  models.AccountKind
+
+	mu   sync.Mutex
+	last string
+}
+
+func (p *persistingSource) Token() (*oauth2.Token, error) {
+	tok, err := p.inner.Token()
+	if err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if tok.RefreshToken != "" && tok.RefreshToken != p.last {
+		if err := p.store.UpdateRefreshToken(context.Background(), p.kind, tok.RefreshToken); err != nil {
+			return nil, fmt.Errorf("oauth: persist rotated refresh token: %w", err)
+		}
+		p.last = tok.RefreshToken
+	}
+	return tok, nil
 }
 
 func fetchEmail(ctx context.Context, ts oauth2.TokenSource) (string, error) {
