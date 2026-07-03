@@ -34,9 +34,9 @@ func TestProgressBar(t *testing.T) {
 		{0, 4, "░░░░"},
 		{1, 4, "████"},
 		{0.5, 4, "██░░"},
-		{-1, 3, "░░░"},  // clamped low
-		{2, 3, "███"},   // clamped high
-		{0.5, 0, ""},    // zero width
+		{-1, 3, "░░░"}, // clamped low
+		{2, 3, "███"},  // clamped high
+		{0.5, 0, ""},   // zero width
 	}
 	for _, tc := range tests {
 		if got := progressBar(tc.frac, tc.width); got != tc.want {

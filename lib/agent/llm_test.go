@@ -3,11 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/testdb"
 	"gorm.io/datatypes"
 )
@@ -75,6 +77,71 @@ func TestListStateSeeded(t *testing.T) {
 	}
 }
 
+func TestListStateProjectHoursFromSessions(t *testing.T) {
+	c := newCycle(t)
+	pj := &models.Project{Name: "Book", Kind: models.SlotWork, TargetHours: 10, Status: models.ProjectActive}
+	if err := c.p.DB.Create(pj).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	sessions := []models.Session{
+		// 2h planned this week: counts against the target.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now, ScheduledEnd: now.Add(2 * time.Hour), Status: models.SessionPlanned},
+		// 3h happened last week: target hours are lifetime, so it counts too.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now.AddDate(0, 0, -7), ScheduledEnd: now.AddDate(0, 0, -7).Add(3 * time.Hour), Status: models.SessionHappened},
+		// 1h skipped: returns to the pool.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now.Add(3 * time.Hour), ScheduledEnd: now.Add(4 * time.Hour), Status: models.SessionSkipped},
+	}
+	for i := range sessions {
+		if err := c.p.DB.Create(&sessions[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := c.listState(nil, listStateArgs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Projects) != 1 {
+		t.Fatalf("projects: %+v", got.Projects)
+	}
+	if hr := got.Projects[0].HoursRemaining; hr != 5 {
+		t.Fatalf("hours_remaining = %v, want 5 (10 target - 2 planned - 3 happened; skipped excluded)", hr)
+	}
+}
+
+// ADK executes parallel tool calls from one model response in separate
+// goroutines, so the per-run state mutations must be safe under -race.
+func TestLLMCycleConcurrentToolState(t *testing.T) {
+	c := &llmCycle{summary: map[string]any{
+		"projects_scheduled": 0,
+		"habits_scheduled":   0,
+		"errors":             []string{},
+	}}
+	var wg sync.WaitGroup
+	for range 50 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			c.recordScheduled(models.SourceProject)
+			c.recordScheduled(models.SourceHabit)
+			c.addErr("x")
+		}()
+	}
+	wg.Wait()
+	if got := intVal(c.summary["projects_scheduled"]); got != 50 {
+		t.Fatalf("projects_scheduled = %d, want 50", got)
+	}
+	if got := intVal(c.summary["habits_scheduled"]); got != 50 {
+		t.Fatalf("habits_scheduled = %d, want 50", got)
+	}
+	if errs, _ := c.summary["errors"].([]string); len(errs) != 50 {
+		t.Fatalf("errors = %d, want 50", len(errs))
+	}
+}
+
 func TestFindFreeSlotsValidation(t *testing.T) {
 	c := newCycle(t)
 	if _, err := c.findFreeSlots(nil, findFreeSlotsArgs{AccountKind: "bad", SlotKind: "work", DurationMin: 30}); err == nil {
@@ -110,6 +177,72 @@ func TestCommitFocusBlockValidation(t *testing.T) {
 		EndISO:   now.Add(-23 * time.Hour).Format(time.RFC3339),
 	}); err == nil {
 		t.Fatal("expected error when start is before planning_start")
+	}
+}
+
+// The prompt tells the model to respect these invariants, but tools are the
+// source of truth: a hallucinated commit must not reach the calendar.
+func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
+	c := newCycle(t)
+	c.ctx = context.Background()
+	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
+	tz := c.p.Cfg.Timezone
+	pj := &models.Project{Name: "P", Kind: models.SlotWork, TargetHours: 4, Status: models.ProjectActive}
+	if err := c.p.DB.Create(pj).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	planFrom := PlanningStart(time.Now(), tz)
+	_, weekEnd := WeekWindow(time.Now(), tz)
+	if weekEnd.Sub(planFrom) < 3*time.Hour {
+		t.Skip("too close to week end for deterministic in-window commits")
+	}
+	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
+	commit := func(start, end time.Time) error {
+		_, err := c.commitFocusBlock(nil, commitFocusBlockArgs{
+			Source: "project", SourceID: pj.ID, StartISO: iso(start), EndISO: iso(end),
+		})
+		return err
+	}
+	// Every rejection must name the violated invariant: an unlinked test
+	// account makes even un-validated commits error, so err != nil alone
+	// proves nothing.
+	wantErr := func(start, end time.Time, substr string) {
+		t.Helper()
+		if err := commit(start, end); err == nil || !contains(err.Error(), substr) {
+			t.Errorf("commit %s..%s: got %v, want error containing %q", iso(start), iso(end), err, substr)
+		}
+	}
+
+	// Duration outside 30-90 minutes is rejected regardless of window.
+	wantErr(planFrom, planFrom.Add(10*time.Minute), "minutes")
+	wantErr(planFrom, planFrom.Add(3*time.Hour), "minutes")
+
+	// No working-hours window covers the block: rejected.
+	wantErr(planFrom, planFrom.Add(time.Hour), "working hours")
+
+	// Open all-day working hours; an existing planned session blocks the range.
+	for d := range 7 {
+		if err := c.p.DB.Create(&models.WorkingHour{
+			SlotKind: models.SlotWork, DayOfWeek: d, StartMinute: 0, EndMinute: 1440,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.p.DB.Create(&models.Session{
+		Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork,
+		CalendarID: "primary", ScheduledStart: planFrom, ScheduledEnd: planFrom.Add(time.Hour),
+		Status: models.SessionPlanned,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	wantErr(planFrom, planFrom.Add(time.Hour), "overlaps")
+
+	// A valid block passes validation and fails only at the unlinked
+	// calendar client — i.e. it made it past every invariant check.
+	err := commit(planFrom.Add(time.Hour), planFrom.Add(2*time.Hour))
+	if err == nil || !contains(err.Error(), "not linked") {
+		t.Errorf("valid block should reach the calendar client, got: %v", err)
 	}
 }
 

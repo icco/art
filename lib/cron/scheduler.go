@@ -3,6 +3,7 @@ package cron
 
 import (
 	"context"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -61,21 +62,39 @@ func (s *Scheduler) Stop() {
 	s.wg.Wait()
 }
 
+// runJob runs fn, logging any panic instead of propagating it: an
+// unrecovered panic here kills the scheduler goroutine and the process.
+func runJob(ctx context.Context, name string, fn func()) {
+	defer func() {
+		if r := recover(); r != nil {
+			gutillog.FromContext(ctx).Errorw("job panicked",
+				"job", name, "panic", r, "stack", string(debug.Stack()))
+		}
+	}()
+	fn()
+}
+
 func (s *Scheduler) runOnce(ctx context.Context) {
 	log := gutillog.FromContext(ctx)
 	tickCtx, cancel := context.WithTimeout(ctx, runOnceTimeout)
 	defer cancel()
-	if errs, err := s.Sync.RunAll(tickCtx); err != nil {
-		log.Errorw("sync failed", "err", err)
-	} else if len(errs) > 0 {
-		log.Warnw("sync had per-account errors", "errors", errs)
-	}
-	if err := s.Planner.Run(tickCtx); err != nil {
-		log.Errorw("planner failed", "err", err)
-	}
-	if s.Triage != nil {
-		if err := s.Triage.RunAll(tickCtx); err != nil {
-			log.Errorw("triage failed", "err", err)
+	runJob(tickCtx, "sync", func() {
+		if errs, err := s.Sync.RunAll(tickCtx); err != nil {
+			log.Errorw("sync failed", "err", err)
+		} else if len(errs) > 0 {
+			log.Warnw("sync had per-account errors", "errors", errs)
 		}
+	})
+	runJob(tickCtx, "planner", func() {
+		if err := s.Planner.Run(tickCtx); err != nil {
+			log.Errorw("planner failed", "err", err)
+		}
+	})
+	if s.Triage != nil {
+		runJob(tickCtx, "triage", func() {
+			if err := s.Triage.RunAll(tickCtx); err != nil {
+				log.Errorw("triage failed", "err", err)
+			}
+		})
 	}
 }

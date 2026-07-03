@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -47,13 +48,15 @@ func (p *Planner) finish(ctx context.Context, id string, summary map[string]any,
 	}
 	body, _ := json.Marshal(summary)
 	t := time.Now()
-	if err := p.DB.WithContext(ctx).Model(&models.AgentRun{}).Where("id = ?", id).Updates(map[string]any{
+	// Record the outcome even if ctx already timed out mid-run, so a started
+	// run never stays stuck "running".
+	if err := p.DB.WithContext(context.WithoutCancel(ctx)).Model(&models.AgentRun{}).Where("id = ?", id).Updates(map[string]any{
 		"ended_at": &t,
 		"status":   string(status),
 		"summary":  datatypes.JSON(body),
 		"error":    errStr,
 	}).Error; err != nil {
-		return err
+		return errors.Join(runErr, err)
 	}
 	return runErr
 }

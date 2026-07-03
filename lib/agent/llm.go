@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -20,6 +21,7 @@ import (
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 	"google.golang.org/genai"
+	"gorm.io/gorm"
 )
 
 //go:embed prompt.md
@@ -31,9 +33,13 @@ var systemInstruction string
 // to the summary that gets persisted on the agent_runs row.
 //
 // ctx is the parent context; agent.ToolContext does not carry one.
+//
+// mu guards summary and clients: ADK executes parallel tool calls from a
+// single model response in separate goroutines.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
+	mu      sync.Mutex
 	summary map[string]any
 	clients map[models.AccountKind]*calendar.Client
 }
@@ -90,7 +96,7 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 			continue
 		}
 		if ev != nil && ev.ErrorMessage != "" {
-			appendErr(summary, "agent: "+ev.ErrorMessage)
+			cycle.addErr("agent: " + ev.ErrorMessage)
 		}
 	}
 	return lastErr
@@ -219,12 +225,19 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		Find(&projects).Error; err != nil {
 		return out, err
 	}
+	// Hours already scheduled come from sessions, not Project.ScheduledHours:
+	// sessions are written on every commit, so each run sees prior bookings
+	// and doesn't re-book the full target.
+	scheduled, err := projectScheduledHours(ctx, c.p.DB)
+	if err != nil {
+		return out, err
+	}
 	for _, pj := range projects {
 		info := projectInfo{
 			ID:             pj.ID,
 			Name:           pj.Name,
 			Kind:           string(pj.Kind),
-			HoursRemaining: pj.TargetHours - pj.ScheduledHours,
+			HoursRemaining: pj.TargetHours - scheduled[pj.ID],
 		}
 		if pj.Deadline != nil {
 			info.Deadline = pj.Deadline.Format(time.RFC3339)
@@ -268,6 +281,27 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 			StartMinute: h.StartMinute,
 			EndMinute:   h.EndMinute,
 		})
+	}
+	return out, nil
+}
+
+// projectScheduledHours sums session durations per project, excluding skipped
+// sessions so their hours return to the schedulable pool.
+func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64, error) {
+	var rows []struct {
+		SourceID string
+		Hours    float64
+	}
+	if err := db.WithContext(ctx).Model(&models.Session{}).
+		Select("source_id, SUM(EXTRACT(EPOCH FROM (scheduled_end - scheduled_start))) / 3600 AS hours").
+		Where("source = ? AND status <> ?", models.SourceProject, models.SessionSkipped).
+		Group("source_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.SourceID] = r.Hours
 	}
 	return out, nil
 }
@@ -319,6 +353,9 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 
 	// Enforce the same invariants as the deterministic planner. The LLM
 	// should respect these via the prompt, but tools are the source of truth.
+	if d := end.Sub(start); d < 30*time.Minute || d > 90*time.Minute {
+		return commitFocusBlockResult{}, fmt.Errorf("block must be 30-90 minutes, got %s", d)
+	}
 	planFrom := PlanningStart(time.Now(), c.p.Cfg.Timezone)
 	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
 	if start.Before(planFrom) {
@@ -333,7 +370,22 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		return commitFocusBlockResult{}, err
 	}
 
+	var hours []models.WorkingHour
+	if err := c.p.DB.WithContext(ctx).Where("slot_kind = ?", kind).Find(&hours).Error; err != nil {
+		return commitFocusBlockResult{}, err
+	}
+	if !withinWorkingHours(start, end, hours, c.p.Cfg.Timezone) {
+		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s is outside working hours", args.StartISO, args.EndISO)
+	}
+
 	acct := accountForKind(kind)
+	busy, err := loadBusy(ctx, c.p.DB, acct, start, end)
+	if err != nil {
+		return commitFocusBlockResult{}, err
+	}
+	if overlapsAny(start, end, busy) {
+		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s overlaps an existing event or planned session", args.StartISO, args.EndISO)
+	}
 	client, err := c.clientFor(ctx, acct)
 	if err != nil {
 		return commitFocusBlockResult{}, fmt.Errorf("account %s not linked: %w", acct, err)
@@ -367,13 +419,25 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		return commitFocusBlockResult{}, err
 	}
 
+	c.recordScheduled(source)
+	return commitFocusBlockResult{SessionID: sess.ID, GoogleEventID: ev.Id}, nil
+}
+
+func (c *llmCycle) recordScheduled(source models.SourceKind) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	switch source {
 	case models.SourceProject:
 		c.summary["projects_scheduled"] = intVal(c.summary["projects_scheduled"]) + 1
 	case models.SourceHabit:
 		c.summary["habits_scheduled"] = intVal(c.summary["habits_scheduled"]) + 1
 	}
-	return commitFocusBlockResult{SessionID: sess.ID, GoogleEventID: ev.Id}, nil
+}
+
+func (c *llmCycle) addErr(s string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	appendErr(c.summary, s)
 }
 
 func (c *llmCycle) resolveSource(ctx context.Context, source models.SourceKind, id string) (string, models.SlotKind, error) {
@@ -395,6 +459,8 @@ func (c *llmCycle) resolveSource(ctx context.Context, source models.SourceKind, 
 }
 
 func (c *llmCycle) clientFor(ctx context.Context, acct models.AccountKind) (*calendar.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if cl, ok := c.clients[acct]; ok {
 		return cl, nil
 	}

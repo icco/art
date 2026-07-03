@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"runtime/debug"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -41,6 +42,14 @@ func (h *Handlers) TriageRun(w http.ResponseWriter, r *http.Request) {
 	// pass survives the response returning.
 	ctx := context.WithoutCancel(r.Context())
 	go func() {
+		// Recover here: chi's Recoverer only covers request goroutines, so
+		// an unrecovered panic in this detached pass kills the process.
+		defer func() {
+			if p := recover(); p != nil {
+				gutillog.FromContext(ctx).Errorw("triage run panicked",
+					"panic", p, "stack", string(debug.Stack()))
+			}
+		}()
 		ctx, cancel := context.WithTimeout(ctx, triageRunTimeout)
 		defer cancel()
 		if err := h.Triage.RunAll(ctx); err != nil {
