@@ -1,7 +1,5 @@
 version: "2"
 linters:
-  # Adds to the default set (errcheck, govet, ineffassign, staticcheck, unused),
-  # matching the -E flags the CI workflow used to pass.
   enable:
     - bodyclose
     - contextcheck
