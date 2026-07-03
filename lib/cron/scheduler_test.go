@@ -50,8 +50,13 @@ func TestNewAndStop(t *testing.T) {
 }
 
 func TestStopTwiceIsSafe(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("second Stop panicked: %v", r)
+		}
+	}()
 	s := New(&calendar.Runner{}, &agent.Planner{}, &email.Runner{})
 	s.tick = time.NewTicker(time.Hour)
 	s.Stop()
-	s.Stop() // must not panic on the closed channel
+	s.Stop()
 }

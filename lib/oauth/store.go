@@ -23,8 +23,8 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 	if tok.RefreshToken == "" {
 		return errors.New("oauth: refresh token missing — revoke and retry with prompt=consent")
 	}
-	// Access token is short-lived; TokenSource refreshes on first use. The
-	// payload is sealed by AES-256-GCM before persistence.
+	// Access token is short-lived; TokenSource refreshes on first use.
+	// #nosec G117 -- payload is sealed by AES-256-GCM before persistence.
 	payload, err := json.Marshal(&oauth2.Token{RefreshToken: tok.RefreshToken})
 	if err != nil {
 		return err
@@ -54,6 +54,7 @@ func (s *Store) UpdateRefreshToken(ctx context.Context, kind models.AccountKind,
 	if refresh == "" {
 		return errors.New("oauth: refresh token missing")
 	}
+	// #nosec G117 -- payload is sealed by AES-256-GCM before persistence.
 	payload, err := json.Marshal(&oauth2.Token{RefreshToken: refresh})
 	if err != nil {
 		return err

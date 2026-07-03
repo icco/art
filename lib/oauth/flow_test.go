@@ -30,7 +30,7 @@ func TestTokenSourceCachesAndPersistsRotation(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits++
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"access_token":"at1","token_type":"Bearer","expires_in":3600,"refresh_token":"r2"}`)
+		_, _ = fmt.Fprint(w, `{"access_token":"at1","token_type":"Bearer","expires_in":3600,"refresh_token":"r2"}`)
 	}))
 	defer srv.Close()
 	f.OAuth.Endpoint = oauth2.Endpoint{TokenURL: srv.URL}
@@ -72,6 +72,7 @@ func TestTokenSourceCachesAndPersistsRotation(t *testing.T) {
 func TestRevokeHitsEndpoint(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		_ = r.ParseForm()
 		got = r.Form.Get("token")
 	}))
