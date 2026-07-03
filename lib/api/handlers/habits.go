@@ -11,27 +11,37 @@ import (
 	"gorm.io/gorm"
 )
 
+// habitReq uses pointers so updates can distinguish "absent" from "clear".
 type habitReq struct {
-	Name                 string          `json:"name"`
-	Description          string          `json:"description"`
+	Name                 *string         `json:"name"`
+	Description          *string         `json:"description"`
 	Kind                 string          `json:"kind"`
-	BlockDurationMinutes int             `json:"block_duration_minutes"`
+	BlockDurationMinutes *int            `json:"block_duration_minutes"`
 	Cadence              *models.Cadence `json:"cadence,omitempty"`
 	Active               *bool           `json:"active,omitempty"`
 }
 
 func (req habitReq) validate(create bool) error {
-	if create && req.Name == "" {
+	if create && (req.Name == nil || *req.Name == "") {
 		return errors.New("name required")
+	}
+	if req.Name != nil && *req.Name == "" {
+		return errors.New("name cannot be empty")
 	}
 	if req.Kind != "" && !models.SlotKind(req.Kind).Valid() {
 		return errors.New("kind must be 'work' or 'personal'")
 	}
-	if create && req.BlockDurationMinutes <= 0 {
+	if create && req.BlockDurationMinutes == nil {
 		return errors.New("block_duration_minutes must be > 0")
 	}
-	if create && (req.Cadence == nil || req.Cadence.Count <= 0 || req.Cadence.Type == "") {
+	if req.BlockDurationMinutes != nil && *req.BlockDurationMinutes <= 0 {
+		return errors.New("block_duration_minutes must be > 0")
+	}
+	if create && req.Cadence == nil {
 		return errors.New("cadence with type and positive count required")
+	}
+	if req.Cadence != nil && !req.Cadence.Valid() {
+		return errors.New("cadence type must be per_week or per_day with a positive count")
 	}
 	return nil
 }
@@ -76,12 +86,14 @@ func (h *Handlers) HabitsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hb := models.Habit{
-		Name:                 req.Name,
-		Description:          req.Description,
+		Name:                 *req.Name,
 		Kind:                 models.SlotKind(req.Kind),
-		BlockDurationMinutes: req.BlockDurationMinutes,
+		BlockDurationMinutes: *req.BlockDurationMinutes,
 		Cadence:              datatypes.JSON(cad),
 		Active:               *req.Active,
+	}
+	if req.Description != nil {
+		hb.Description = *req.Description
 	}
 	if err := h.DB.WithContext(r.Context()).Create(&hb).Error; err != nil {
 		writeServerError(w, r, "habits create", err)
@@ -113,17 +125,17 @@ func (h *Handlers) HabitsUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updates := map[string]any{}
-	if req.Name != "" {
-		updates["name"] = req.Name
+	if req.Name != nil {
+		updates["name"] = *req.Name
 	}
-	if req.Description != "" {
-		updates["description"] = req.Description
+	if req.Description != nil {
+		updates["description"] = *req.Description
 	}
 	if req.Kind != "" {
 		updates["kind"] = req.Kind
 	}
-	if req.BlockDurationMinutes > 0 {
-		updates["block_duration_minutes"] = req.BlockDurationMinutes
+	if req.BlockDurationMinutes != nil {
+		updates["block_duration_minutes"] = *req.BlockDurationMinutes
 	}
 	if req.Cadence != nil {
 		cad, err := json.Marshal(req.Cadence)

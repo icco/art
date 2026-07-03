@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -10,23 +11,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// projectReq uses pointers so updates can distinguish "absent" from "clear";
+// Deadline is raw JSON so an explicit null clears it.
 type projectReq struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Kind        string     `json:"kind"`
-	TargetHours float64    `json:"target_hours"`
-	Deadline    *time.Time `json:"deadline,omitempty"`
-	Status      string     `json:"status,omitempty"`
+	Name        *string         `json:"name"`
+	Description *string         `json:"description"`
+	Kind        string          `json:"kind"`
+	TargetHours *float64        `json:"target_hours"`
+	Deadline    json.RawMessage `json:"deadline,omitempty"`
+	Status      string          `json:"status,omitempty"`
 }
 
 func (p projectReq) validate(create bool) error {
-	if create && p.Name == "" {
+	if create && (p.Name == nil || *p.Name == "") {
 		return errors.New("name required")
+	}
+	if p.Name != nil && *p.Name == "" {
+		return errors.New("name cannot be empty")
 	}
 	if p.Kind != "" && !models.SlotKind(p.Kind).Valid() {
 		return errors.New("kind must be 'work' or 'personal'")
 	}
-	if create && p.TargetHours <= 0 {
+	if create && p.TargetHours == nil {
+		return errors.New("target_hours must be > 0")
+	}
+	if p.TargetHours != nil && *p.TargetHours <= 0 {
 		return errors.New("target_hours must be > 0")
 	}
 	if p.Status != "" {
@@ -37,6 +46,21 @@ func (p projectReq) validate(create bool) error {
 		}
 	}
 	return nil
+}
+
+// deadlineValue decodes the raw deadline: absent → set=false; null → clear.
+func (p projectReq) deadlineValue() (*time.Time, bool, error) {
+	if len(p.Deadline) == 0 {
+		return nil, false, nil
+	}
+	if string(p.Deadline) == "null" {
+		return nil, true, nil
+	}
+	var t time.Time
+	if err := json.Unmarshal(p.Deadline, &t); err != nil {
+		return nil, false, errors.New("deadline must be an RFC3339 timestamp or null")
+	}
+	return &t, true, nil
 }
 
 // ProjectsList responds with a paginated list of projects.
@@ -72,13 +96,20 @@ func (h *Handlers) ProjectsCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
+	deadline, _, err := req.deadlineValue()
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
 	p := models.Project{
-		Name:        req.Name,
-		Description: req.Description,
+		Name:        *req.Name,
 		Kind:        models.SlotKind(req.Kind),
-		TargetHours: req.TargetHours,
-		Deadline:    req.Deadline,
+		TargetHours: *req.TargetHours,
+		Deadline:    deadline,
 		Status:      models.ProjectStatus(req.Status),
+	}
+	if req.Description != nil {
+		p.Description = *req.Description
 	}
 	if err := h.DB.WithContext(r.Context()).Create(&p).Error; err != nil {
 		writeServerError(w, r, "projects create", err)
@@ -109,21 +140,26 @@ func (h *Handlers) ProjectsUpdate(w http.ResponseWriter, r *http.Request) {
 		writeServerError(w, r, "projects update lookup", err)
 		return
 	}
-	updates := map[string]any{}
-	if req.Name != "" {
-		updates["name"] = req.Name
+	deadline, deadlineSet, err := req.deadlineValue()
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, err.Error())
+		return
 	}
-	if req.Description != "" {
-		updates["description"] = req.Description
+	updates := map[string]any{}
+	if req.Name != nil {
+		updates["name"] = *req.Name
+	}
+	if req.Description != nil {
+		updates["description"] = *req.Description
 	}
 	if req.Kind != "" {
 		updates["kind"] = req.Kind
 	}
-	if req.TargetHours > 0 {
-		updates["target_hours"] = req.TargetHours
+	if req.TargetHours != nil {
+		updates["target_hours"] = *req.TargetHours
 	}
-	if req.Deadline != nil {
-		updates["deadline"] = req.Deadline
+	if deadlineSet {
+		updates["deadline"] = deadline
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status

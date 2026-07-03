@@ -4,6 +4,7 @@ package db
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/icco/art/lib/models"
 	"go.uber.org/zap"
@@ -23,6 +24,15 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gorm open: %w", err)
 	}
+	// The Postgres on rope is shared with other services; don't let a burst
+	// exhaust its connection slots.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("sql db: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(10)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
 	if err := db.AutoMigrate(models.All()...); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}

@@ -98,6 +98,9 @@ func run(log *zap.SugaredLogger) error {
 		log.Infow("shutdown signal received")
 	case err := <-serveErr:
 		if err != nil {
+			// Cancel the cron context so the deferred scheduler.Stop() isn't
+			// stuck behind an in-flight pass for up to 30 minutes.
+			stop()
 			return err
 		}
 	}

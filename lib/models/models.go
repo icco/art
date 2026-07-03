@@ -160,6 +160,16 @@ type Cadence struct {
 	PreferredWindows []string `json:"preferred_windows,omitempty"`
 }
 
+// Valid reports whether the cadence uses a type the planner understands and a
+// positive count; anything else silently degrades to wrong scheduling.
+func (c Cadence) Valid() bool {
+	switch c.Type {
+	case "per_week", "per_day":
+		return c.Count > 0
+	}
+	return false
+}
+
 // Habit is a recurring practice with a cadence and per-block duration.
 type Habit struct {
 	Base

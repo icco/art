@@ -51,6 +51,84 @@ func do(t *testing.T, h http.Handler, method, path string, body any) *httptest.R
 	return w
 }
 
+// Unknown cadence types silently fell into count-per-week semantics in the
+// planner; validate on both create and update.
+func TestHabitCadenceTypeValidated(t *testing.T) {
+	db := testdb.Open(t)
+	h := &handlers.Handlers{DB: db}
+	r := newRouter(h)
+
+	w := do(t, r, "POST", "/habits", map[string]any{
+		"name": "Walk", "block_duration_minutes": 30,
+		"cadence": map[string]any{"type": "weekly", "count": 3},
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("create with bad cadence type: %d %s", w.Code, w.Body)
+	}
+
+	w = do(t, r, "POST", "/habits", map[string]any{
+		"name": "Walk", "block_duration_minutes": 30,
+		"cadence": map[string]any{"type": "per_week", "count": 3},
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body)
+	}
+	var hb models.Habit
+	mustDecode(t, w, &hb)
+
+	w = do(t, r, "PATCH", "/habits/"+hb.ID, map[string]any{
+		"cadence": map[string]any{"type": "per_week", "count": 0},
+	})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("update with zero cadence count: %d %s", w.Code, w.Body)
+	}
+}
+
+// PATCH must distinguish "field absent" from "clear this field".
+func TestProjectsUpdateClearsFields(t *testing.T) {
+	db := testdb.Open(t)
+	h := &handlers.Handlers{DB: db}
+	r := newRouter(h)
+
+	deadline := time.Now().Add(48 * time.Hour).UTC().Format(time.RFC3339)
+	w := do(t, r, "POST", "/projects", map[string]any{
+		"name": "P", "kind": "work", "target_hours": 4.0,
+		"description": "keep me", "deadline": deadline,
+	})
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", w.Code, w.Body)
+	}
+	var p models.Project
+	mustDecode(t, w, &p)
+
+	w = do(t, r, "PATCH", "/projects/"+p.ID, map[string]any{
+		"description": "", "deadline": nil,
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("update: %d %s", w.Code, w.Body)
+	}
+	var got models.Project
+	if err := db.First(&got, "id = ?", p.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Description != "" {
+		t.Errorf("description not cleared: %q", got.Description)
+	}
+	if got.Deadline != nil {
+		t.Errorf("deadline not cleared: %v", got.Deadline)
+	}
+	if got.Name != "P" {
+		t.Errorf("absent fields must be untouched, name = %q", got.Name)
+	}
+}
+
+func mustDecode(t *testing.T, w *httptest.ResponseRecorder, v any) {
+	t.Helper()
+	if err := json.NewDecoder(w.Body).Decode(v); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestProjectsCRUD(t *testing.T) {
 	db := testdb.Open(t)
 	h := &handlers.Handlers{DB: db}

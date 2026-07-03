@@ -23,9 +23,10 @@ type Scheduler struct {
 	Planner *agent.Planner
 	Triage  *email.Runner
 
-	tick *time.Ticker
-	stop chan struct{}
-	wg   sync.WaitGroup
+	tick     *time.Ticker
+	stop     chan struct{}
+	stopOnce sync.Once
+	wg       sync.WaitGroup
 }
 
 // New returns a Scheduler ready to be Start()ed.
@@ -53,12 +54,13 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}()
 }
 
-// Stop halts the ticker and waits for any in-flight tick to return.
+// Stop halts the ticker and waits for any in-flight tick to return. Safe to
+// call more than once.
 func (s *Scheduler) Stop() {
 	if s.tick != nil {
 		s.tick.Stop()
 	}
-	close(s.stop)
+	s.stopOnce.Do(func() { close(s.stop) })
 	s.wg.Wait()
 }
 

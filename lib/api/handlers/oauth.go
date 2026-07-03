@@ -3,6 +3,8 @@ package handlers
 import (
 	"html"
 	"net/http"
+
+	gutillog "github.com/icco/gutil/logging"
 )
 
 // OAuthStart returns a Google consent URL for the requested account.
@@ -29,7 +31,10 @@ func (h *Handlers) OAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	account, email, err := h.OAuth.Complete(r.Context(), q.Get("state"), q.Get("code"))
 	if err != nil {
-		writeCallbackHTML(w, http.StatusBadRequest, "link failed", html.EscapeString(err.Error()))
+		// Public route: log the detail, render a generic page.
+		gutillog.FromContext(r.Context()).Errorw("oauth callback", "err", err)
+		writeCallbackHTML(w, http.StatusBadRequest, "link failed",
+			"Linking failed; check the server logs and retry from /oauth/start.")
 		return
 	}
 	writeCallbackHTML(w, http.StatusOK, "linked",

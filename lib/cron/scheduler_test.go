@@ -48,3 +48,10 @@ func TestNewAndStop(t *testing.T) {
 		t.Fatal("goroutine didn't run")
 	}
 }
+
+func TestStopTwiceIsSafe(t *testing.T) {
+	s := New(&calendar.Runner{}, &agent.Planner{}, &email.Runner{})
+	s.tick = time.NewTicker(time.Hour)
+	s.Stop()
+	s.Stop() // must not panic on the closed channel
+}
