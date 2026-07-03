@@ -2,16 +2,20 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/icco/art/lib/models"
 	"google.golang.org/api/calendar/v3"
+	"google.golang.org/api/googleapi"
 )
 
 // FocusBlock describes an art-managed focus event to write to Google Calendar.
 type FocusBlock struct {
 	CalendarID  string
+	EventID     string // optional caller-supplied ID for idempotent inserts
 	Start       time.Time
 	End         time.Time
 	Summary     string
@@ -30,6 +34,7 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 	}
 
 	ev := &calendar.Event{
+		Id:          fb.EventID,
 		Summary:     fb.Summary,
 		Description: fb.Description,
 		EventType:   "focusTime",
@@ -47,7 +52,17 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 			AutoDeclineMode: "declineNone",
 		},
 	}
-	return c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
+	created, err := c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
+	if err != nil {
+		// 409 on a caller-supplied ID means a previous attempt already
+		// landed; resolve to the existing event so retries are idempotent.
+		var gerr *googleapi.Error
+		if fb.EventID != "" && errors.As(err, &gerr) && gerr.Code == http.StatusConflict {
+			return c.Service.Events.Get(fb.CalendarID, fb.EventID).Context(ctx).Do()
+		}
+		return nil, err
+	}
+	return created, nil
 }
 
 // DeleteManaged refuses to delete events not tagged art_managed=true.

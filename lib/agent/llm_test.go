@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/testdb"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 func newCycle(t *testing.T) *llmCycle {
@@ -182,6 +184,51 @@ func TestCommitFocusBlockValidation(t *testing.T) {
 
 // The prompt tells the model to respect these invariants, but tools are the
 // source of truth: a hallucinated commit must not reach the calendar.
+func TestFocusEventID(t *testing.T) {
+	t1 := time.Date(2026, 7, 6, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+	a := focusEventID(models.SourceProject, "p1", t1, t2)
+	if a != focusEventID(models.SourceProject, "p1", t1, t2) {
+		t.Fatal("same commit must derive the same event ID")
+	}
+	if a == focusEventID(models.SourceHabit, "p1", t1, t2) {
+		t.Fatal("different sources must derive different IDs")
+	}
+	// Google requires [a-v0-9], length 5-1024.
+	if len(a) < 5 || len(a) > 1024 {
+		t.Fatalf("bad length %d", len(a))
+	}
+	for _, r := range a {
+		if (r < 'a' || r > 'v') && (r < '0' || r > '9') {
+			t.Fatalf("invalid event-id rune %q in %q", r, a)
+		}
+	}
+}
+
+// Duplicate-key errors must translate to gorm.ErrDuplicatedKey so
+// commitFocusBlock can treat a replayed insert as success.
+func TestSessionDuplicateKeyTranslated(t *testing.T) {
+	db := testdb.Open(t)
+	id := "deadbeef01"
+	mk := func() models.Session {
+		return models.Session{
+			Source: models.SourceProject, SourceID: "11111111-1111-1111-1111-111111111111",
+			AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: &id,
+			ScheduledStart: time.Now(), ScheduledEnd: time.Now().Add(time.Hour),
+			Status: models.SessionPlanned,
+		}
+	}
+	first := mk()
+	if err := db.Create(&first).Error; err != nil {
+		t.Fatal(err)
+	}
+	second := mk()
+	err := db.Create(&second).Error
+	if !errors.Is(err, gorm.ErrDuplicatedKey) {
+		t.Fatalf("want gorm.ErrDuplicatedKey, got %v", err)
+	}
+}
+
 func TestListStateBadCadenceSurfaced(t *testing.T) {
 	c := newCycle(t)
 	if err := c.p.DB.Create(&models.Habit{

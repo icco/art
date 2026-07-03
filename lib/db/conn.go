@@ -18,7 +18,7 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	// sync), not an error worth a stack trace.
 	gormLog := zapgorm2.New(log)
 	gormLog.IgnoreRecordNotFoundError = true
-	cfg := &gorm.Config{Logger: gormLog}
+	cfg := &gorm.Config{Logger: gormLog, TranslateError: true}
 	db, err := gorm.Open(postgres.Open(dsn), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("gorm open: %w", err)

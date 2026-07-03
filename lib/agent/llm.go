@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -291,6 +293,13 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 	return out, nil
 }
 
+// focusEventID derives a stable Google event ID for a commit so retries of
+// the same block converge on one event (charset [a-v0-9]; hex fits).
+func focusEventID(source models.SourceKind, sourceID string, start, end time.Time) string {
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s|%s|%d|%d", source, sourceID, start.Unix(), end.Unix()))
+	return hex.EncodeToString(sum[:16])
+}
+
 // projectScheduledHours sums session durations per project, excluding skipped
 // sessions so their hours return to the schedulable pool.
 func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64, error) {
@@ -400,6 +409,7 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	calID := client.Account.PrimaryCalendarID
 	ev, err := client.CreateFocus(ctx, calendar.FocusBlock{
 		CalendarID:  calID,
+		EventID:     focusEventID(source, args.SourceID, start, end),
 		Start:       start,
 		End:         end,
 		Summary:     focusTitle(source, name),
@@ -422,6 +432,14 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		Status:         models.SessionPlanned,
 	}
 	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
+		// A duplicate means a prior attempt at this exact block already
+		// committed; return it so retries converge.
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			var existing models.Session
+			if lookupErr := c.p.DB.WithContext(ctx).First(&existing, "google_event_id = ?", ev.Id).Error; lookupErr == nil {
+				return commitFocusBlockResult{SessionID: existing.ID, GoogleEventID: ev.Id}, nil
+			}
+		}
 		return commitFocusBlockResult{}, err
 	}
 
