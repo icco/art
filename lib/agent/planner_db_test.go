@@ -95,3 +95,38 @@ func TestFindFreeSlotsHonorsBusy(t *testing.T) {
 		t.Fatal("expected at least one free slot in 9-18 window")
 	}
 }
+
+func TestFindFreeSlotsHonorsPlannedSessions(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A focus block committed earlier in the same run exists only as a
+	// session row; the mirroring Event row won't appear until the next sync.
+	monday10 := time.Date(2026, 5, 25, 10, 0, 0, 0, tz)
+	if err := db.Create(&models.Session{
+		Source: models.SourceProject, SourceID: "11111111-1111-1111-1111-111111111111",
+		AccountKind: models.AccountWork, CalendarID: "primary",
+		ScheduledStart: monday10, ScheduledEnd: monday10.Add(time.Hour),
+		Status: models.SessionPlanned,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	from := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range slots {
+		if s.Start.Before(monday10.Add(time.Hour)) && s.End.After(monday10) {
+			t.Fatalf("slot %v-%v overlaps planned session", s.Start, s.End)
+		}
+	}
+	if len(slots) == 0 {
+		t.Fatal("expected at least one free slot in 9-18 window")
+	}
+}

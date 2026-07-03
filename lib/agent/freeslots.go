@@ -82,9 +82,21 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 		Find(&events).Error; err != nil {
 		return nil, err
 	}
-	out := make([]busyRange, len(events))
-	for i, e := range events {
-		out[i] = busyRange{start: e.StartTime, end: e.EndTime}
+	out := make([]busyRange, 0, len(events))
+	for _, e := range events {
+		out = append(out, busyRange{start: e.StartTime, end: e.EndTime})
+	}
+	// Planned sessions are busy too: a block committed earlier in the same
+	// planner run has no Event row until the next calendar sync.
+	var sessions []models.Session
+	if err := db.WithContext(ctx).
+		Where("account_kind = ? AND status = ? AND scheduled_end > ? AND scheduled_start < ?",
+			kind, models.SessionPlanned, from, to).
+		Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+	for _, s := range sessions {
+		out = append(out, busyRange{start: s.ScheduledStart, end: s.ScheduledEnd})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].start.Before(out[j].start) })
 	return out, nil
