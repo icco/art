@@ -20,6 +20,7 @@ import (
 	"google.golang.org/adk/tool"
 	"google.golang.org/adk/tool/functiontool"
 	"google.golang.org/genai"
+	"gorm.io/gorm"
 )
 
 //go:embed prompt.md
@@ -219,12 +220,19 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		Find(&projects).Error; err != nil {
 		return out, err
 	}
+	// Hours already scheduled come from sessions, not Project.ScheduledHours:
+	// sessions are written on every commit, so each run sees prior bookings
+	// and doesn't re-book the full target.
+	scheduled, err := projectScheduledHours(ctx, c.p.DB)
+	if err != nil {
+		return out, err
+	}
 	for _, pj := range projects {
 		info := projectInfo{
 			ID:             pj.ID,
 			Name:           pj.Name,
 			Kind:           string(pj.Kind),
-			HoursRemaining: pj.TargetHours - pj.ScheduledHours,
+			HoursRemaining: pj.TargetHours - scheduled[pj.ID],
 		}
 		if pj.Deadline != nil {
 			info.Deadline = pj.Deadline.Format(time.RFC3339)
@@ -268,6 +276,27 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 			StartMinute: h.StartMinute,
 			EndMinute:   h.EndMinute,
 		})
+	}
+	return out, nil
+}
+
+// projectScheduledHours sums session durations per project, excluding skipped
+// sessions so their hours return to the schedulable pool.
+func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64, error) {
+	var rows []struct {
+		SourceID string
+		Hours    float64
+	}
+	if err := db.WithContext(ctx).Model(&models.Session{}).
+		Select("source_id, SUM(EXTRACT(EPOCH FROM (scheduled_end - scheduled_start))) / 3600 AS hours").
+		Where("source = ? AND status <> ?", models.SourceProject, models.SessionSkipped).
+		Group("source_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]float64, len(rows))
+	for _, r := range rows {
+		out[r.SourceID] = r.Hours
 	}
 	return out, nil
 }

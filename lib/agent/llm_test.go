@@ -75,6 +75,41 @@ func TestListStateSeeded(t *testing.T) {
 	}
 }
 
+func TestListStateProjectHoursFromSessions(t *testing.T) {
+	c := newCycle(t)
+	pj := &models.Project{Name: "Book", Kind: models.SlotWork, TargetHours: 10, Status: models.ProjectActive}
+	if err := c.p.DB.Create(pj).Error; err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	sessions := []models.Session{
+		// 2h planned this week: counts against the target.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now, ScheduledEnd: now.Add(2 * time.Hour), Status: models.SessionPlanned},
+		// 3h happened last week: target hours are lifetime, so it counts too.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now.AddDate(0, 0, -7), ScheduledEnd: now.AddDate(0, 0, -7).Add(3 * time.Hour), Status: models.SessionHappened},
+		// 1h skipped: returns to the pool.
+		{Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork, CalendarID: "primary",
+			ScheduledStart: now.Add(3 * time.Hour), ScheduledEnd: now.Add(4 * time.Hour), Status: models.SessionSkipped},
+	}
+	for i := range sessions {
+		if err := c.p.DB.Create(&sessions[i]).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := c.listState(nil, listStateArgs{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Projects) != 1 {
+		t.Fatalf("projects: %+v", got.Projects)
+	}
+	if hr := got.Projects[0].HoursRemaining; hr != 5 {
+		t.Fatalf("hours_remaining = %v, want 5 (10 target - 2 planned - 3 happened; skipped excluded)", hr)
+	}
+}
+
 func TestFindFreeSlotsValidation(t *testing.T) {
 	c := newCycle(t)
 	if _, err := c.findFreeSlots(nil, findFreeSlotsArgs{AccountKind: "bad", SlotKind: "work", DurationMin: 30}); err == nil {
