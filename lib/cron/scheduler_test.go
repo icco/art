@@ -14,6 +14,11 @@ import (
 // A panicking job must not propagate: it would kill the scheduler goroutine
 // and with it the whole process.
 func TestRunJobRecoversPanic(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("panic escaped runJob: %v", r)
+		}
+	}()
 	runJob(context.Background(), "boom", func() { panic("kaboom") })
 }
 
