@@ -23,6 +23,4 @@ jobs:
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
-          # Pinned: a new linter release must not break main without a code
-          # change. The linter set lives in .golangci.yml.
-          version: v2.12.2
+          version: latest
