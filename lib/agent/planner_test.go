@@ -1,11 +1,41 @@
 package agent
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/testdb"
 )
+
+// A run that times out must still be finalized: finish runs under the same
+// ctx that just got cancelled, and the row staying "running" forever is
+// exactly the failure being reported.
+func TestFinishSurvivesCancelledContext(t *testing.T) {
+	db := testdb.Open(t)
+	p := &Planner{DB: db}
+	run := models.AgentRun{Kind: models.AgentRunPlanner, StartedAt: time.Now(), Status: models.AgentRunRunning}
+	if err := db.Create(&run).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	runErr := errors.New("llm timed out")
+	if err := p.finish(ctx, run.ID, map[string]any{}, runErr); !errors.Is(err, runErr) {
+		t.Fatalf("finish returned %v, want to include the run error", err)
+	}
+
+	var got models.AgentRun
+	if err := db.First(&got, "id = ?", run.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != models.AgentRunFailed || got.EndedAt == nil {
+		t.Fatalf("run row not finalized: status=%s ended_at=%v", got.Status, got.EndedAt)
+	}
+}
 
 func TestAccountForKind(t *testing.T) {
 	if accountForKind(models.SlotWork) != models.AccountWork {
