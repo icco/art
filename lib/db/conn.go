@@ -33,6 +33,9 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	if err := dropSessionGlobalEventIndex(db); err != nil {
+		return nil, fmt.Errorf("drop session event index: %w", err)
+	}
 	if err := db.AutoMigrate(models.All()...); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}
@@ -43,6 +46,17 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 		return nil, fmt.Errorf("drop art calendar column: %w", err)
 	}
 	return db, nil
+}
+
+// dropSessionGlobalEventIndex retires the table-global unique index on
+// sessions.google_event_id, replaced by the per-(account, calendar) index.
+// AutoMigrate never drops indexes, so this is explicit and idempotent.
+func dropSessionGlobalEventIndex(db *gorm.DB) error {
+	m := db.Migrator()
+	if !m.HasIndex(&models.Session{}, "idx_session_google_event") {
+		return nil
+	}
+	return m.DropIndex(&models.Session{}, "idx_session_google_event")
 }
 
 // dropArtCalendarColumn removes the retired art_calendar_id column. Art always

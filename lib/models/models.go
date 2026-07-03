@@ -138,7 +138,7 @@ type WorkingHour struct {
 	SlotKind    SlotKind `gorm:"type:varchar(16);not null;check:slot_kind IN ('work','personal');uniqueIndex:idx_wh_unique,priority:1" json:"slot_kind"`
 	DayOfWeek   int      `gorm:"not null;check:day_of_week BETWEEN 0 AND 6;uniqueIndex:idx_wh_unique,priority:2" json:"day_of_week"`
 	StartMinute int      `gorm:"not null;check:start_minute BETWEEN 0 AND 1439;uniqueIndex:idx_wh_unique,priority:3" json:"start_minute"`
-	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440" json:"end_minute"`
+	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440;check:chk_working_hours_order,end_minute > start_minute" json:"end_minute"`
 }
 
 // Project is a goal with a target number of hours and an optional deadline.
@@ -186,9 +186,9 @@ type Session struct {
 	Base
 	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1" json:"source"`
 	SourceID       string        `gorm:"type:uuid;not null;index:idx_session_source,priority:2" json:"source_id"`
-	AccountKind    AccountKind   `gorm:"type:varchar(16);not null;check:account_kind IN ('personal','work')" json:"account_kind"`
-	CalendarID     string        `gorm:"type:varchar(255);not null" json:"calendar_id"`
-	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_google_event" json:"google_event_id,omitempty"`
+	AccountKind    AccountKind   `gorm:"type:varchar(16);not null;check:account_kind IN ('personal','work');uniqueIndex:idx_session_event_lookup,priority:1" json:"account_kind"`
+	CalendarID     string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_session_event_lookup,priority:2" json:"calendar_id"`
+	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_event_lookup,priority:3" json:"google_event_id,omitempty"`
 	ScheduledStart time.Time     `gorm:"not null;index" json:"scheduled_start"`
 	ScheduledEnd   time.Time     `gorm:"not null" json:"scheduled_end"`
 	ActualStart    *time.Time    `json:"actual_start,omitempty"`
