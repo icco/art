@@ -353,6 +353,9 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 
 	// Enforce the same invariants as the deterministic planner. The LLM
 	// should respect these via the prompt, but tools are the source of truth.
+	if d := end.Sub(start); d < 30*time.Minute || d > 90*time.Minute {
+		return commitFocusBlockResult{}, fmt.Errorf("block must be 30-90 minutes, got %s", d)
+	}
 	planFrom := PlanningStart(time.Now(), c.p.Cfg.Timezone)
 	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
 	if start.Before(planFrom) {
@@ -367,7 +370,22 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 		return commitFocusBlockResult{}, err
 	}
 
+	var hours []models.WorkingHour
+	if err := c.p.DB.WithContext(ctx).Where("slot_kind = ?", kind).Find(&hours).Error; err != nil {
+		return commitFocusBlockResult{}, err
+	}
+	if !withinWorkingHours(start, end, hours, c.p.Cfg.Timezone) {
+		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s is outside working hours", args.StartISO, args.EndISO)
+	}
+
 	acct := accountForKind(kind)
+	busy, err := loadBusy(ctx, c.p.DB, acct, start, end)
+	if err != nil {
+		return commitFocusBlockResult{}, err
+	}
+	if overlapsAny(start, end, busy) {
+		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s overlaps an existing event or planned session", args.StartISO, args.EndISO)
+	}
 	client, err := c.clientFor(ctx, acct)
 	if err != nil {
 		return commitFocusBlockResult{}, fmt.Errorf("account %s not linked: %w", acct, err)

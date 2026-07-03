@@ -9,6 +9,7 @@ import (
 
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/testdb"
 	"gorm.io/datatypes"
 )
@@ -176,6 +177,72 @@ func TestCommitFocusBlockValidation(t *testing.T) {
 		EndISO:   now.Add(-23 * time.Hour).Format(time.RFC3339),
 	}); err == nil {
 		t.Fatal("expected error when start is before planning_start")
+	}
+}
+
+// The prompt tells the model to respect these invariants, but tools are the
+// source of truth: a hallucinated commit must not reach the calendar.
+func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
+	c := newCycle(t)
+	c.ctx = context.Background()
+	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
+	tz := c.p.Cfg.Timezone
+	pj := &models.Project{Name: "P", Kind: models.SlotWork, TargetHours: 4, Status: models.ProjectActive}
+	if err := c.p.DB.Create(pj).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	planFrom := PlanningStart(time.Now(), tz)
+	_, weekEnd := WeekWindow(time.Now(), tz)
+	if weekEnd.Sub(planFrom) < 3*time.Hour {
+		t.Skip("too close to week end for deterministic in-window commits")
+	}
+	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
+	commit := func(start, end time.Time) error {
+		_, err := c.commitFocusBlock(nil, commitFocusBlockArgs{
+			Source: "project", SourceID: pj.ID, StartISO: iso(start), EndISO: iso(end),
+		})
+		return err
+	}
+	// Every rejection must name the violated invariant: an unlinked test
+	// account makes even un-validated commits error, so err != nil alone
+	// proves nothing.
+	wantErr := func(start, end time.Time, substr string) {
+		t.Helper()
+		if err := commit(start, end); err == nil || !contains(err.Error(), substr) {
+			t.Errorf("commit %s..%s: got %v, want error containing %q", iso(start), iso(end), err, substr)
+		}
+	}
+
+	// Duration outside 30-90 minutes is rejected regardless of window.
+	wantErr(planFrom, planFrom.Add(10*time.Minute), "minutes")
+	wantErr(planFrom, planFrom.Add(3*time.Hour), "minutes")
+
+	// No working-hours window covers the block: rejected.
+	wantErr(planFrom, planFrom.Add(time.Hour), "working hours")
+
+	// Open all-day working hours; an existing planned session blocks the range.
+	for d := range 7 {
+		if err := c.p.DB.Create(&models.WorkingHour{
+			SlotKind: models.SlotWork, DayOfWeek: d, StartMinute: 0, EndMinute: 1440,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.p.DB.Create(&models.Session{
+		Source: models.SourceProject, SourceID: pj.ID, AccountKind: models.AccountWork,
+		CalendarID: "primary", ScheduledStart: planFrom, ScheduledEnd: planFrom.Add(time.Hour),
+		Status: models.SessionPlanned,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	wantErr(planFrom, planFrom.Add(time.Hour), "overlaps")
+
+	// A valid block passes validation and fails only at the unlinked
+	// calendar client — i.e. it made it past every invariant check.
+	err := commit(planFrom.Add(time.Hour), planFrom.Add(2*time.Hour))
+	if err == nil || !contains(err.Error(), "not linked") {
+		t.Errorf("valid block should reach the calendar client, got: %v", err)
 	}
 }
 
