@@ -177,6 +177,16 @@ type AgentRun struct {
 	Error     string          `json:"error"`
 }
 
+// Job mirrors the API background-job resource.
+type Job struct {
+	ID         string     `json:"id"`
+	Kind       string     `json:"kind"`
+	Status     string     `json:"status"`
+	RunAt      time.Time  `json:"run_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	LastError  string     `json:"last_error"`
+}
+
 // Session mirrors a planner-scheduled focus block (project or habit).
 type Session struct {
 	ID             string    `json:"id"`
@@ -283,9 +293,20 @@ func (c *Client) Replan(ctx context.Context) (string, error) {
 	return out.Status, c.do(ctx, "POST", "/replan", nil, &out)
 }
 
-// Sync triggers a sync of upstream calendars on the server.
-func (c *Client) Sync(ctx context.Context) error {
-	return c.do(ctx, "POST", "/sync", nil, nil)
+// Sync enqueues a calendar-sync job on the server and returns it; poll
+// GetJob until the job reaches a terminal status.
+func (c *Client) Sync(ctx context.Context) (Job, error) {
+	var out struct {
+		Status string `json:"status"`
+		Job    Job    `json:"job"`
+	}
+	return out.Job, c.do(ctx, "POST", "/sync", nil, &out)
+}
+
+// GetJob fetches one background job by id.
+func (c *Client) GetJob(ctx context.Context, id string) (Job, error) {
+	var out Job
+	return out, c.do(ctx, "GET", "/jobs/"+id, nil, &out)
 }
 
 // ListEmails returns recently triaged messages, newest first.

@@ -97,7 +97,12 @@ func TestClientEventsReplanSync(t *testing.T) {
 		case "/replan":
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
 		case "/sync":
-			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "queued",
+				"job":    Job{ID: "j1", Kind: "sync", Status: "pending"},
+			})
+		case "/jobs/j1":
+			_ = json.NewEncoder(w).Encode(Job{ID: "j1", Kind: "sync", Status: "succeeded"})
 		}
 	}))
 	defer server.Close()
@@ -110,8 +115,13 @@ func TestClientEventsReplanSync(t *testing.T) {
 	if err != nil || status != "started" {
 		t.Fatalf("replan: %q %v", status, err)
 	}
-	if err := c.Sync(ctx); err != nil {
-		t.Fatal(err)
+	job, err := c.Sync(ctx)
+	if err != nil || job.ID != "j1" {
+		t.Fatalf("sync: job=%+v err=%v", job, err)
+	}
+	got, err := c.GetJob(ctx, job.ID)
+	if err != nil || got.Status != "succeeded" {
+		t.Fatalf("get job: job=%+v err=%v", got, err)
 	}
 }
 

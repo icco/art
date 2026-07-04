@@ -185,14 +185,35 @@ func replan(c *Client) tea.Cmd {
 	}
 }
 
+// syncCalendars enqueues a sync job and polls it until it lands.
 func syncCalendars(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		if err := c.Sync(ctx); err != nil {
+		startCtx, cancel := bg()
+		job, err := c.Sync(startCtx)
+		cancel()
+		if err != nil {
 			return errMsg{err}
 		}
-		return statusMsg("sync done")
+		deadline := timeNow().Add(triagePollTimeout)
+		for timeNow().Before(deadline) {
+			time.Sleep(triagePollInterval)
+			pollCtx, cancel := bg()
+			j, err := c.GetJob(pollCtx, job.ID)
+			cancel()
+			if err != nil {
+				continue
+			}
+			switch j.Status {
+			case "succeeded":
+				if j.LastError != "" {
+					return statusMsg("sync done (account errors: " + j.LastError + ")")
+				}
+				return statusMsg("sync done")
+			case "failed":
+				return errMsg{fmt.Errorf("sync failed: %s", j.LastError)}
+			}
+		}
+		return statusMsg("sync still running…")
 	}
 }
 
