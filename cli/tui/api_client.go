@@ -293,8 +293,7 @@ func (c *Client) Replan(ctx context.Context) (string, error) {
 	return out.Status, c.do(ctx, "POST", "/replan", nil, &out)
 }
 
-// Sync enqueues a calendar-sync job on the server and returns it; poll
-// GetJob until the job reaches a terminal status.
+// Sync enqueues a calendar-sync job and returns it; poll GetJob for the outcome.
 func (c *Client) Sync(ctx context.Context) (Job, error) {
 	var out struct {
 		Status string `json:"status"`

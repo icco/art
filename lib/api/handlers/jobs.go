@@ -9,8 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// SyncRun enqueues a calendar-sync job; the queue worker executes it.
-// Clients poll /jobs/{id} for the outcome.
+// SyncRun enqueues a calendar-sync job; clients poll /jobs/{id}.
 func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
 	h.enqueueJob(w, r, models.JobSync)
 }
@@ -38,8 +37,8 @@ func (h *Handlers) enqueueJob(w http.ResponseWriter, r *http.Request, kind model
 	writeJSON(w, r, http.StatusAccepted, map[string]any{"status": status, "job": job})
 }
 
-// JobsList responds with jobs by most recent activity. Supports optional
-// kind and status filters plus standard pagination.
+// JobsList responds with jobs by recent activity, with optional kind and
+// status filters plus standard pagination.
 func (h *Handlers) JobsList(w http.ResponseWriter, r *http.Request) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {

@@ -25,9 +25,8 @@ type Handlers struct {
 	Triage TriageService
 }
 
-// OAuthService decouples handlers from the concrete oauth package and lets
-// tests pass a fake implementation. JobsService and TriageService do the
-// same for the job queue and email actions respectively.
+// OAuthService and friends decouple handlers from the concrete oauth,
+// queue, and email packages so tests can pass fakes.
 type (
 	OAuthService interface {
 		StartURL(account string) (string, error)

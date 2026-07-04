@@ -21,8 +21,7 @@ const (
 	jobTimeout = 30 * time.Minute
 )
 
-// SyncService, PlannerService, and TriageService are the job implementations
-// the worker drives, satisfied by calendar.Runner, agent.Planner, and
+// The job implementations, satisfied by calendar.Runner, agent.Planner, and
 // email.Runner.
 type (
 	// SyncService runs upstream calendar syncs.
@@ -39,8 +38,7 @@ type (
 	}
 )
 
-// Worker polls the queue and executes jobs one at a time, keeping the
-// sync → planner → triage order within a shared slot.
+// Worker polls the queue and runs jobs one at a time.
 type Worker struct {
 	Queue   *Queue
 	Sync    SyncService
@@ -65,8 +63,7 @@ func New(db *gorm.DB, sync SyncService, planner PlannerService, triage TriageSer
 	}
 }
 
-// Start reaps orphaned jobs, seeds missing schedules, and launches the
-// polling goroutine; overdue jobs (including seeds) run immediately.
+// Start reaps orphans, seeds missing schedules, and launches the poll loop.
 func (w *Worker) Start(ctx context.Context) error {
 	if err := w.Queue.Reap(ctx); err != nil {
 		return fmt.Errorf("queue reap: %w", err)
@@ -107,8 +104,7 @@ func (w *Worker) Poke() {
 	}
 }
 
-// Enqueue queues kind to run now and wakes the worker. It satisfies the API
-// handlers' JobsService.
+// Enqueue queues kind to run now and wakes the worker.
 func (w *Worker) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, bool, error) {
 	job, running, err := w.Queue.Enqueue(ctx, kind)
 	if err == nil && !running {
@@ -138,9 +134,8 @@ func (w *Worker) drain(ctx context.Context) {
 	}
 }
 
-// run executes one claimed job and records the outcome. The finish write
-// survives ctx cancellation so a graceful shutdown records the retry instead
-// of leaving the row running.
+// run executes one claimed job; the finish write survives ctx cancellation
+// so shutdown records the retry instead of leaving the row running.
 func (w *Worker) run(ctx context.Context, job models.Job) {
 	log := gutillog.FromContext(ctx)
 	log.Infow("job started", "job", job.ID, "kind", job.Kind, "attempt", job.Attempts)
@@ -170,8 +165,7 @@ func (w *Worker) run(ctx context.Context, job models.Job) {
 	}
 }
 
-// execute dispatches to the job implementation, converting panics into
-// errors so one bad pass can't kill the worker.
+// execute dispatches to the job implementation, converting panics to errors.
 func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -193,8 +187,8 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 	return "", fmt.Errorf("unknown job kind %q", kind)
 }
 
-// formatAccountErrors flattens sync's per-account error map for last_error,
-// sorted for stable output.
+// formatAccountErrors flattens sync's per-account errors, sorted for
+// stable output.
 func formatAccountErrors(errs map[string]string) string {
 	if len(errs) == 0 {
 		return ""

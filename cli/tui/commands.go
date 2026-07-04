@@ -194,6 +194,7 @@ func syncCalendars(c *Client) tea.Cmd {
 		if err != nil {
 			return errMsg{err}
 		}
+		var pollErr error
 		deadline := timeNow().Add(triagePollTimeout)
 		for timeNow().Before(deadline) {
 			time.Sleep(triagePollInterval)
@@ -201,8 +202,10 @@ func syncCalendars(c *Client) tea.Cmd {
 			j, err := c.GetJob(pollCtx, job.ID)
 			cancel()
 			if err != nil {
+				pollErr = err // transient poll errors retry, but keep the last one
 				continue
 			}
+			pollErr = nil
 			switch j.Status {
 			case "succeeded":
 				if j.LastError != "" {
@@ -212,6 +215,9 @@ func syncCalendars(c *Client) tea.Cmd {
 			case "failed":
 				return errMsg{fmt.Errorf("sync failed: %s", j.LastError)}
 			}
+		}
+		if pollErr != nil {
+			return errMsg{fmt.Errorf("sync status unknown: %w", pollErr)}
 		}
 		return statusMsg("sync still running…")
 	}

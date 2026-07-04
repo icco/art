@@ -295,9 +295,8 @@ type EmailMessage struct {
 	ReconciledAt *time.Time `json:"reconciled_at,omitempty"`
 }
 
-// Job is one queued, running, or finished unit of background work. The
-// partial unique index keeps at most one pending job per kind; recurrence
-// chains a new pending row when a job reaches a terminal status.
+// Job is one unit of queued background work; the partial unique index
+// allows only one pending job per kind.
 type Job struct {
 	Base
 	Kind        JobKind    `gorm:"type:varchar(16);not null;check:kind IN ('sync','planner','triage');index:idx_jobs_one_pending,unique,where:status = 'pending'" json:"kind"`

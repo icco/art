@@ -1,6 +1,4 @@
-// Package queue implements the Postgres-backed job queue and worker that
-// replaced the in-memory cron scheduler; see
-// docs/superpowers/specs/2026-07-04-db-job-queue-design.md.
+// Package queue runs art's background jobs from a Postgres-backed queue.
 package queue
 
 import (
@@ -42,14 +40,12 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// nextSlot returns the next top-of-hour grid slot after t, in UTC. All kinds
-// recur hourly; scheduled runs stay pinned to the clock grid.
+// nextSlot returns the next top-of-hour slot after t, in UTC.
 func nextSlot(t time.Time) time.Time {
 	return t.UTC().Truncate(time.Hour).Add(time.Hour)
 }
 
-// onePendingConflict targets the partial unique index so inserting a pending
-// job is a no-op when one already exists for that kind.
+// onePendingConflict makes inserting a pending job a no-op when one exists.
 var onePendingConflict = clause.OnConflict{
 	Columns:     []clause.Column{{Name: "kind"}},
 	TargetWhere: clause.Where{Exprs: []clause.Expression{gorm.Expr("status = 'pending'")}},
@@ -84,9 +80,8 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 	return job, running, err
 }
 
-// claimSQL atomically claims the next due pending job; kinds sharing a slot
-// run in sync → planner → triage order. SKIP LOCKED keeps a second worker or
-// replica safe even though today there is only one.
+// claimSQL claims the next due job; kinds sharing a slot run
+// sync → planner → triage.
 const claimSQL = `
 UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1, updated_at = now()
 WHERE id = (
@@ -111,10 +106,9 @@ func (q *Queue) Claim(ctx context.Context) (models.Job, error) {
 	return job, nil
 }
 
-// Finish records a claimed job's outcome and returns the status it ended in.
-// Retryable failures go back to pending with backoff; terminal outcomes chain
-// the next recurring run onto the hourly grid. A warning (e.g. sync's
-// per-account errors) is kept in last_error without failing the job.
+// Finish records a claimed job's outcome: retryable failures go back to
+// pending with backoff, terminal outcomes chain the next run onto the grid,
+// and a warning lands in last_error without failing the job.
 func (q *Queue) Finish(ctx context.Context, job models.Job, runErr error, warning string) (models.JobStatus, error) {
 	now := q.now()
 	if runErr != nil && job.Attempts < job.MaxAttempts {
@@ -146,8 +140,7 @@ func (q *Queue) Finish(ctx context.Context, job models.Job, runErr error, warnin
 	return status, err
 }
 
-// Seed ensures every kind has a pending job; missing ones are due
-// immediately, so a fresh deploy runs its first pass at boot.
+// Seed ensures every kind has a pending job; missing ones are due immediately.
 func (q *Queue) Seed(ctx context.Context) error {
 	for _, kind := range models.JobKinds() {
 		job := models.Job{Kind: kind, Status: models.JobPending, RunAt: q.now(), MaxAttempts: maxAttempts}
@@ -158,9 +151,8 @@ func (q *Queue) Seed(ctx context.Context) error {
 	return nil
 }
 
-// Reap resets running jobs to pending-now. Called at boot, before the worker
-// starts: in a single-process deployment any running row belongs to a dead
-// process. Attempts were counted at claim, so crash loops still exhaust
+// Reap resets running jobs to pending: at boot any running row belongs to a
+// dead process. Attempts were counted at claim, so crash loops still exhaust
 // MaxAttempts.
 func (q *Queue) Reap(ctx context.Context) error {
 	return q.DB.WithContext(ctx).Model(&models.Job{}).Where("status = ?", models.JobRunning).Updates(map[string]any{
