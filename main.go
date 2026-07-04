@@ -1,4 +1,4 @@
-// Command art-server is the API/cron entry point for the art service.
+// Command art-server is the API and job-queue entry point for the art service.
 package main
 
 import (
@@ -15,10 +15,10 @@ import (
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
-	"github.com/icco/art/lib/cron"
 	"github.com/icco/art/lib/db"
 	"github.com/icco/art/lib/email"
 	"github.com/icco/art/lib/oauth"
+	"github.com/icco/art/lib/queue"
 	gutillog "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
 )
@@ -61,19 +61,21 @@ func run(log *zap.SugaredLogger) error {
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
+	worker := queue.New(gdb, syncRunner, planner, triager)
+
 	h := &handlers.Handlers{
-		Cfg:     cfg,
-		DB:      gdb,
-		OAuth:   oauthFlow,
-		Sync:    syncRunner,
-		Planner: planner,
-		Triage:  triager,
+		Cfg:    cfg,
+		DB:     gdb,
+		OAuth:  oauthFlow,
+		Jobs:   worker,
+		Triage: triager,
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 
-	scheduler := cron.New(syncRunner, planner, triager)
-	scheduler.Start(ctx)
-	defer scheduler.Stop()
+	if err := worker.Start(ctx); err != nil {
+		return err
+	}
+	defer worker.Stop()
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -98,7 +100,7 @@ func run(log *zap.SugaredLogger) error {
 		log.Infow("shutdown signal received")
 	case err := <-serveErr:
 		if err != nil {
-			stop() // cancel cron so scheduler.Stop() isn't stuck behind a pass
+			stop() // cancel the worker so worker.Stop() isn't stuck behind a job
 			return err
 		}
 	}
