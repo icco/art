@@ -34,7 +34,7 @@ func TestEmailsList(t *testing.T) {
 	}
 
 	w = do(t, r, "GET", "/emails?account=work", nil)
-	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	mustDecode(t, w, &got)
 	if w.Code != http.StatusOK || len(got) != 1 {
 		t.Fatalf("account filter: code=%d len=%d", w.Code, len(got))
 	}

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -127,7 +126,7 @@ func TestDeleteReloadsList(t *testing.T) {
 			atomic.AddInt32(&projectGets, 1)
 			mu.Lock()
 			defer mu.Unlock()
-			_ = json.NewEncoder(w).Encode(projects)
+			encodeJSON(t, w, projects)
 		case r.Method == http.MethodDelete:
 			atomic.AddInt32(&deletes, 1)
 			mu.Lock()

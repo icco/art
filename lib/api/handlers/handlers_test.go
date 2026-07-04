@@ -138,7 +138,7 @@ func TestProjectsCRUD(t *testing.T) {
 		t.Fatalf("create: %d %s", w.Code, w.Body)
 	}
 	var created models.Project
-	_ = json.Unmarshal(w.Body.Bytes(), &created)
+	mustDecode(t, w, &created)
 	if created.ID == "" {
 		t.Fatal("missing id")
 	}
@@ -148,7 +148,7 @@ func TestProjectsCRUD(t *testing.T) {
 		t.Fatalf("list: %d", w.Code)
 	}
 	var list []models.Project
-	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	mustDecode(t, w, &list)
 	if len(list) != 1 {
 		t.Fatalf("expected 1 project, got %d", len(list))
 	}
@@ -203,7 +203,7 @@ func TestHabitsCRUD(t *testing.T) {
 		t.Fatalf("create: %d %s", w.Code, w.Body)
 	}
 	var hb models.Habit
-	_ = json.Unmarshal(w.Body.Bytes(), &hb)
+	mustDecode(t, w, &hb)
 
 	w = do(t, r, "PATCH", "/habits/"+hb.ID, map[string]any{"block_duration_minutes": 45})
 	if w.Code != http.StatusOK {
@@ -296,7 +296,7 @@ func TestAgentRunsList(t *testing.T) {
 		t.Fatalf("filtered list: %d %s", w.Code, w.Body)
 	}
 	var triage []models.AgentRun
-	_ = json.Unmarshal(w.Body.Bytes(), &triage)
+	mustDecode(t, w, &triage)
 	if len(triage) != 1 || triage[0].Kind != models.AgentRunTriage || triage[0].Status != models.AgentRunFailed {
 		t.Fatalf("expected newest triage run only, got %+v", triage)
 	}
@@ -358,7 +358,7 @@ func TestEventsPrimaryFilter(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("list: %d %s", w.Code, w.Body)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &all)
+	mustDecode(t, w, &all)
 	if len(all) != 3 {
 		t.Fatalf("unfiltered: want 3 events, got %d", len(all))
 	}
@@ -369,7 +369,7 @@ func TestEventsPrimaryFilter(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("primary list: %d %s", w.Code, w.Body)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &primary)
+	mustDecode(t, w, &primary)
 	if len(primary) != 2 {
 		t.Fatalf("primary: want 2 events, got %d", len(primary))
 	}
@@ -398,7 +398,7 @@ func TestEventsPrimaryFilterNoAccounts(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("primary list: %d %s", w.Code, w.Body)
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	mustDecode(t, w, &out)
 	if len(out) != 0 {
 		t.Fatalf("no primary calendars: want 0 events, got %d", len(out))
 	}
@@ -430,7 +430,7 @@ func TestEmailReverse(t *testing.T) {
 		t.Fatalf("reverse: %d %s", w.Code, w.Body)
 	}
 	var got models.EmailMessage
-	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	mustDecode(t, w, &got)
 	if !got.Reversed {
 		t.Error("expected reversed row in response")
 	}
@@ -455,7 +455,7 @@ func TestEmailSetArchived(t *testing.T) {
 		t.Fatalf("set archived: %d %s", w.Code, w.Body)
 	}
 	var got models.EmailMessage
-	_ = json.Unmarshal(w.Body.Bytes(), &got)
+	mustDecode(t, w, &got)
 	if !got.Archived {
 		t.Error("expected archived row in response")
 	}

@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -116,8 +115,8 @@ func TestDigestArchiveKeyIsInstant(t *testing.T) {
 func TestSetEmailArchivedCommand(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		_ = json.NewEncoder(w).Encode(Email{ID: "e1", Archived: false})
+		decodeRequest(t, r.Body, &gotBody)
+		encodeJSON(t, w, Email{ID: "e1", Archived: false})
 	}))
 	defer server.Close()
 

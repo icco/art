@@ -14,15 +14,21 @@ import (
 	"google.golang.org/api/option"
 )
 
+// writeJSON encodes a fake Gmail response, failing the test on error.
+func writeJSON(t *testing.T, w http.ResponseWriter, v any) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("encode fake response: %v", err)
+	}
+}
+
 // fakeGmailServer routes the handful of Gmail endpoints the triager uses to
 // canned responses, so the API-calling Client methods can be exercised without
 // real credentials.
 func fakeGmailServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	write := func(w http.ResponseWriter, v any) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(v)
-	}
+	write := func(w http.ResponseWriter, v any) { writeJSON(t, w, v) }
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p := r.URL.Path
 		switch {
@@ -32,7 +38,9 @@ func fakeGmailServer(t *testing.T) *httptest.Server {
 			write(w, &gmail.ListLabelsResponse{Labels: []*gmail.Label{{Id: "L_TRIAGED", Name: LabelTriaged}}})
 		case strings.HasSuffix(p, "/labels") && r.Method == http.MethodPost:
 			var in gmail.Label
-			_ = json.NewDecoder(r.Body).Decode(&in)
+			if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+				t.Errorf("decode label request: %v", err)
+			}
 			write(w, &gmail.Label{Id: "NEW_" + in.Name, Name: in.Name})
 		case strings.HasSuffix(p, "/messages"):
 			write(w, &gmail.ListMessagesResponse{Messages: []*gmail.Message{{Id: "m1"}, {Id: "m2"}}})
@@ -72,8 +80,7 @@ func TestEnsureLabelsCaseInsensitive(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/labels") && r.Method == http.MethodGet:
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(&gmail.ListLabelsResponse{Labels: []*gmail.Label{
+			writeJSON(t, w, &gmail.ListLabelsResponse{Labels: []*gmail.Label{
 				{Id: "L1", Name: "art/triaged"},
 				{Id: "L2", Name: "ART/Archived"},
 				{Id: "L3", Name: LabelReply},
@@ -113,8 +120,7 @@ func TestEnsureLabelsCreateConflict(t *testing.T) {
 					{Id: "L3", Name: LabelReply},
 				}
 			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(resp)
+			writeJSON(t, w, resp)
 		case strings.HasSuffix(r.URL.Path, "/labels") && r.Method == http.MethodPost:
 			http.Error(w, `{"error": {"code": 409, "message": "Label name exists or conflicts"}}`, http.StatusConflict)
 		default:
@@ -139,8 +145,7 @@ func htmlMessageServer(t *testing.T, html string) *httptest.Server {
 			http.Error(w, "unexpected "+r.URL.Path, http.StatusNotFound)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(&gmail.Message{
+		writeJSON(t, w, &gmail.Message{
 			Id: "m1", InternalDate: 1700000000000,
 			Payload: &gmail.MessagePart{
 				MimeType: "text/html",
