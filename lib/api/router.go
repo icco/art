@@ -72,6 +72,8 @@ func NewRouter(d Deps) http.Handler {
 		r.Post("/emails/{id}/reverse", d.H.EmailReverse)
 		r.Post("/emails/{id}/archive", d.H.EmailSetArchived)
 		r.Get("/agent-runs", d.H.AgentRunsList)
+		r.Get("/jobs", d.H.JobsList)
+		r.Get("/jobs/{id}", d.H.JobsGet)
 		r.Post("/sync", d.H.SyncRun)
 		r.Post("/replan", d.H.ReplanRun)
 		r.Post("/triage/run", d.H.TriageRun)

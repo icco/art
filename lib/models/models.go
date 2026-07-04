@@ -35,6 +35,12 @@ type AgentRunStatus string
 // share the agent_runs table.
 type AgentRunKind string
 
+// JobKind identifies which recurring task a queued Job runs.
+type JobKind string
+
+// JobStatus is the lifecycle status of a Job.
+type JobStatus string
+
 // EmailCategory is the triage classification assigned to an email.
 type EmailCategory string
 
@@ -68,6 +74,15 @@ const (
 	AgentRunPlanner AgentRunKind = "planner"
 	AgentRunTriage  AgentRunKind = "triage"
 
+	JobSync    JobKind = "sync"
+	JobPlanner JobKind = "planner"
+	JobTriage  JobKind = "triage"
+
+	JobPending   JobStatus = "pending"
+	JobRunning   JobStatus = "running"
+	JobSucceeded JobStatus = "succeeded"
+	JobFailed    JobStatus = "failed"
+
 	// EmailArchive marks bulk mail to remove from the inbox.
 	EmailArchive EmailCategory = "archive"
 	// EmailReply marks mail that wants a response; art labels it Art/Reply for
@@ -97,6 +112,21 @@ func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit
 
 // Valid reports whether k is one of the recognised AgentRunKind values.
 func (k AgentRunKind) Valid() bool { return k == AgentRunPlanner || k == AgentRunTriage }
+
+// Valid reports whether k is one of the recognised JobKind values.
+func (k JobKind) Valid() bool { return k == JobSync || k == JobPlanner || k == JobTriage }
+
+// Valid reports whether s is one of the recognised JobStatus values.
+func (s JobStatus) Valid() bool {
+	switch s {
+	case JobPending, JobRunning, JobSucceeded, JobFailed:
+		return true
+	}
+	return false
+}
+
+// JobKinds returns all job kinds in their within-slot execution order.
+func JobKinds() []JobKind { return []JobKind{JobSync, JobPlanner, JobTriage} }
 
 // Valid reports whether c is one of the recognised EmailCategory values.
 func (c EmailCategory) Valid() bool {
@@ -265,6 +295,20 @@ type EmailMessage struct {
 	ReconciledAt *time.Time `json:"reconciled_at,omitempty"`
 }
 
+// Job is one unit of queued background work; the partial unique index
+// allows only one pending job per kind.
+type Job struct {
+	Base
+	Kind        JobKind    `gorm:"type:varchar(16);not null;check:kind IN ('sync','planner','triage');index:idx_jobs_one_pending,unique,where:status = 'pending'" json:"kind"`
+	Status      JobStatus  `gorm:"type:varchar(16);not null;default:'pending';index;check:status IN ('pending','running','succeeded','failed')" json:"status"`
+	RunAt       time.Time  `gorm:"not null;index" json:"run_at"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
+	Attempts    int        `gorm:"not null;default:0" json:"attempts"`
+	MaxAttempts int        `gorm:"not null;default:4" json:"max_attempts"`
+	LastError   string     `gorm:"type:text;not null;default:''" json:"last_error"`
+}
+
 // All returns the models in AutoMigrate order.
 func All() []any {
 	return []any{
@@ -277,5 +321,6 @@ func All() []any {
 		&SyncState{},
 		&AgentRun{},
 		&EmailMessage{},
+		&Job{},
 	}
 }

@@ -3,11 +3,28 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+// encodeJSON writes a fake server response, failing the test on error.
+func encodeJSON(t *testing.T, w io.Writer, v any) {
+	t.Helper()
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		t.Errorf("encode fake response: %v", err)
+	}
+}
+
+// decodeRequest parses a fake server request body, failing the test on error.
+func decodeRequest(t *testing.T, r io.Reader, v any) {
+	t.Helper()
+	if err := json.NewDecoder(r).Decode(v); err != nil {
+		t.Errorf("decode request body: %v", err)
+	}
+}
 
 // stubClient builds a Client pointed at server with a pre-cached fake token so
 // idToken() doesn't try to shell out to gcloud.
@@ -23,7 +40,7 @@ func TestClientListProjects(t *testing.T) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			t.Errorf("missing auth header")
 		}
-		_ = json.NewEncoder(w).Encode([]Project{{ID: "1", Name: "A"}})
+		encodeJSON(t, w, []Project{{ID: "1", Name: "A"}})
 	}))
 	defer server.Close()
 	got, err := stubClient(server).ListProjects(context.Background())
@@ -41,7 +58,7 @@ func TestClientCreateProject(t *testing.T) {
 			t.Errorf("method: %s", r.Method)
 		}
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(Project{ID: "2", Name: "B"})
+		encodeJSON(t, w, Project{ID: "2", Name: "B"})
 	}))
 	defer server.Close()
 	got, err := stubClient(server).CreateProject(context.Background(), Project{Name: "B"})
@@ -68,9 +85,9 @@ func TestClientHabits(t *testing.T) {
 		switch r.Method {
 		case "POST":
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(Habit{ID: "h1", Name: "Walk"})
+			encodeJSON(t, w, Habit{ID: "h1", Name: "Walk"})
 		case "GET":
-			_ = json.NewEncoder(w).Encode([]Habit{{ID: "h1"}})
+			encodeJSON(t, w, []Habit{{ID: "h1"}})
 		case "DELETE":
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -93,11 +110,16 @@ func TestClientEventsReplanSync(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/events":
-			_ = json.NewEncoder(w).Encode([]Event{{ID: "e1"}})
+			encodeJSON(t, w, []Event{{ID: "e1"}})
 		case "/replan":
-			_ = json.NewEncoder(w).Encode(map[string]string{"status": "started"})
+			encodeJSON(t, w, map[string]string{"status": "started"})
 		case "/sync":
-			w.WriteHeader(http.StatusOK)
+			encodeJSON(t, w, map[string]any{
+				"status": "queued",
+				"job":    Job{ID: "j1", Kind: "sync", Status: "pending"},
+			})
+		case "/jobs/j1":
+			encodeJSON(t, w, Job{ID: "j1", Kind: "sync", Status: "succeeded"})
 		}
 	}))
 	defer server.Close()
@@ -110,8 +132,13 @@ func TestClientEventsReplanSync(t *testing.T) {
 	if err != nil || status != "started" {
 		t.Fatalf("replan: %q %v", status, err)
 	}
-	if err := c.Sync(ctx); err != nil {
-		t.Fatal(err)
+	job, err := c.Sync(ctx)
+	if err != nil || job.ID != "j1" {
+		t.Fatalf("sync: job=%+v err=%v", job, err)
+	}
+	got, err := c.GetJob(ctx, job.ID)
+	if err != nil || got.Status != "succeeded" {
+		t.Fatalf("get job: job=%+v err=%v", got, err)
 	}
 }
 
@@ -119,7 +146,7 @@ func TestClientListEventsPrimaryOnly(t *testing.T) {
 	var gotCalendar string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotCalendar = r.URL.Query().Get("calendar")
-		_ = json.NewEncoder(w).Encode([]Event{{ID: "e1"}})
+		encodeJSON(t, w, []Event{{ID: "e1"}})
 	}))
 	defer server.Close()
 	if _, err := stubClient(server).ListEvents(context.Background(), time.Now(), time.Now().Add(time.Hour)); err != nil {
@@ -135,8 +162,8 @@ func TestClientSetEmailArchived(t *testing.T) {
 	var gotBody map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotMethod = r.URL.Path, r.Method
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-		_ = json.NewEncoder(w).Encode(Email{ID: "e1", Archived: true})
+		decodeRequest(t, r.Body, &gotBody)
+		encodeJSON(t, w, Email{ID: "e1", Archived: true})
 	}))
 	defer server.Close()
 
