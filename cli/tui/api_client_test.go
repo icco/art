@@ -155,6 +155,60 @@ func TestClientSetEmailArchived(t *testing.T) {
 	}
 }
 
+// The server decodes mutations with DisallowUnknownFields, so request bodies
+// must not carry server-computed fields like id or scheduled_hours.
+func TestClientMutationBodiesMatchServerContract(t *testing.T) {
+	allowedProject := map[string]bool{
+		"name": true, "description": true, "kind": true,
+		"target_hours": true, "deadline": true, "status": true,
+	}
+	allowedHabit := map[string]bool{
+		"name": true, "description": true, "kind": true,
+		"block_duration_minutes": true, "cadence": true, "active": true,
+	}
+	cases := []struct {
+		name    string
+		allowed map[string]bool
+		call    func(*Client) error
+	}{
+		{"create project", allowedProject, func(c *Client) error {
+			_, err := c.CreateProject(context.Background(), Project{Name: "B", Kind: "work", TargetHours: 1})
+			return err
+		}},
+		{"update project", allowedProject, func(c *Client) error {
+			_, err := c.UpdateProject(context.Background(), "p1", Project{Name: "B", Kind: "work", TargetHours: 1})
+			return err
+		}},
+		{"create habit", allowedHabit, func(c *Client) error {
+			_, err := c.CreateHabit(context.Background(), Habit{Name: "Walk", BlockDurationMinutes: 30, Cadence: Cadence{Type: "per_week", Count: 3}})
+			return err
+		}},
+		{"update habit", allowedHabit, func(c *Client) error {
+			_, err := c.UpdateHabit(context.Background(), "h1", Habit{Name: "Walk", BlockDurationMinutes: 30, Cadence: Cadence{Type: "per_week", Count: 3}})
+			return err
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var rec capturedReq
+			server := captureServer(t, &rec, http.StatusOK)
+			defer server.Close()
+			if err := tc.call(stubClient(server)); err != nil {
+				t.Fatal(err)
+			}
+			var body map[string]any
+			if err := json.Unmarshal(rec.body, &body); err != nil {
+				t.Fatalf("decode body: %v (%s)", err, rec.body)
+			}
+			for k := range body {
+				if !tc.allowed[k] {
+					t.Errorf("request body contains field %q the server rejects", k)
+				}
+			}
+		})
+	}
+}
+
 func TestClientErrorResponse(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusBadRequest)

@@ -122,21 +122,23 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	return nil
 }
 
-// Project mirrors the API project resource.
+// Project mirrors the API project resource. ID and ScheduledHours are
+// server-computed and omitted from requests: the API rejects unknown fields.
 type Project struct {
-	ID             string     `json:"id"`
+	ID             string     `json:"id,omitempty"`
 	Name           string     `json:"name"`
 	Description    string     `json:"description"`
 	Kind           string     `json:"kind"`
 	TargetHours    float64    `json:"target_hours"`
-	ScheduledHours float64    `json:"scheduled_hours"`
+	ScheduledHours float64    `json:"scheduled_hours,omitempty"`
 	Deadline       *time.Time `json:"deadline,omitempty"`
 	Status         string     `json:"status"`
 }
 
-// Habit mirrors the API habit resource.
+// Habit mirrors the API habit resource. ID is server-computed and omitted
+// from requests: the API rejects unknown fields.
 type Habit struct {
-	ID                   string  `json:"id"`
+	ID                   string  `json:"id,omitempty"`
 	Name                 string  `json:"name"`
 	Description          string  `json:"description"`
 	Kind                 string  `json:"kind"`
