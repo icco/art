@@ -215,8 +215,9 @@ func TestReapResetsRunning(t *testing.T) {
 	if got.Status != models.JobPending || !got.RunAt.Equal(now) || got.Attempts != 2 {
 		t.Fatalf("want orphan pending now with attempts kept, got %+v", got)
 	}
-	q.DB.First(&got, "id = ?", done.ID)
-	if got.Status != models.JobSucceeded {
-		t.Fatalf("terminal rows must be untouched, got %+v", got)
+	var doneRow models.Job
+	q.DB.First(&doneRow, "id = ?", done.ID)
+	if doneRow.Status != models.JobSucceeded {
+		t.Fatalf("terminal rows must be untouched, got %+v", doneRow)
 	}
 }

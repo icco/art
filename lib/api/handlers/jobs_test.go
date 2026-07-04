@@ -2,8 +2,8 @@ package handlers_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +12,12 @@ import (
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
 )
+
+// enqueueResp mirrors the trigger endpoints' 202 body.
+type enqueueResp struct {
+	Status string     `json:"status"`
+	Job    models.Job `json:"job"`
+}
 
 // fakeJobs records enqueues and returns a canned job.
 type fakeJobs struct {
@@ -45,8 +51,10 @@ func TestTriggerEndpointsEnqueue(t *testing.T) {
 		if w.Code != http.StatusAccepted {
 			t.Fatalf("%s: %d %s", path, w.Code, w.Body)
 		}
-		if !strings.Contains(w.Body.String(), `"status":"queued"`) {
-			t.Fatalf("%s: want queued status, got %s", path, w.Body)
+		var resp enqueueResp
+		mustDecode(t, w, &resp)
+		if resp.Status != "queued" || resp.Job.Kind != kind {
+			t.Fatalf("%s: want queued %s job, got %+v", path, kind, resp)
 		}
 		found := false
 		for _, k := range f.kinds {
@@ -64,8 +72,13 @@ func TestTriggerReportsRunning(t *testing.T) {
 	f := &fakeJobs{running: true}
 	h := &handlers.Handlers{DB: testdb.Open(t), Jobs: f}
 	w := do(t, jobsRouter(h), "POST", "/replan", nil)
-	if w.Code != http.StatusAccepted || !strings.Contains(w.Body.String(), `"status":"running"`) {
-		t.Fatalf("want running status, got %d %s", w.Code, w.Body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("replan: %d %s", w.Code, w.Body)
+	}
+	var resp enqueueResp
+	mustDecode(t, w, &resp)
+	if resp.Status != "running" {
+		t.Fatalf("want running status, got %+v", resp)
 	}
 }
 
@@ -79,8 +92,12 @@ func TestJobsListAndGet(t *testing.T) {
 	}
 
 	w := do(t, r, "GET", "/jobs?kind=sync&status=succeeded", nil)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), job.ID) {
+	if w.Code != http.StatusOK {
 		t.Fatalf("list: %d %s", w.Code, w.Body)
+	}
+	var list []models.Job
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list) != 1 || list[0].ID != job.ID {
+		t.Fatalf("list: err=%v body=%s", err, w.Body)
 	}
 	w = do(t, r, "GET", "/jobs?kind=bogus", nil)
 	if w.Code != http.StatusBadRequest {
@@ -92,8 +109,13 @@ func TestJobsListAndGet(t *testing.T) {
 	}
 
 	w = do(t, r, "GET", "/jobs/"+job.ID, nil)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"kind":"sync"`) {
+	if w.Code != http.StatusOK {
 		t.Fatalf("get: %d %s", w.Code, w.Body)
+	}
+	var got models.Job
+	mustDecode(t, w, &got)
+	if got.ID != job.ID || got.Kind != models.JobSync {
+		t.Fatalf("get: want %s, got %+v", job.ID, got)
 	}
 	missing := "00000000-0000-0000-0000-000000000000"
 	w = do(t, r, "GET", "/jobs/"+missing, nil)
