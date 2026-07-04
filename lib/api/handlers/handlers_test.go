@@ -32,7 +32,6 @@ func newRouter(h *handlers.Handlers) http.Handler {
 	r.Get("/sessions", h.SessionsList)
 	r.Get("/emails", h.EmailsList)
 	r.Get("/agent-runs", h.AgentRunsList)
-	r.Post("/triage/run", h.TriageRun)
 	return r
 }
 
@@ -410,7 +409,6 @@ type stubTriage struct {
 	err error
 }
 
-func (s stubTriage) RunAll(context.Context) error { return nil }
 func (s stubTriage) Reverse(context.Context, string) (models.EmailMessage, error) {
 	return s.msg, s.err
 }

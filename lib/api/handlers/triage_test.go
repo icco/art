@@ -1,101 +1,14 @@
 package handlers_test
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/icco/art/lib/api/handlers"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
 )
-
-// fakeTriage signals that RunAll was invoked without doing any work.
-type fakeTriage struct{ called chan struct{} }
-
-func (f *fakeTriage) RunAll(context.Context) error {
-	select {
-	case f.called <- struct{}{}:
-	default:
-	}
-	return nil
-}
-
-func (f *fakeTriage) Reverse(context.Context, string) (models.EmailMessage, error) {
-	return models.EmailMessage{}, nil
-}
-
-func (f *fakeTriage) SetArchived(context.Context, string, bool) (models.EmailMessage, error) {
-	return models.EmailMessage{}, nil
-}
-
-// panickyTriage signals RunAll was invoked, then panics.
-type panickyTriage struct{ fakeTriage }
-
-func (p *panickyTriage) RunAll(context.Context) error {
-	select {
-	case p.called <- struct{}{}:
-	default:
-	}
-	panic("triage kaboom")
-}
-
-// chi's Recoverer only protects request goroutines.
-func TestTriageRunRecoversPanic(t *testing.T) {
-	db := testdb.Open(t)
-	pt := &panickyTriage{fakeTriage{called: make(chan struct{}, 1)}}
-	h := &handlers.Handlers{DB: db, Triage: pt}
-	r := newRouter(h)
-
-	w := do(t, r, "POST", "/triage/run", nil)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("triage run: %d %s", w.Code, w.Body)
-	}
-	select {
-	case <-pt.called:
-	case <-time.After(2 * time.Second):
-		t.Fatal("detached RunAll was not invoked")
-	}
-	// Let the goroutine unwind; without recovery the panic crashes the
-	// test process right here.
-	time.Sleep(50 * time.Millisecond)
-}
-
-func TestTriageRun(t *testing.T) {
-	db := testdb.Open(t)
-	ft := &fakeTriage{called: make(chan struct{}, 1)}
-	h := &handlers.Handlers{DB: db, Triage: ft}
-	r := newRouter(h)
-
-	// Fresh trigger: returns 202 immediately and runs the pass detached.
-	w := do(t, r, "POST", "/triage/run", nil)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("triage run: %d %s", w.Code, w.Body)
-	}
-	select {
-	case <-ft.called:
-	case <-time.After(2 * time.Second):
-		t.Error("detached RunAll was not invoked")
-	}
-
-	// Guard: a recent running triage run makes a second trigger a no-op.
-	if err := db.Create(&models.AgentRun{
-		Kind: models.AgentRunTriage, Status: models.AgentRunRunning, StartedAt: time.Now(),
-	}).Error; err != nil {
-		t.Fatal(err)
-	}
-	w = do(t, r, "POST", "/triage/run", nil)
-	if w.Code != http.StatusAccepted {
-		t.Fatalf("guard: %d %s", w.Code, w.Body)
-	}
-	var resp map[string]string
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
-	if resp["status"] != "running" {
-		t.Fatalf("expected status running, got %q", resp["status"])
-	}
-}
 
 func TestEmailsList(t *testing.T) {
 	db := testdb.Open(t)

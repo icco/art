@@ -18,33 +18,27 @@ const maxBodyBytes = 64 * 1024
 
 // Handlers wires HTTP handlers to their service dependencies.
 type Handlers struct {
-	Cfg     *config.Config
-	DB      *gorm.DB
-	OAuth   OAuthService
-	Sync    SyncService
-	Planner PlannerService
-	Triage  TriageService
+	Cfg    *config.Config
+	DB     *gorm.DB
+	OAuth  OAuthService
+	Jobs   JobsService
+	Triage TriageService
 }
 
 // OAuthService decouples handlers from the concrete oauth package and lets
-// tests pass a fake implementation. SyncService and PlannerService do the
-// same for sync runs and planner runs respectively.
+// tests pass a fake implementation. JobsService and TriageService do the
+// same for the job queue and email actions respectively.
 type (
 	OAuthService interface {
 		StartURL(account string) (string, error)
 		Complete(ctx context.Context, state, code string) (account, email string, err error)
 	}
-	// SyncService runs upstream calendar/data syncs.
-	SyncService interface {
-		RunAll(ctx context.Context) (perAccountErrors map[string]string, err error)
+	// JobsService enqueues background jobs; satisfied by *queue.Worker.
+	JobsService interface {
+		Enqueue(ctx context.Context, kind models.JobKind) (job models.Job, running bool, err error)
 	}
-	// PlannerService executes a planner pass.
-	PlannerService interface {
-		Run(ctx context.Context) error
-	}
-	// TriageService executes an email-triage pass across all linked accounts.
+	// TriageService applies email actions; the triage pass itself runs as a job.
 	TriageService interface {
-		RunAll(ctx context.Context) error
 		Reverse(ctx context.Context, id string) (models.EmailMessage, error)
 		SetArchived(ctx context.Context, id string, archived bool) (models.EmailMessage, error)
 	}
