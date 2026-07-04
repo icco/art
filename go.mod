@@ -16,7 +16,7 @@ require (
 	go.uber.org/zap v1.28.0
 	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
-	google.golang.org/adk v1.4.0
+	google.golang.org/adk v1.5.0
 	google.golang.org/api v0.287.0
 	google.golang.org/genai v1.62.0
 	gorm.io/datatypes v1.2.7
