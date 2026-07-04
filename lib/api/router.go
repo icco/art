@@ -39,7 +39,7 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(gutillog.Middleware(d.Log.Desugar()))
 	r.Use(middleware.Recoverer)
 	r.Use(secureHeaders)
-	r.Use(httprate.Limit(rpm, time.Minute, httprate.WithKeyFuncs(clientIPKey)))
+	r.Use(httprate.LimitBy(rpm, time.Minute, clientIPKey))
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// Public: health, the Google OAuth redirect, and Prometheus scrape.
