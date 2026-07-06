@@ -10,6 +10,7 @@ type keyMap struct {
 	Projects  key.Binding
 	Habits    key.Binding
 	Digest    key.Binding
+	Sessions  key.Binding
 
 	PrevWeek key.Binding
 	NextWeek key.Binding
@@ -36,6 +37,7 @@ func defaultKeyMap() keyMap {
 		Projects:  key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "projects")),
 		Habits:    key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "habits")),
 		Digest:    key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "digest")),
+		Sessions:  key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "sessions")),
 
 		PrevWeek: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev week")),
 		NextWeek: key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next week")),
@@ -74,7 +76,7 @@ func (h pageHelp) ShortHelp() []key.Binding {
 // global run/back/help/quit keys.
 func (h pageHelp) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits, h.keys.Digest},
+		{h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits, h.keys.Digest, h.keys.Sessions},
 		h.page,
 		{h.keys.Replan, h.keys.Sync, h.keys.Triage, h.keys.Back, h.keys.Help, h.keys.Quit},
 	}

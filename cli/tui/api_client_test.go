@@ -80,6 +80,21 @@ func TestClientDeleteProject(t *testing.T) {
 	}
 }
 
+func TestClientDeleteSession(t *testing.T) {
+	var gotPath string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.Method + " " + r.URL.Path
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	if err := stubClient(server).DeleteSession(context.Background(), "sess-1"); err != nil {
+		t.Fatal(err)
+	}
+	if gotPath != "DELETE /sessions/sess-1" {
+		t.Fatalf("got %q, want DELETE /sessions/sess-1", gotPath)
+	}
+}
+
 func TestClientHabits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
