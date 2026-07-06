@@ -25,6 +25,25 @@ func TestJobKindValid(t *testing.T) {
 	}
 }
 
+func TestJobKindsIncludeReconcileInOrder(t *testing.T) {
+	got := models.JobKinds()
+	want := []models.JobKind{models.JobSync, models.JobReconcile, models.JobPlanner, models.JobTriage}
+	if len(got) != len(want) {
+		t.Fatalf("JobKinds len = %d, want %d (%v)", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("JobKinds[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if !models.JobReconcile.Valid() {
+		t.Fatal("JobReconcile should be Valid")
+	}
+	if !models.AgentRunReconcile.Valid() {
+		t.Fatal("AgentRunReconcile should be Valid")
+	}
+}
+
 func TestJobOnePendingPerKind(t *testing.T) {
 	db := testdb.Open(t)
 	mk := func(status models.JobStatus) error {

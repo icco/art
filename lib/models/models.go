@@ -71,12 +71,14 @@ const (
 	AgentRunSucceeded AgentRunStatus = "succeeded"
 	AgentRunFailed    AgentRunStatus = "failed"
 
-	AgentRunPlanner AgentRunKind = "planner"
-	AgentRunTriage  AgentRunKind = "triage"
+	AgentRunPlanner   AgentRunKind = "planner"
+	AgentRunTriage    AgentRunKind = "triage"
+	AgentRunReconcile AgentRunKind = "reconcile"
 
-	JobSync    JobKind = "sync"
-	JobPlanner JobKind = "planner"
-	JobTriage  JobKind = "triage"
+	JobSync      JobKind = "sync"
+	JobReconcile JobKind = "reconcile"
+	JobPlanner   JobKind = "planner"
+	JobTriage    JobKind = "triage"
 
 	JobPending   JobStatus = "pending"
 	JobRunning   JobStatus = "running"
@@ -111,10 +113,14 @@ func (s SlotKind) Valid() bool { return s == SlotWork || s == SlotPersonal }
 func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit }
 
 // Valid reports whether k is one of the recognised AgentRunKind values.
-func (k AgentRunKind) Valid() bool { return k == AgentRunPlanner || k == AgentRunTriage }
+func (k AgentRunKind) Valid() bool {
+	return k == AgentRunPlanner || k == AgentRunTriage || k == AgentRunReconcile
+}
 
 // Valid reports whether k is one of the recognised JobKind values.
-func (k JobKind) Valid() bool { return k == JobSync || k == JobPlanner || k == JobTriage }
+func (k JobKind) Valid() bool {
+	return k == JobSync || k == JobReconcile || k == JobPlanner || k == JobTriage
+}
 
 // Valid reports whether s is one of the recognised JobStatus values.
 func (s JobStatus) Valid() bool {
@@ -126,7 +132,7 @@ func (s JobStatus) Valid() bool {
 }
 
 // JobKinds returns all job kinds in their within-slot execution order.
-func JobKinds() []JobKind { return []JobKind{JobSync, JobPlanner, JobTriage} }
+func JobKinds() []JobKind { return []JobKind{JobSync, JobReconcile, JobPlanner, JobTriage} }
 
 // Valid reports whether c is one of the recognised EmailCategory values.
 func (c EmailCategory) Valid() bool {
@@ -220,6 +226,8 @@ type Session struct {
 	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_event_lookup,priority:3" json:"google_event_id,omitempty"`
 	ScheduledStart time.Time     `gorm:"not null;index" json:"scheduled_start"`
 	ScheduledEnd   time.Time     `gorm:"not null" json:"scheduled_end"`
+	PlannedStart   *time.Time    `json:"planned_start,omitempty"`
+	PlannedEnd     *time.Time    `json:"planned_end,omitempty"`
 	ActualStart    *time.Time    `json:"actual_start,omitempty"`
 	ActualEnd      *time.Time    `json:"actual_end,omitempty"`
 	Status         SessionStatus `gorm:"type:varchar(16);not null;default:'planned';check:status IN ('planned','happened','skipped','moved')" json:"status"`
@@ -255,7 +263,7 @@ type SyncState struct {
 // outcome. Kind discriminates which agent produced the row.
 type AgentRun struct {
 	Base
-	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'planner';index;check:kind IN ('planner','triage')" json:"kind"`
+	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'planner';index;check:kind IN ('planner','triage','reconcile')" json:"kind"`
 	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started" json:"started_at"`
 	EndedAt   *time.Time     `json:"ended_at,omitempty"`
 	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')" json:"status"`
@@ -299,7 +307,7 @@ type EmailMessage struct {
 // allows only one pending job per kind.
 type Job struct {
 	Base
-	Kind        JobKind    `gorm:"type:varchar(16);not null;check:kind IN ('sync','planner','triage');index:idx_jobs_one_pending,unique,where:status = 'pending'" json:"kind"`
+	Kind        JobKind    `gorm:"type:varchar(16);not null;check:kind IN ('sync','reconcile','planner','triage');index:idx_jobs_one_pending,unique,where:status = 'pending'" json:"kind"`
 	Status      JobStatus  `gorm:"type:varchar(16);not null;default:'pending';index;check:status IN ('pending','running','succeeded','failed')" json:"status"`
 	RunAt       time.Time  `gorm:"not null;index" json:"run_at"`
 	StartedAt   *time.Time `json:"started_at,omitempty"`
