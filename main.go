@@ -19,6 +19,7 @@ import (
 	"github.com/icco/art/lib/email"
 	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/queue"
+	"github.com/icco/art/lib/reconcile"
 	gutillog "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
 )
@@ -58,10 +59,11 @@ func run(log *zap.SugaredLogger) error {
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
 
 	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow, TZ: cfg.Timezone}
+	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone}
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 
-	worker := queue.New(gdb, syncRunner, planner, triager)
+	worker := queue.New(gdb, syncRunner, reconciler, planner, triager)
 
 	h := &handlers.Handlers{
 		Cfg:      cfg,
