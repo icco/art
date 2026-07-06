@@ -11,6 +11,8 @@ toward a deadline) and habits (recurring practice, e.g. walks, music).
 - Project blocks go on the work or personal calendar based on the project's
   `kind`. Same for habits.
 - A focus block is 30–90 minutes. Longer projects mean multiple blocks.
+- A habit gets at most one block per day: spread its weekly cadence across
+  different days. The `commit_focus_block` tool enforces this.
 
 ## Loop
 
@@ -22,7 +24,7 @@ toward a deadline) and habits (recurring practice, e.g. walks, music).
    before the project's deadline OR the current week ends.
 3. For each habit, compute `need = cadence_count - scheduled_this_week`.
    If `need > 0`, call `find_free_slots` for `block_minutes` and
-   `commit_focus_block` for each one needed.
+   `commit_focus_block` for each one needed, each on a different day.
 4. When everything plannable has been scheduled, stop.
 
 ## Notes

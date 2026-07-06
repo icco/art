@@ -394,6 +394,23 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	if overlapsAny(start, end, busy) {
 		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s overlaps an existing event or planned session", args.StartISO, args.EndISO)
 	}
+
+	// A habit gets at most one block per calendar day (config tz): its weekly
+	// cadence must spread across days rather than stack onto one.
+	if source == models.SourceHabit {
+		dayStart := startOfDay(start, c.p.Cfg.Timezone)
+		var n int64
+		if err := c.p.DB.WithContext(ctx).Model(&models.Session{}).
+			Where("source = ? AND source_id = ? AND status <> ? AND scheduled_start >= ? AND scheduled_start < ?",
+				models.SourceHabit, args.SourceID, models.SessionSkipped, dayStart, dayStart.AddDate(0, 0, 1)).
+			Count(&n).Error; err != nil {
+			return commitFocusBlockResult{}, err
+		}
+		if n > 0 {
+			return commitFocusBlockResult{}, fmt.Errorf("habit already has a block on %s; at most one per day", dayStart.Format("2006-01-02"))
+		}
+	}
+
 	client, err := c.clientFor(ctx, acct)
 	if err != nil {
 		return commitFocusBlockResult{}, fmt.Errorf("account %s not linked: %w", acct, err)
