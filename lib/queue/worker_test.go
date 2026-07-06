@@ -34,6 +34,17 @@ func (f *fakeServices) Run(context.Context) error {
 	return f.plannerErr
 }
 
+// reconcileFake records the reconcile pass in the shared order slice.
+type reconcileFake struct{ f *fakeServices }
+
+func (r reconcileFake) Run(context.Context) error {
+	r.f.order = append(r.f.order, "reconcile")
+	if r.f.panicKind == models.JobReconcile {
+		panic("reconcile kaboom")
+	}
+	return nil
+}
+
 // triageFake separates triage's RunAll signature from sync's.
 type triageFake struct{ f *fakeServices }
 
@@ -47,7 +58,7 @@ func (t triageFake) RunAll(context.Context) error {
 
 func testWorker(t *testing.T, f *fakeServices) *Worker {
 	t.Helper()
-	return New(testdb.Open(t), f, f, triageFake{f})
+	return New(testdb.Open(t), f, reconcileFake{f}, f, triageFake{f})
 }
 
 func TestDrainRunsDueJobsInOrder(t *testing.T) {
@@ -58,15 +69,20 @@ func TestDrainRunsDueJobsInOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.drain(ctx)
-	want := []string{"sync", "planner", "triage"}
-	if len(f.order) != 3 || f.order[0] != want[0] || f.order[1] != want[1] || f.order[2] != want[2] {
+	want := []string{"sync", "reconcile", "planner", "triage"}
+	if len(f.order) != len(want) {
 		t.Fatalf("want %v, got %v", want, f.order)
+	}
+	for i := range want {
+		if f.order[i] != want[i] {
+			t.Fatalf("want %v, got %v", want, f.order)
+		}
 	}
 	var pending, succeeded int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobPending).Count(&pending)
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&succeeded)
-	if pending != 3 || succeeded != 3 {
-		t.Fatalf("want 3 succeeded + 3 chained pending, got %d/%d", succeeded, pending)
+	if pending != 4 || succeeded != 4 {
+		t.Fatalf("want 4 succeeded + 4 chained pending, got %d/%d", succeeded, pending)
 	}
 }
 
@@ -134,7 +150,7 @@ func TestStartSeedsAndStops(t *testing.T) {
 	for time.Now().Before(deadline) {
 		var n int64
 		w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-		if n == 3 {
+		if n == 4 {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -142,8 +158,8 @@ func TestStartSeedsAndStops(t *testing.T) {
 	w.Stop()
 	var n int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-	if n != 3 {
-		t.Fatalf("want 3 succeeded jobs after start, got %d", n)
+	if n != 4 {
+		t.Fatalf("want 4 succeeded jobs after start, got %d", n)
 	}
 }
 

@@ -213,8 +213,8 @@ func TestSeedCreatesMissingOnly(t *testing.T) {
 	}
 	var jobs []models.Job
 	q.DB.Where("status = ?", models.JobPending).Order("kind").Find(&jobs)
-	if len(jobs) != 3 {
-		t.Fatalf("want 3 pending jobs, got %d", len(jobs))
+	if len(jobs) != 4 {
+		t.Fatalf("want 4 pending jobs, got %d", len(jobs))
 	}
 	for _, j := range jobs {
 		if j.Kind == models.JobSync {
