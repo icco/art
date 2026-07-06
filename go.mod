@@ -13,6 +13,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/icco/gutil v0.0.0-20260630032459-de9e83f7fbb2
 	github.com/prometheus/client_golang v1.23.2
+	github.com/unrolled/secure v1.17.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0

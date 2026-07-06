@@ -13,6 +13,7 @@ import (
 	"github.com/icco/art/lib/config"
 	gutillog "github.com/icco/gutil/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/unrolled/secure"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -34,11 +35,27 @@ func NewRouter(d Deps) http.Handler {
 		rpm = defaultRateLimitRPM
 	}
 
+	// Security headers via unrolled/secure, matching the other icco services.
+	// SSLProxyHeaders makes HSTS fire when a trusting reverse proxy terminates
+	// TLS. The CSP is tight for an API but allows the inline style on the OAuth
+	// callback page (the only HTML this service serves).
+	secureMiddleware := secure.New(secure.Options{
+		SSLRedirect:           false,
+		SSLProxyHeaders:       map[string]string{"X-Forwarded-Proto": "https"},
+		STSSeconds:            63072000,
+		STSIncludeSubdomains:  true,
+		FrameDeny:             true,
+		ContentTypeNosniff:    true,
+		BrowserXssFilter:      true,
+		ReferrerPolicy:        "no-referrer",
+		ContentSecurityPolicy: "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'",
+	})
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(gutillog.Middleware(d.Log.Desugar()))
 	r.Use(middleware.Recoverer)
-	r.Use(secureHeaders)
+	r.Use(secureMiddleware.Handler)
 	r.Use(httprate.LimitBy(rpm, time.Minute, clientIPKey))
 	r.Use(middleware.Timeout(60 * time.Second))
 
@@ -81,23 +98,6 @@ func NewRouter(d Deps) http.Handler {
 	})
 
 	return r
-}
-
-// secureHeaders sets API security headers. No CORS (no browser clients); HSTS
-// only over HTTPS. CSP allows the inline style on the OAuth callback page.
-func secureHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("X-Frame-Options", "DENY")
-		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy",
-			"default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'")
-		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-			h.Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // clientIPKey keys the rate limiter. X-Forwarded-For is only trusted from the
