@@ -152,6 +152,32 @@ func TestFinishTerminalChainsNextSlot(t *testing.T) {
 	}
 }
 
+func TestFinishChainsPerKindGrid(t *testing.T) {
+	cases := []struct {
+		kind models.JobKind
+		want time.Time
+	}{
+		{models.JobReconcile, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		{models.JobSync, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		{models.JobPlanner, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
+		{models.JobTriage, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
+	}
+	for _, c := range cases {
+		q, _ := fixedQueue(t)
+		job := mustJob(t, q, c.kind, models.JobRunning, q.now(), 1)
+		if _, err := q.Finish(context.Background(), job, nil, ""); err != nil {
+			t.Fatalf("%s finish: %v", c.kind, err)
+		}
+		var next models.Job
+		if err := q.DB.First(&next, "kind = ? AND status = ?", c.kind, models.JobPending).Error; err != nil {
+			t.Fatalf("%s chained job: %v", c.kind, err)
+		}
+		if !next.RunAt.Equal(c.want) {
+			t.Fatalf("%s chained to %v, want %v", c.kind, next.RunAt, c.want)
+		}
+	}
+}
+
 func TestFinishSuccessKeepsWarning(t *testing.T) {
 	q, now := fixedQueue(t)
 	job := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
@@ -187,8 +213,8 @@ func TestSeedCreatesMissingOnly(t *testing.T) {
 	}
 	var jobs []models.Job
 	q.DB.Where("status = ?", models.JobPending).Order("kind").Find(&jobs)
-	if len(jobs) != 3 {
-		t.Fatalf("want 3 pending jobs, got %d", len(jobs))
+	if len(jobs) != 4 {
+		t.Fatalf("want 4 pending jobs, got %d", len(jobs))
 	}
 	for _, j := range jobs {
 		if j.Kind == models.JobSync {

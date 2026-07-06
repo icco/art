@@ -32,6 +32,10 @@ type (
 	PlannerService interface {
 		Run(ctx context.Context) error
 	}
+	// ReconcileService heals sessions against the synced calendar mirror.
+	ReconcileService interface {
+		Run(ctx context.Context) error
+	}
 	// TriageService executes an email-triage pass.
 	TriageService interface {
 		RunAll(ctx context.Context) error
@@ -40,10 +44,11 @@ type (
 
 // Worker polls the queue and runs jobs one at a time.
 type Worker struct {
-	Queue   *Queue
-	Sync    SyncService
-	Planner PlannerService
-	Triage  TriageService
+	Queue     *Queue
+	Sync      SyncService
+	Reconcile ReconcileService
+	Planner   PlannerService
+	Triage    TriageService
 
 	poke     chan struct{}
 	stop     chan struct{}
@@ -52,14 +57,15 @@ type Worker struct {
 }
 
 // New returns a Worker over db ready to be Start()ed.
-func New(db *gorm.DB, sync SyncService, planner PlannerService, triage TriageService) *Worker {
+func New(db *gorm.DB, sync SyncService, reconcile ReconcileService, planner PlannerService, triage TriageService) *Worker {
 	return &Worker{
-		Queue:   &Queue{DB: db},
-		Sync:    sync,
-		Planner: planner,
-		Triage:  triage,
-		poke:    make(chan struct{}, 1),
-		stop:    make(chan struct{}),
+		Queue:     &Queue{DB: db},
+		Sync:      sync,
+		Reconcile: reconcile,
+		Planner:   planner,
+		Triage:    triage,
+		poke:      make(chan struct{}, 1),
+		stop:      make(chan struct{}),
 	}
 }
 
@@ -179,6 +185,8 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 			return "", runErr
 		}
 		return formatAccountErrors(accountErrs), nil
+	case models.JobReconcile:
+		return "", w.Reconcile.Run(ctx)
 	case models.JobPlanner:
 		return "", w.Planner.Run(ctx)
 	case models.JobTriage:
