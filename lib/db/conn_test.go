@@ -79,6 +79,40 @@ func TestMigrateEmailCategories(t *testing.T) {
 	}
 }
 
+func TestMigrateKindConstraints(t *testing.T) {
+	db := testdb.Open(t)
+
+	// Simulate a pre-migration database whose kind constraints predate
+	// 'reconcile'.
+	db.Exec(`ALTER TABLE jobs DROP CONSTRAINT IF EXISTS chk_jobs_kind`)
+	if err := db.Exec(`ALTER TABLE jobs ADD CONSTRAINT chk_jobs_kind CHECK (kind IN ('sync','planner','triage'))`).Error; err != nil {
+		t.Fatalf("narrow jobs constraint: %v", err)
+	}
+	db.Exec(`ALTER TABLE agent_runs DROP CONSTRAINT IF EXISTS chk_agent_runs_kind`)
+	if err := db.Exec(`ALTER TABLE agent_runs ADD CONSTRAINT chk_agent_runs_kind CHECK (kind IN ('planner','triage'))`).Error; err != nil {
+		t.Fatalf("narrow agent_runs constraint: %v", err)
+	}
+	if err := db.Create(&models.Job{Kind: models.JobReconcile, Status: models.JobPending, MaxAttempts: 4}).Error; err == nil {
+		t.Fatal("pre-migration constraint should reject a reconcile job")
+	}
+
+	if err := migrateKindConstraints(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	if err := db.Create(&models.Job{Kind: models.JobReconcile, Status: models.JobPending, MaxAttempts: 4}).Error; err != nil {
+		t.Fatalf("reconcile job should insert after migration: %v", err)
+	}
+	if err := db.Create(&models.AgentRun{Kind: models.AgentRunReconcile, Status: models.AgentRunRunning}).Error; err != nil {
+		t.Fatalf("reconcile agent run should insert after migration: %v", err)
+	}
+
+	// Idempotent: a second run detects the widened constraint and no-ops.
+	if err := migrateKindConstraints(db); err != nil {
+		t.Fatalf("second migrate: %v", err)
+	}
+}
+
 func TestDropArtCalendarColumn(t *testing.T) {
 	db := testdb.Open(t)
 

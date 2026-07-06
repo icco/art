@@ -44,7 +44,44 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	if err := dropArtCalendarColumn(db); err != nil {
 		return nil, fmt.Errorf("drop art calendar column: %w", err)
 	}
+	if err := migrateKindConstraints(db); err != nil {
+		return nil, fmt.Errorf("migrate kind constraints: %w", err)
+	}
 	return db, nil
+}
+
+// migrateKindConstraints widens the jobs.kind and agent_runs.kind CHECK
+// constraints to admit 'reconcile'. AutoMigrate creates a missing constraint but
+// never alters an existing one, so this is explicit. Idempotent: skips when the
+// constraint already admits reconcile, safe on a fresh database.
+func migrateKindConstraints(db *gorm.DB) error {
+	widen := func(model any, table, name, def string) error {
+		m := db.Migrator()
+		if m.HasConstraint(model, name) {
+			var cur string
+			if err := db.Raw(
+				`SELECT pg_get_constraintdef(oid) FROM pg_constraint
+				 WHERE conname = ? AND conrelid = ?::regclass`, name, table).
+				Scan(&cur).Error; err != nil {
+				return err
+			}
+			if cur != "" && strings.Contains(cur, "reconcile") {
+				return nil
+			}
+			if err := m.DropConstraint(model, name); err != nil {
+				return err
+			}
+		}
+		return db.Exec(def).Error
+	}
+	if err := widen(&models.Job{}, "jobs", "chk_jobs_kind",
+		`ALTER TABLE jobs ADD CONSTRAINT chk_jobs_kind
+		 CHECK (kind IN ('sync','reconcile','planner','triage'))`); err != nil {
+		return err
+	}
+	return widen(&models.AgentRun{}, "agent_runs", "chk_agent_runs_kind",
+		`ALTER TABLE agent_runs ADD CONSTRAINT chk_agent_runs_kind
+		 CHECK (kind IN ('planner','triage','reconcile'))`)
 }
 
 // dropSessionGlobalEventIndex retires the table-global unique index on
