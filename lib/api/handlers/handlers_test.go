@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,6 +31,7 @@ func newRouter(h *handlers.Handlers) http.Handler {
 	r.Put("/working-hours", h.WorkingHoursReplace)
 	r.Get("/events", h.EventsList)
 	r.Get("/sessions", h.SessionsList)
+	r.Delete("/sessions/{id}", h.SessionsDelete)
 	r.Get("/emails", h.EmailsList)
 	r.Get("/agent-runs", h.AgentRunsList)
 	return r
@@ -48,6 +50,72 @@ func do(t *testing.T, h http.Handler, method, path string, body any) *httptest.R
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	return w
+}
+
+type fakeCalendar struct {
+	calls []string
+	err   error
+}
+
+func (f *fakeCalendar) DeleteManaged(_ context.Context, account models.AccountKind, calendarID, eventID string) error {
+	f.calls = append(f.calls, string(account)+" "+calendarID+" "+eventID)
+	return f.err
+}
+
+func TestSessionsDelete(t *testing.T) {
+	db := testdb.Open(t)
+	eid := "evt-1"
+	sess := models.Session{
+		Source: models.SourceHabit, SourceID: "00000000-0000-0000-0000-000000000001",
+		AccountKind: models.AccountPersonal, CalendarID: "primary", GoogleEventID: &eid,
+		ScheduledStart: time.Now(), ScheduledEnd: time.Now().Add(time.Hour), Status: models.SessionPlanned,
+	}
+	if err := db.Create(&sess).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	cal := &fakeCalendar{}
+	r := newRouter(&handlers.Handlers{DB: db, Calendar: cal})
+
+	if w := do(t, r, "DELETE", "/sessions/"+sess.ID, nil); w.Code != http.StatusNoContent {
+		t.Fatalf("delete: got %d, want 204", w.Code)
+	}
+	if len(cal.calls) != 1 || cal.calls[0] != "personal primary evt-1" {
+		t.Fatalf("calendar delete calls = %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", sess.ID).Count(&n)
+	if n != 0 {
+		t.Fatalf("session row not deleted: %d remain", n)
+	}
+
+	// Unknown id -> 404.
+	if w := do(t, r, "DELETE", "/sessions/00000000-0000-0000-0000-0000000000ff", nil); w.Code != http.StatusNotFound {
+		t.Fatalf("missing session: got %d, want 404", w.Code)
+	}
+}
+
+func TestSessionsDeleteCalendarErrorKeepsRow(t *testing.T) {
+	db := testdb.Open(t)
+	eid := "evt-2"
+	sess := models.Session{
+		Source: models.SourceHabit, SourceID: "00000000-0000-0000-0000-000000000002",
+		AccountKind: models.AccountPersonal, CalendarID: "primary", GoogleEventID: &eid,
+		ScheduledStart: time.Now(), ScheduledEnd: time.Now().Add(time.Hour), Status: models.SessionPlanned,
+	}
+	if err := db.Create(&sess).Error; err != nil {
+		t.Fatal(err)
+	}
+	r := newRouter(&handlers.Handlers{DB: db, Calendar: &fakeCalendar{err: errors.New("boom")}})
+
+	if w := do(t, r, "DELETE", "/sessions/"+sess.ID, nil); w.Code != http.StatusInternalServerError {
+		t.Fatalf("calendar failure: got %d, want 500", w.Code)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", sess.ID).Count(&n)
+	if n != 1 {
+		t.Fatalf("row should survive a calendar-delete failure, remain=%d", n)
+	}
 }
 
 func TestHabitCadenceTypeValidated(t *testing.T) {
