@@ -40,9 +40,20 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// nextSlot returns the next top-of-hour slot after t, in UTC.
-func nextSlot(t time.Time) time.Time {
-	return t.UTC().Truncate(time.Hour).Add(time.Hour)
+// cadence is how often a kind repeats: sync and reconcile run every 10 minutes
+// so manual calendar edits are caught quickly; planner and triage run hourly.
+func cadence(kind models.JobKind) time.Duration {
+	switch kind {
+	case models.JobSync, models.JobReconcile:
+		return 10 * time.Minute
+	default:
+		return time.Hour
+	}
+}
+
+// nextGrid returns the next interval-aligned slot after t, in UTC.
+func nextGrid(t time.Time, interval time.Duration) time.Time {
+	return t.UTC().Truncate(interval).Add(interval)
 }
 
 // onePendingConflict makes inserting a pending job a no-op when one exists.
@@ -81,13 +92,13 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 }
 
 // claimSQL claims the next due job; kinds sharing a slot run
-// sync → planner → triage.
+// sync → reconcile → planner → triage.
 const claimSQL = `
 UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1, updated_at = now()
 WHERE id = (
 	SELECT id FROM jobs
 	WHERE status = 'pending' AND run_at <= now()
-	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'planner' THEN 1 ELSE 2 END
+	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'reconcile' THEN 1 WHEN 'planner' THEN 2 ELSE 3 END
 	LIMIT 1
 	FOR UPDATE SKIP LOCKED
 )
@@ -134,7 +145,7 @@ func (q *Queue) Finish(ctx context.Context, job models.Job, runErr error, warnin
 		}).Error; err != nil {
 			return err
 		}
-		next := models.Job{Kind: job.Kind, Status: models.JobPending, RunAt: nextSlot(now), MaxAttempts: maxAttempts}
+		next := models.Job{Kind: job.Kind, Status: models.JobPending, RunAt: nextGrid(now, cadence(job.Kind)), MaxAttempts: maxAttempts}
 		return tx.Clauses(onePendingConflict).Create(&next).Error
 	})
 	return status, err
