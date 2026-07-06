@@ -64,11 +64,12 @@ func run(log *zap.SugaredLogger) error {
 	worker := queue.New(gdb, syncRunner, planner, triager)
 
 	h := &handlers.Handlers{
-		Cfg:    cfg,
-		DB:     gdb,
-		OAuth:  oauthFlow,
-		Jobs:   worker,
-		Triage: triager,
+		Cfg:      cfg,
+		DB:       gdb,
+		OAuth:    oauthFlow,
+		Jobs:     worker,
+		Triage:   triager,
+		Calendar: &calendar.Manager{OAuth: oauthFlow},
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 

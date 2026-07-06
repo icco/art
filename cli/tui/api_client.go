@@ -274,6 +274,12 @@ func (c *Client) ListSessions(ctx context.Context, from, to time.Time) ([]Sessio
 	return out, c.do(ctx, "GET", "/sessions"+q, nil, &out)
 }
 
+// DeleteSession retracts the planned session with the given id; the server
+// deletes its Art-managed calendar event too.
+func (c *Client) DeleteSession(ctx context.Context, id string) error {
+	return c.do(ctx, "DELETE", "/sessions/"+id, nil, nil)
+}
+
 // ListRuns returns recent agent runs, newest first. kind is optional
 // ("planner" or "triage"); limit caps the count.
 func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentRun, error) {

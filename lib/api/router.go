@@ -68,6 +68,7 @@ func NewRouter(d Deps) http.Handler {
 		r.Put("/working-hours", d.H.WorkingHoursReplace)
 		r.Get("/events", d.H.EventsList)
 		r.Get("/sessions", d.H.SessionsList)
+		r.Delete("/sessions/{id}", d.H.SessionsDelete)
 		r.Get("/emails", d.H.EmailsList)
 		r.Post("/emails/{id}/reverse", d.H.EmailReverse)
 		r.Post("/emails/{id}/archive", d.H.EmailSetArchived)

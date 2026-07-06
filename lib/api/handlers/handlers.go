@@ -18,11 +18,12 @@ const maxBodyBytes = 64 * 1024
 
 // Handlers wires HTTP handlers to their service dependencies.
 type Handlers struct {
-	Cfg    *config.Config
-	DB     *gorm.DB
-	OAuth  OAuthService
-	Jobs   JobsService
-	Triage TriageService
+	Cfg      *config.Config
+	DB       *gorm.DB
+	OAuth    OAuthService
+	Jobs     JobsService
+	Triage   TriageService
+	Calendar CalendarService
 }
 
 // OAuthService and friends decouple handlers from the concrete oauth,
@@ -40,6 +41,11 @@ type (
 	TriageService interface {
 		Reverse(ctx context.Context, id string) (models.EmailMessage, error)
 		SetArchived(ctx context.Context, id string, archived bool) (models.EmailMessage, error)
+	}
+	// CalendarService retracts Art-managed calendar events; satisfied by
+	// *calendar.Manager.
+	CalendarService interface {
+		DeleteManaged(ctx context.Context, account models.AccountKind, calendarID, eventID string) error
 	}
 )
 

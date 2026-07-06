@@ -167,6 +167,17 @@ func updateHabit(c *Client, id string, h Habit) tea.Cmd {
 	}
 }
 
+func deleteSession(c *Client, id string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		if err := c.DeleteSession(ctx, id); err != nil {
+			return errMsg{err}
+		}
+		return statusMsg("session retracted")
+	}
+}
+
 func deleteHabit(c *Client, id string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := bg()

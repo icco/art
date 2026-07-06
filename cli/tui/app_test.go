@@ -163,3 +163,56 @@ func TestDeleteReloadsList(t *testing.T) {
 	tm.Type("q")
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
 }
+
+// TestSessionRetract navigates to the sessions page, retracts the selected
+// block with "d", and proves the DELETE is followed by a reload.
+func TestSessionRetract(t *testing.T) {
+	var mu sync.Mutex
+	sessions := []Session{{
+		ID: "s1", Source: "habit", SourceID: "h1", AccountKind: "personal",
+		ScheduledStart: time.Now(), ScheduledEnd: time.Now().Add(time.Hour), Status: "planned",
+	}}
+	var sessionGets, deletes int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/sessions":
+			atomic.AddInt32(&sessionGets, 1)
+			mu.Lock()
+			defer mu.Unlock()
+			encodeJSON(t, w, sessions)
+		case r.Method == http.MethodDelete && r.URL.Path == "/sessions/s1":
+			atomic.AddInt32(&deletes, 1)
+			mu.Lock()
+			sessions = nil
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			_, _ = w.Write([]byte("[]"))
+		}
+	}))
+	defer server.Close()
+
+	tm := testModel(t, server)
+	tm.Type("6") // sessions
+	waitForContains(t, tm, "planned")
+
+	tm.Type("d") // retract the selected session
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if atomic.LoadInt32(&sessionGets) >= 2 && atomic.LoadInt32(&deletes) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := atomic.LoadInt32(&deletes); got != 1 {
+		t.Fatalf("expected 1 DELETE /sessions/s1, got %d", got)
+	}
+	if got := atomic.LoadInt32(&sessionGets); got < 2 {
+		t.Fatalf("expected reload (>=2 GET /sessions), got %d — retract did not refresh", got)
+	}
+
+	tm.Type("q")
+	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
+}

@@ -14,10 +14,11 @@ const (
 	pageProjects
 	pageHabits
 	pageDigest
+	pageSessions
 )
 
 // pageOrder is the tab order used by the header and number keys.
-var pageOrder = []pageID{pageDashboard, pageCalendar, pageProjects, pageHabits, pageDigest}
+var pageOrder = []pageID{pageDashboard, pageCalendar, pageProjects, pageHabits, pageDigest, pageSessions}
 
 func (p pageID) String() string {
 	switch p {
@@ -31,6 +32,8 @@ func (p pageID) String() string {
 		return "habits"
 	case pageDigest:
 		return "digest"
+	case pageSessions:
+		return "sessions"
 	default:
 		return "?"
 	}

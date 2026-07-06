@@ -49,6 +49,7 @@ func newRootWithClient(cfg Config, c *Client, isDark bool) rootModel {
 		pageProjects:  newProjectsPage(c, isDark),
 		pageHabits:    newHabitsPage(c, isDark),
 		pageDigest:    newDigestPage(c, isDark),
+		pageSessions:  newSessionsPage(c, isDark),
 	}
 	return rootModel{
 		cfg:    cfg,
@@ -126,6 +127,8 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.navigate(pageHabits)
 	case key.Matches(k, m.keys.Digest):
 		return m.navigate(pageDigest)
+	case key.Matches(k, m.keys.Sessions):
+		return m.navigate(pageSessions)
 	case key.Matches(k, m.keys.Back):
 		if len(m.stack) > 1 {
 			return m.pop()
