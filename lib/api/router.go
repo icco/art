@@ -36,9 +36,8 @@ func NewRouter(d Deps) http.Handler {
 	}
 
 	// Security headers via unrolled/secure, matching the other icco services.
-	// SSLProxyHeaders makes HSTS fire when a trusting reverse proxy terminates
-	// TLS. The CSP is tight for an API but allows the inline style on the OAuth
-	// callback page (the only HTML this service serves).
+	// The CSP allows the inline style on the OAuth callback page (the only HTML
+	// this service serves).
 	secureMiddleware := secure.New(secure.Options{
 		SSLRedirect:           false,
 		SSLProxyHeaders:       map[string]string{"X-Forwarded-Proto": "https"},

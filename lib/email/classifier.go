@@ -94,11 +94,9 @@ func parseClassification(text string) (Classification, error) {
 	return out, nil
 }
 
-// Fence markers delimit untrusted email content in the user prompt. The email
-// itself is attacker-controlled, so it is wrapped in these markers and the
-// model is told to treat everything between them as inert data — a
-// defense-in-depth measure against prompt injection (the structured enum output
-// and label-only action surface already bound the blast radius).
+// Fence markers delimit the attacker-controlled email in the prompt so the
+// model can be told to treat everything between them as data, not instructions
+// (defense-in-depth against prompt injection).
 const (
 	emailFenceBegin = "-----BEGIN UNTRUSTED EMAIL-----"
 	emailFenceEnd   = "-----END UNTRUSTED EMAIL-----"
@@ -128,9 +126,8 @@ func userPrompt(m *gmail.Message) string {
 	return b.String()
 }
 
-// fenceSafe neutralizes any attempt to forge the fence markers from within
-// attacker-controlled content, so the email body can't close the untrusted
-// block early and smuggle in instructions.
+// fenceSafe strips forged fence markers so the email body can't close the
+// untrusted block early and smuggle in instructions.
 func fenceSafe(s string) string {
 	s = strings.ReplaceAll(s, emailFenceBegin, "-----")
 	s = strings.ReplaceAll(s, emailFenceEnd, "-----")
