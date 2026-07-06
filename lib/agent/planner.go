@@ -79,6 +79,11 @@ func focusDescription(src models.SourceKind, id string) string {
 	return fmt.Sprintf("Scheduled by Art.\nSource: %s\nID: %s\n", src, id)
 }
 
+func startOfDay(t time.Time, tz *time.Location) time.Time {
+	local := t.In(tz)
+	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, tz)
+}
+
 func startOfWeek(t time.Time, tz *time.Location) time.Time {
 	local := t.In(tz)
 	wd := int(local.Weekday())

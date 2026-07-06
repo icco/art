@@ -306,6 +306,67 @@ func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
 	}
 }
 
+func TestCommitFocusBlockOneHabitPerDay(t *testing.T) {
+	c := newCycle(t)
+	c.ctx = context.Background()
+	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
+	tz := c.p.Cfg.Timezone
+
+	h := &models.Habit{
+		Name: "Walk", Kind: models.SlotPersonal, BlockDurationMinutes: 60,
+		Active: true, Cadence: datatypes.JSON(`{"type":"per_week","count":3}`),
+	}
+	if err := c.p.DB.Create(h).Error; err != nil {
+		t.Fatal(err)
+	}
+	for d := range 7 {
+		if err := c.p.DB.Create(&models.WorkingHour{
+			SlotKind: models.SlotPersonal, DayOfWeek: d, StartMinute: 0, EndMinute: 1440,
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	planFrom := PlanningStart(time.Now(), tz)
+	_, weekEnd := WeekWindow(time.Now(), tz)
+	// Use the first whole local day after planning start, so intra-day blocks
+	// are all in-window and share one calendar day.
+	day := startOfDay(planFrom, tz)
+	if !day.After(planFrom) {
+		day = day.AddDate(0, 0, 1)
+	}
+	if day.AddDate(0, 0, 1).After(weekEnd) {
+		t.Skip("too close to week end for a full in-window day")
+	}
+	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
+	commitHabit := func(start time.Time) error {
+		_, err := c.commitFocusBlock(nil, commitFocusBlockArgs{
+			Source: "habit", SourceID: h.ID, StartISO: iso(start), EndISO: iso(start.Add(time.Hour)),
+		})
+		return err
+	}
+
+	// The day's first habit block clears every invariant and only fails at the
+	// unlinked calendar client — the per-day guard must not block it.
+	if err := commitHabit(day.Add(10 * time.Hour)); err == nil || !contains(err.Error(), "not linked") {
+		t.Fatalf("first habit block should reach the calendar client, got: %v", err)
+	}
+	// Seed a planned session for the same habit on that day (the commit above
+	// failed at the client and never persisted one).
+	if err := c.p.DB.Create(&models.Session{
+		Source: models.SourceHabit, SourceID: h.ID, AccountKind: models.AccountPersonal,
+		CalendarID: "primary", ScheduledStart: day.Add(10 * time.Hour), ScheduledEnd: day.Add(11 * time.Hour),
+		Status: models.SessionPlanned,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A second, non-overlapping block for the same habit on the same day is
+	// rejected: at most one block per day per habit.
+	if err := commitHabit(day.Add(13 * time.Hour)); err == nil || !contains(err.Error(), "per day") {
+		t.Errorf("second same-day habit block: got %v, want error containing %q", err, "per day")
+	}
+}
+
 func TestInstruction(t *testing.T) {
 	c := newCycle(t)
 	got := c.instruction()
