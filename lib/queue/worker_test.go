@@ -11,11 +11,12 @@ import (
 )
 
 type fakeServices struct {
-	order      []string
-	syncErrs   map[string]string
-	syncErr    error
-	plannerErr error
-	panicKind  models.JobKind
+	order        []string
+	syncErrs     map[string]string
+	syncErr      error
+	plannerErr   error
+	reconcileErr error
+	panicKind    models.JobKind
 }
 
 func (f *fakeServices) RunAll(context.Context) (map[string]string, error) {
@@ -34,15 +35,13 @@ func (f *fakeServices) Run(context.Context) error {
 	return f.plannerErr
 }
 
-// reconcileFake records the reconcile pass in the shared order slice.
+// reconcileFake records the reconcile pass in the shared order slice. Reconcile
+// runs as the tail of the sync job, so its entry lands right after "sync".
 type reconcileFake struct{ f *fakeServices }
 
 func (r reconcileFake) Run(context.Context) error {
 	r.f.order = append(r.f.order, "reconcile")
-	if r.f.panicKind == models.JobReconcile {
-		panic("reconcile kaboom")
-	}
-	return nil
+	return r.f.reconcileErr
 }
 
 // triageFake separates triage's RunAll signature from sync's.
@@ -81,8 +80,29 @@ func TestDrainRunsDueJobsInOrder(t *testing.T) {
 	var pending, succeeded int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobPending).Count(&pending)
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&succeeded)
-	if pending != 4 || succeeded != 4 {
-		t.Fatalf("want 4 succeeded + 4 chained pending, got %d/%d", succeeded, pending)
+	if pending != 3 || succeeded != 3 {
+		t.Fatalf("want 3 succeeded + 3 chained pending, got %d/%d", succeeded, pending)
+	}
+}
+
+func TestDrainReconcileErrorFailsSync(t *testing.T) {
+	f := &fakeServices{reconcileErr: errors.New("mirror stale")}
+	w := testWorker(t, f)
+	ctx := context.Background()
+	if err := w.Queue.Seed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	w.drain(ctx)
+	// Reconcile runs as the sync job's tail, so its failure fails that job.
+	if len(f.order) < 2 || f.order[0] != "sync" || f.order[1] != "reconcile" {
+		t.Fatalf("sync must run reconcile as its tail, got %v", f.order)
+	}
+	var job models.Job
+	if err := w.Queue.DB.First(&job, "kind = ?", models.JobSync).Error; err != nil {
+		t.Fatal(err)
+	}
+	if job.Status != models.JobPending || job.LastError != "mirror stale" {
+		t.Fatalf("reconcile failure should fail the sync job, got %+v", job)
 	}
 }
 
@@ -150,7 +170,7 @@ func TestStartSeedsAndStops(t *testing.T) {
 	for time.Now().Before(deadline) {
 		var n int64
 		w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-		if n == 4 {
+		if n == 3 {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -158,8 +178,8 @@ func TestStartSeedsAndStops(t *testing.T) {
 	w.Stop()
 	var n int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-	if n != 4 {
-		t.Fatalf("want 4 succeeded jobs after start, got %d", n)
+	if n != 3 {
+		t.Fatalf("want 3 succeeded jobs after start, got %d", n)
 	}
 }
 

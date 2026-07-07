@@ -83,13 +83,18 @@ func TestHabitTargetCount(t *testing.T) {
 	now := time.Now()
 	weekEnd := now.Add(7 * 24 * time.Hour)
 	if got := habitTargetCount(models.Cadence{Type: "per_week", Count: 4}, now, weekEnd); got != 4 {
-		t.Fatalf("per_week: %d", got)
+		t.Fatalf("per_week over one week: %d", got)
 	}
 	if got := habitTargetCount(models.Cadence{Type: "per_day", Count: 1}, now, weekEnd); got < 6 || got > 8 {
 		t.Fatalf("per_day approximate: %d", got)
 	}
 	if got := habitTargetCount(models.Cadence{Type: "unknown", Count: 2}, now, weekEnd); got != 2 {
 		t.Fatalf("default branch: %d", got)
+	}
+	// Over a 30-day window a weekly cadence scales: 3/week × (30/7) ≈ 12.86 → 13.
+	monthEnd := now.Add(30 * 24 * time.Hour)
+	if got := habitTargetCount(models.Cadence{Type: "per_week", Count: 3}, now, monthEnd); got != 13 {
+		t.Fatalf("per_week over 30 days: got %d, want 13", got)
 	}
 }
 

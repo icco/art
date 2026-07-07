@@ -254,11 +254,7 @@ func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	planFrom := PlanningStart(time.Now(), tz)
-	_, weekEnd := WeekWindow(time.Now(), tz)
-	if weekEnd.Sub(planFrom) < 3*time.Hour {
-		t.Skip("too close to week end for deterministic in-window commits")
-	}
+	planFrom, _ := PlanWindow(time.Now(), tz)
 	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
 	commit := func(start, end time.Time) error {
 		_, err := c.commitFocusBlock(nil, commitFocusBlockArgs{
@@ -327,16 +323,15 @@ func TestCommitFocusBlockOneHabitPerDay(t *testing.T) {
 		}
 	}
 
-	planFrom := PlanningStart(time.Now(), tz)
-	_, weekEnd := WeekWindow(time.Now(), tz)
+	planFrom, windowEnd := PlanWindow(time.Now(), tz)
 	// Use the first whole local day after planning start, so intra-day blocks
 	// are all in-window and share one calendar day.
 	day := startOfDay(planFrom, tz)
 	if !day.After(planFrom) {
 		day = day.AddDate(0, 0, 1)
 	}
-	if day.AddDate(0, 0, 1).After(weekEnd) {
-		t.Skip("too close to week end for a full in-window day")
+	if day.AddDate(0, 0, 1).After(windowEnd) {
+		t.Skip("too close to window end for a full in-window day")
 	}
 	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
 	commitHabit := func(start time.Time) error {

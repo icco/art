@@ -40,12 +40,17 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// cadence is how often a kind repeats: sync and reconcile run every 10 minutes
-// so manual calendar edits are caught quickly; planner and triage run hourly.
+// cadence is how often a kind repeats: sync (which reconciles as its tail) runs
+// every 10 minutes so manual calendar edits are caught quickly; the planner
+// runs every 15 minutes and triage every 30.
 func cadence(kind models.JobKind) time.Duration {
 	switch kind {
-	case models.JobSync, models.JobReconcile:
+	case models.JobSync:
 		return 10 * time.Minute
+	case models.JobPlanner:
+		return 15 * time.Minute
+	case models.JobTriage:
+		return 30 * time.Minute
 	default:
 		return time.Hour
 	}
@@ -92,13 +97,13 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 }
 
 // claimSQL claims the next due job; kinds sharing a slot run
-// sync → reconcile → planner → triage.
+// sync → planner → triage.
 const claimSQL = `
 UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1, updated_at = now()
 WHERE id = (
 	SELECT id FROM jobs
 	WHERE status = 'pending' AND run_at <= now()
-	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'reconcile' THEN 1 WHEN 'planner' THEN 2 ELSE 3 END
+	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'planner' THEN 1 ELSE 2 END
 	LIMIT 1
 	FOR UPDATE SKIP LOCKED
 )
@@ -171,4 +176,16 @@ func (q *Queue) Reap(ctx context.Context) error {
 		"run_at":     q.now(),
 		"started_at": nil,
 	}).Error
+}
+
+// DropRetiredKinds deletes queued jobs whose kind is no longer served, so a
+// row left by a merged-away kind (e.g. the old standalone reconcile) can't be
+// claimed, fail as "unknown job kind", and re-chain itself forever.
+func (q *Queue) DropRetiredKinds(ctx context.Context) error {
+	kinds := models.JobKinds()
+	valid := make([]string, len(kinds))
+	for i, k := range kinds {
+		valid[i] = string(k)
+	}
+	return q.DB.WithContext(ctx).Where("kind NOT IN ?", valid).Delete(&models.Job{}).Error
 }

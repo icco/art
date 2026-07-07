@@ -8,6 +8,7 @@ import (
 
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
+	"gorm.io/gorm"
 )
 
 // fixedQueue pins the clock so grid and backoff math is assertable.
@@ -134,7 +135,8 @@ func TestFinishTerminalChainsNextSlot(t *testing.T) {
 	if err := q.DB.First(&next, "kind = ? AND status = ?", models.JobPlanner, models.JobPending).Error; err != nil {
 		t.Fatalf("chained job: %v", err)
 	}
-	wantSlot := time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)
+	// Planner runs every 15 min: from 10:20 the next grid slot is 10:30.
+	wantSlot := time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)
 	if !next.RunAt.Equal(wantSlot) {
 		t.Fatalf("want next run on grid %v, got %v", wantSlot, next.RunAt)
 	}
@@ -157,10 +159,11 @@ func TestFinishChainsPerKindGrid(t *testing.T) {
 		kind models.JobKind
 		want time.Time
 	}{
-		{models.JobReconcile, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		// From 10:20: sync every 10m → 10:30, planner every 15m → 10:30,
+		// triage every 30m → 10:30.
 		{models.JobSync, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
-		{models.JobPlanner, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
-		{models.JobTriage, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
+		{models.JobPlanner, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		{models.JobTriage, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
 	}
 	for _, c := range cases {
 		q, _ := fixedQueue(t)
@@ -213,8 +216,8 @@ func TestSeedCreatesMissingOnly(t *testing.T) {
 	}
 	var jobs []models.Job
 	q.DB.Where("status = ?", models.JobPending).Order("kind").Find(&jobs)
-	if len(jobs) != 4 {
-		t.Fatalf("want 4 pending jobs, got %d", len(jobs))
+	if len(jobs) != 3 {
+		t.Fatalf("want 3 pending jobs, got %d", len(jobs))
 	}
 	for _, j := range jobs {
 		if j.Kind == models.JobSync {
@@ -226,6 +229,21 @@ func TestSeedCreatesMissingOnly(t *testing.T) {
 		if !j.RunAt.Equal(now) {
 			t.Fatalf("seeded %s should be due now, got %v", j.Kind, j.RunAt)
 		}
+	}
+}
+
+func TestDropRetiredKinds(t *testing.T) {
+	q, now := fixedQueue(t)
+	stale := mustJob(t, q, models.JobKind("reconcile"), models.JobPending, now, 0)
+	keep := mustJob(t, q, models.JobSync, models.JobPending, now, 0)
+	if err := q.DropRetiredKinds(context.Background()); err != nil {
+		t.Fatalf("drop retired: %v", err)
+	}
+	if err := q.DB.First(&models.Job{}, "id = ?", stale.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("retired reconcile row should be deleted, got %v", err)
+	}
+	if err := q.DB.First(&models.Job{}, "id = ?", keep.ID).Error; err != nil {
+		t.Fatalf("served kind must survive: %v", err)
 	}
 }
 

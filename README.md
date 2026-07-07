@@ -2,7 +2,8 @@
 
 Personal scheduling agent. Blocks focus time on your work + personal Google
 Calendars for **projects** (target hours toward a deadline) and **habits**
-(recurring practice) — writing new events only, never touching events you made.
+(recurring practice) over a rolling 30-day window — writing new events only,
+never touching events you made.
 
 It also triages both Gmail inboxes with Gemini: archives bulk mail and labels
 what needs a reply, reading, or thought. Its only actions are applying labels
@@ -56,7 +57,7 @@ The TUI authenticates as *you* via `gcloud` — no stored secrets. `r` replans,
 
 ## Email triage
 
-Runs hourly after the planner over **inbox mail only**. Archive removes `INBOX`
+Runs every 30 minutes over **inbox mail only**. Archive removes `INBOX`
 and adds `Art/Archived` (mail stays in All Mail); mail needing a response is
 labeled `Art/Reply` for you to handle (Art never writes the reply); `keep` is
 left in place with `Art/Triaged`. Labeling and archiving are the only actions
