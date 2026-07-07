@@ -184,9 +184,7 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 	}()
 	switch kind {
 	case models.JobSync:
-		// Sync mirrors both calendars, then reconcile heals the plan against
-		// that fresh mirror in the same job — one pass, so reconcile never
-		// runs on stale data.
+		// Reconcile runs as the sync tail, always against a fresh mirror.
 		accountErrs, runErr := w.Sync.RunAll(ctx)
 		if runErr != nil {
 			return "", runErr

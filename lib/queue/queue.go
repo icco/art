@@ -178,9 +178,8 @@ func (q *Queue) Reap(ctx context.Context) error {
 	}).Error
 }
 
-// DropRetiredKinds deletes queued jobs whose kind is no longer served, so a
-// row left by a merged-away kind (e.g. the old standalone reconcile) can't be
-// claimed, fail as "unknown job kind", and re-chain itself forever.
+// DropRetiredKinds deletes queued jobs of no-longer-served kinds, so a row from
+// a merged-away kind (e.g. the old reconcile) can't fail and re-chain forever.
 func (q *Queue) DropRetiredKinds(ctx context.Context) error {
 	kinds := models.JobKinds()
 	valid := make([]string, len(kinds))
