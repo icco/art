@@ -69,10 +69,14 @@ func New(db *gorm.DB, sync SyncService, reconcile ReconcileService, planner Plan
 	}
 }
 
-// Start reaps orphans, seeds missing schedules, and launches the poll loop.
+// Start reaps orphans, drops retired kinds, seeds missing schedules, and
+// launches the poll loop.
 func (w *Worker) Start(ctx context.Context) error {
 	if err := w.Queue.Reap(ctx); err != nil {
 		return fmt.Errorf("queue reap: %w", err)
+	}
+	if err := w.Queue.DropRetiredKinds(ctx); err != nil {
+		return fmt.Errorf("queue drop retired kinds: %w", err)
 	}
 	if err := w.Queue.Seed(ctx); err != nil {
 		return fmt.Errorf("queue seed: %w", err)
@@ -180,13 +184,15 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 	}()
 	switch kind {
 	case models.JobSync:
+		// Reconcile runs as the sync tail, always against a fresh mirror.
 		accountErrs, runErr := w.Sync.RunAll(ctx)
 		if runErr != nil {
 			return "", runErr
 		}
+		if err := w.Reconcile.Run(ctx); err != nil {
+			return "", err
+		}
 		return formatAccountErrors(accountErrs), nil
-	case models.JobReconcile:
-		return "", w.Reconcile.Run(ctx)
 	case models.JobPlanner:
 		return "", w.Planner.Run(ctx)
 	case models.JobTriage:

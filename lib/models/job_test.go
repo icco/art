@@ -25,9 +25,10 @@ func TestJobKindValid(t *testing.T) {
 	}
 }
 
-func TestJobKindsIncludeReconcileInOrder(t *testing.T) {
+func TestJobKindsInOrder(t *testing.T) {
 	got := models.JobKinds()
-	want := []models.JobKind{models.JobSync, models.JobReconcile, models.JobPlanner, models.JobTriage}
+	// Reconcile is retired as a job kind (it runs as the sync job's tail).
+	want := []models.JobKind{models.JobSync, models.JobPlanner, models.JobTriage}
 	if len(got) != len(want) {
 		t.Fatalf("JobKinds len = %d, want %d (%v)", len(got), len(want), got)
 	}
@@ -36,9 +37,11 @@ func TestJobKindsIncludeReconcileInOrder(t *testing.T) {
 			t.Fatalf("JobKinds[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
-	if !models.JobReconcile.Valid() {
-		t.Fatal("JobReconcile should be Valid")
+	if models.JobKind("reconcile").Valid() {
+		t.Fatal("reconcile is no longer a valid job kind")
 	}
+	// Reconcile lives on as an agent-run kind: the merged sync job still
+	// records reconcile passes.
 	if !models.AgentRunReconcile.Valid() {
 		t.Fatal("AgentRunReconcile should be Valid")
 	}

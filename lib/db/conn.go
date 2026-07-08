@@ -54,6 +54,10 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 // constraints to admit 'reconcile'. AutoMigrate creates a missing constraint but
 // never alters an existing one, so this is explicit. Idempotent: skips when the
 // constraint already admits reconcile, safe on a fresh database.
+//
+// Reconcile is retired as a job kind but stays an agent-run kind; the jobs
+// constraint is left permissive to avoid a narrowing migration. JobKinds() is
+// the source of truth.
 func migrateKindConstraints(db *gorm.DB) error {
 	widen := func(model any, table, name, def string) error {
 		m := db.Migrator()

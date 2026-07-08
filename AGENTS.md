@@ -6,18 +6,24 @@ Guidance for coding agents working in this repo. Operator/usage docs live in
 ## Layout
 
 - `./` — server entrypoint (`main.go`, binary `art-server`): chi/v5 router,
-  GORM/Postgres, Google OIDC, Prometheus, graceful shutdown, hourly cron.
+  GORM/Postgres, Google OIDC, Prometheus, graceful shutdown, background job queue.
 - `./cmd/art` — Bubble Tea TUI (the `art` CLI). Talks to the server over HTTP;
   auth via `gcloud auth print-identity-token` (no stored secrets).
 - `lib/api` — middleware, router, handlers. `lib/models` — GORM models.
   `lib/oauth`, `lib/calendar`, `lib/gmail`, `lib/email`, `lib/agent`,
-  `lib/cron`, `lib/config`, `lib/db`.
+  `lib/reconcile`, `lib/queue`, `lib/config`, `lib/db`.
 
 ## Architecture
 
-`art TUI --(ID token)--> server --> Google Calendar/Gmail`; server ↔ Postgres;
-an hourly cron runs the planner, then the email triager. The planner is
-deterministic Go today — ADK/Vertex can wrap the same primitives later.
+`art TUI --(ID token)--> server --> Google Calendar/Gmail`; server ↔ Postgres.
+A Postgres-backed job queue (`lib/queue`) runs three kinds on a self-chaining
+grid: **sync** every 10 min (mirrors both calendars, then reconciles the plan
+against that fresh mirror as its tail — `lib/reconcile`), **planner** every
+15 min, **triage** every 30 min. Within a shared slot they run
+sync → planner → triage. The planner is an ADK/Vertex Gemini agent
+(`lib/agent`) that books focus blocks over a rolling 30-day window
+(`PlanHorizon`); `commit_focus_block` is the server-side source of truth for
+every scheduling invariant.
 
 - Schema is owned by `gorm.AutoMigrate` over `lib/models`; UUID PKs are
   generated in Go (`BeforeCreate` + `google/uuid`). No migration files.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/icco/art/lib/config"
@@ -14,8 +15,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Planner schedules focus blocks for the *current calendar week* only and
-// never inside the in-progress hour. ADK orchestration wraps the same
+// Planner schedules focus blocks over a rolling 30-day window (PlanHorizon)
+// and never inside the in-progress hour. ADK orchestration wraps the same
 // primitives as tools.
 type Planner struct {
 	Cfg   *config.Config
@@ -94,15 +95,16 @@ func startOfWeek(t time.Time, tz *time.Location) time.Time {
 	return time.Date(monday.Year(), monday.Month(), monday.Day(), 0, 0, 0, 0, tz)
 }
 
-func habitTargetCount(c models.Cadence, from, weekEnd time.Time) int {
+// habitTargetCount is how many blocks a habit wants over [from, to). A weekly
+// cadence is scaled across the window (rounded to nearest), so a 3×/week habit
+// targets ~13 blocks over a 30-day plan; a daily cadence gets one per day.
+func habitTargetCount(c models.Cadence, from, to time.Time) int {
 	switch c.Type {
 	case "per_week":
-		return c.Count
+		weeks := max(to.Sub(from).Hours()/(24*7), 0)
+		return int(math.Round(float64(c.Count) * weeks))
 	case "per_day":
-		days := int(weekEnd.Sub(from).Hours()/24) + 1
-		if days < 0 {
-			days = 0
-		}
+		days := max(int(to.Sub(from).Hours()/24)+1, 0)
 		return c.Count * days
 	default:
 		return c.Count

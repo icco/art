@@ -86,7 +86,7 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 	sessionID := uuid.NewString()
 	msg := &genai.Content{
 		Role:  "user",
-		Parts: []*genai.Part{{Text: "Plan focus blocks for the current week now."}},
+		Parts: []*genai.Part{{Text: "Plan focus blocks for the plan window now."}},
 	}
 
 	var lastErr error
@@ -104,13 +104,12 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 
 func (c *llmCycle) instruction() string {
 	now := time.Now().In(c.p.Cfg.Timezone)
-	from := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	from, end := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	return fmt.Sprintf("%s\n\nNow: %s\nPlan window: [%s, %s) in %s.",
 		systemInstruction,
 		now.Format(time.RFC3339),
 		from.In(c.p.Cfg.Timezone).Format(time.RFC3339),
-		weekEnd.In(c.p.Cfg.Timezone).Format(time.RFC3339),
+		end.In(c.p.Cfg.Timezone).Format(time.RFC3339),
 		c.p.Cfg.Timezone.String(),
 	)
 }
@@ -134,7 +133,8 @@ type habitInfo struct {
 	BlockMinutes      int    `json:"block_minutes"`
 	CadenceType       string `json:"cadence_type"`
 	CadenceCount      int    `json:"cadence_count"`
-	ScheduledThisWeek int    `json:"scheduled_this_week"`
+	TargetInWindow    int    `json:"target_in_window"`
+	ScheduledInWindow int    `json:"scheduled_in_window"`
 }
 
 type workingHourInfo struct {
@@ -242,7 +242,7 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		out.Projects = append(out.Projects, info)
 	}
 
-	weekStart, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	windowStart, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 
 	var habits []models.Habit
 	if err := c.p.DB.WithContext(ctx).Where("active = ?", true).Find(&habits).Error; err != nil {
@@ -257,7 +257,7 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		var n int64
 		if err := c.p.DB.WithContext(ctx).Model(&models.Session{}).
 			Where("source = ? AND source_id = ? AND scheduled_start >= ? AND scheduled_start < ? AND status <> ?",
-				models.SourceHabit, h.ID, weekStart, weekEnd, models.SessionSkipped).
+				models.SourceHabit, h.ID, windowStart, windowEnd, models.SessionSkipped).
 			Count(&n).Error; err != nil {
 			c.addErr(fmt.Sprintf("habit %s: session count: %v", h.Name, err))
 			continue
@@ -269,7 +269,8 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 			BlockMinutes:      h.BlockDurationMinutes,
 			CadenceType:       cad.Type,
 			CadenceCount:      cad.Count,
-			ScheduledThisWeek: int(n),
+			TargetInWindow:    habitTargetCount(cad, windowStart, windowEnd),
+			ScheduledInWindow: int(n),
 		})
 	}
 
@@ -326,11 +327,10 @@ func (c *llmCycle) findFreeSlots(_ adkagent.ToolContext, args findFreeSlotsArgs)
 	if maxResults <= 0 {
 		maxResults = 5
 	}
-	from := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	from, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	slots, err := FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone,
 		models.AccountKind(args.AccountKind), models.SlotKind(args.SlotKind),
-		args.DurationMin, from, weekEnd, maxResults)
+		args.DurationMin, from, windowEnd, maxResults)
 	if err != nil {
 		return findFreeSlotsResult{}, err
 	}
@@ -364,13 +364,12 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	if d := end.Sub(start); d < 30*time.Minute || d > 90*time.Minute {
 		return commitFocusBlockResult{}, fmt.Errorf("block must be 30-90 minutes, got %s", d)
 	}
-	planFrom := PlanningStart(time.Now(), c.p.Cfg.Timezone)
-	_, weekEnd := WeekWindow(time.Now(), c.p.Cfg.Timezone)
+	planFrom, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	if start.Before(planFrom) {
 		return commitFocusBlockResult{}, fmt.Errorf("start %s is before planning start %s", start, planFrom)
 	}
-	if end.After(weekEnd) {
-		return commitFocusBlockResult{}, fmt.Errorf("end %s is past the current week", end)
+	if end.After(windowEnd) {
+		return commitFocusBlockResult{}, fmt.Errorf("end %s is past the plan window end %s", end, windowEnd)
 	}
 
 	name, kind, err := c.resolveSource(ctx, source, args.SourceID)

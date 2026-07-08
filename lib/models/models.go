@@ -75,10 +75,9 @@ const (
 	AgentRunTriage    AgentRunKind = "triage"
 	AgentRunReconcile AgentRunKind = "reconcile"
 
-	JobSync      JobKind = "sync"
-	JobReconcile JobKind = "reconcile"
-	JobPlanner   JobKind = "planner"
-	JobTriage    JobKind = "triage"
+	JobSync    JobKind = "sync"
+	JobPlanner JobKind = "planner"
+	JobTriage  JobKind = "triage"
 
 	JobPending   JobStatus = "pending"
 	JobRunning   JobStatus = "running"
@@ -119,7 +118,7 @@ func (k AgentRunKind) Valid() bool {
 
 // Valid reports whether k is one of the recognised JobKind values.
 func (k JobKind) Valid() bool {
-	return k == JobSync || k == JobReconcile || k == JobPlanner || k == JobTriage
+	return k == JobSync || k == JobPlanner || k == JobTriage
 }
 
 // Valid reports whether s is one of the recognised JobStatus values.
@@ -132,7 +131,7 @@ func (s JobStatus) Valid() bool {
 }
 
 // JobKinds returns all job kinds in their within-slot execution order.
-func JobKinds() []JobKind { return []JobKind{JobSync, JobReconcile, JobPlanner, JobTriage} }
+func JobKinds() []JobKind { return []JobKind{JobSync, JobPlanner, JobTriage} }
 
 // Valid reports whether c is one of the recognised EmailCategory values.
 func (c EmailCategory) Valid() bool {

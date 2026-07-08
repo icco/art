@@ -92,7 +92,7 @@ func TestMigrateKindConstraints(t *testing.T) {
 	if err := db.Exec(`ALTER TABLE agent_runs ADD CONSTRAINT chk_agent_runs_kind CHECK (kind IN ('planner','triage'))`).Error; err != nil {
 		t.Fatalf("narrow agent_runs constraint: %v", err)
 	}
-	if err := db.Create(&models.Job{Kind: models.JobReconcile, Status: models.JobPending, MaxAttempts: 4}).Error; err == nil {
+	if err := db.Create(&models.Job{Kind: models.JobKind("reconcile"), Status: models.JobPending, MaxAttempts: 4}).Error; err == nil {
 		t.Fatal("pre-migration constraint should reject a reconcile job")
 	}
 
@@ -100,7 +100,10 @@ func TestMigrateKindConstraints(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 
-	if err := db.Create(&models.Job{Kind: models.JobReconcile, Status: models.JobPending, MaxAttempts: 4}).Error; err != nil {
+	// The jobs.kind constraint stays permissive to 'reconcile' (a retired job
+	// kind) so no data-dependent narrowing migration is needed; DropRetiredKinds
+	// clears any leftover rows at startup.
+	if err := db.Create(&models.Job{Kind: models.JobKind("reconcile"), Status: models.JobPending, MaxAttempts: 4}).Error; err != nil {
 		t.Fatalf("reconcile job should insert after migration: %v", err)
 	}
 	if err := db.Create(&models.AgentRun{Kind: models.AgentRunReconcile, Status: models.AgentRunRunning}).Error; err != nil {
