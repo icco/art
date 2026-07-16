@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/list"
@@ -11,7 +12,7 @@ import (
 
 type emailItem struct{ e Email }
 
-func (i emailItem) FilterValue() string { return i.e.Subject }
+func (i emailItem) FilterValue() string { return i.e.AccountKind + " " + i.e.Subject }
 func (i emailItem) Title() string {
 	tag := i.e.Action
 	switch {
@@ -24,11 +25,15 @@ func (i emailItem) Title() string {
 }
 
 func (i emailItem) Description() string {
-	from := truncate(i.e.From, 32)
-	if i.e.Summary != "" {
-		return from + " · " + i.e.Summary
+	parts := make([]string, 0, 3)
+	if i.e.AccountKind != "" {
+		parts = append(parts, i.e.AccountKind)
 	}
-	return from
+	parts = append(parts, truncate(i.e.From, 32))
+	if i.e.Summary != "" {
+		parts = append(parts, i.e.Summary)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // confirmData holds the confirm value on the heap so huh's *bool binding
