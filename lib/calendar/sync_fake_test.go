@@ -160,6 +160,51 @@ func TestCreateFocusIdempotent(t *testing.T) {
 	}
 }
 
+// A 409 whose existing event is a cancelled tombstone must be revived via
+// update, not returned dead: Google keeps deleted event IDs forever, so
+// returning the tombstone books a block that never appears on the calendar.
+func TestCreateFocusRevivesCancelledTombstone(t *testing.T) {
+	var updated *calapi.Event
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /calendars/c1/events", func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, `{"error": {"code": 409, "message": "duplicate"}}`, http.StatusConflict)
+	})
+	mux.HandleFunc("GET /calendars/c1/events/abc123", func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(t, w, &calapi.Event{Id: "abc123", Status: "cancelled"})
+	})
+	mux.HandleFunc("PUT /calendars/c1/events/abc123", func(w http.ResponseWriter, r *http.Request) {
+		var ev calapi.Event
+		if err := json.NewDecoder(r.Body).Decode(&ev); err != nil {
+			t.Errorf("decode update body: %v", err)
+		}
+		updated = &ev
+		ev.Id = "abc123"
+		writeJSON(t, w, &ev)
+	})
+	c := &Client{Account: models.Account{Kind: models.AccountPersonal}, Service: newFakeService(t, mux)}
+
+	ev, err := c.CreateFocus(context.Background(), FocusBlock{
+		CalendarID: "c1", EventID: "abc123",
+		Start: time.Now(), End: time.Now().Add(time.Hour),
+		Summary: "Focus: X", Source: models.SourceProject, SourceID: "p1",
+	})
+	if err != nil {
+		t.Fatalf("CreateFocus: %v", err)
+	}
+	if updated == nil {
+		t.Fatal("cancelled tombstone was not revived via events.update")
+	}
+	if updated.Status != "confirmed" {
+		t.Fatalf("update status = %q, want confirmed", updated.Status)
+	}
+	if updated.ExtendedProperties == nil || updated.ExtendedProperties.Private[ArtManagedKey] != ArtManagedTrue {
+		t.Fatal("revived event lost the art_managed marker")
+	}
+	if ev.Status != "confirmed" {
+		t.Fatalf("returned status = %q, want confirmed", ev.Status)
+	}
+}
+
 // All-day dates must land on midnight in the configured timezone, not UTC.
 func TestEventTimesAllDayInTZ(t *testing.T) {
 	tz, _ := time.LoadLocation("America/Los_Angeles")
