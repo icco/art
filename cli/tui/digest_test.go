@@ -23,6 +23,18 @@ func makeDigestWithEmail(t *testing.T) digestPage {
 	return pg.(digestPage)
 }
 
+// TestEmailItemShowsAccount verifies the digest list says which account an
+// email belongs to, both in the visible row and in the filter.
+func TestEmailItemShowsAccount(t *testing.T) {
+	i := emailItem{Email{AccountKind: "work", From: "a@b.com", Subject: "Hello", Summary: "a summary"}}
+	if d := i.Description(); !strings.Contains(d, "work") {
+		t.Fatalf("Description() = %q, want the account kind in it", d)
+	}
+	if fv := i.FilterValue(); !strings.Contains(fv, "work") {
+		t.Fatalf("FilterValue() = %q, want the account kind in it", fv)
+	}
+}
+
 // TestDigestRejectKeyOpensForm verifies that pressing "x" on a selected email
 // opens the confirm form (FullInput becomes true and the view shows the form).
 func TestDigestRejectKeyOpensForm(t *testing.T) {
