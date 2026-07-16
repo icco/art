@@ -54,10 +54,21 @@ func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Even
 	}
 	created, err := c.Service.Events.Insert(fb.CalendarID, ev).Context(ctx).Do()
 	if err != nil {
-		// 409 on a caller-supplied ID: a prior attempt landed; return it.
+		// 409 on a caller-supplied ID: either a prior attempt landed, or the
+		// ID belongs to a deleted event — Google keeps tombstones forever.
 		var gerr *googleapi.Error
 		if fb.EventID != "" && errors.As(err, &gerr) && gerr.Code == http.StatusConflict {
-			return c.Service.Events.Get(fb.CalendarID, fb.EventID).Context(ctx).Do()
+			existing, getErr := c.Service.Events.Get(fb.CalendarID, fb.EventID).Context(ctx).Do()
+			if getErr != nil {
+				return nil, getErr
+			}
+			if existing.Status != "cancelled" {
+				return existing, nil
+			}
+			// Revive the tombstone; per the Calendar API, reusing a deleted
+			// event's ID requires events.update with status "confirmed".
+			ev.Status = "confirmed"
+			return c.Service.Events.Update(fb.CalendarID, fb.EventID, ev).Context(ctx).Do()
 		}
 		return nil, err
 	}
