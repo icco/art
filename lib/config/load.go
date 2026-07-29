@@ -10,8 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/icco/art/lib/models"
 )
 
 // Config is the resolved runtime configuration for the art server.
@@ -27,8 +25,10 @@ type Config struct {
 	CredentialsEnv string
 	Triage         TriageConfig
 	RateLimitRPM   int
-	// SoftTitles are human-event summaries the planner may schedule over.
-	SoftTitles models.SoftTitles
+	// SoftEventTitles are human-event summaries the planner may schedule over,
+	// kept as written so the settings API and TUI show them the way the calendar
+	// does. Consumers normalize at use time via models.NewSoftTitles.
+	SoftEventTitles []string
 }
 
 // DefaultSoftTitles are the owner's standing placeholder blocks.
@@ -105,7 +105,11 @@ func Load() (*Config, error) {
 	if v, ok := os.LookupEnv("SOFT_EVENT_TITLES"); ok {
 		softRaw = strings.Split(v, ",")
 	}
-	c.SoftTitles = models.NewSoftTitles(softRaw...)
+	for _, t := range softRaw {
+		if t = strings.TrimSpace(t); t != "" {
+			c.SoftEventTitles = append(c.SoftEventTitles, t)
+		}
+	}
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {
 		e = strings.TrimSpace(strings.ToLower(e))

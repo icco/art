@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"gorm.io/gorm"
@@ -47,6 +48,13 @@ const (
 	minBlockMinutes = 5
 	maxBlockMinutes = 8 * 60
 )
+
+// maxPlanHorizonDays keeps the plan window inside the synced events mirror
+// (calendar.FutureWindow). Past the mirror loadBusy finds nothing, so every slot
+// looks free and the planner books over real meetings it cannot see — and
+// reconcile's window never revisits those sessions to retract them. The day of
+// slack absorbs the sync cadence and PlanningStart's rounding to the next hour.
+const maxPlanHorizonDays = int(calendar.FutureWindow/(24*time.Hour)) - 1
 
 // Keys returns every settable key.
 func Keys() []string {
@@ -91,8 +99,9 @@ func (v Values) Validate() error {
 	if d := v.TriageReconcileDays; d < 0 || d > maxDays {
 		return fmt.Errorf("triage_reconcile_days must be 0-%d, got %d", maxDays, d)
 	}
-	if d := v.PlanHorizonDays; d < 1 || d > maxDays {
-		return fmt.Errorf("plan_horizon_days must be 1-%d, got %d", maxDays, d)
+	if d := v.PlanHorizonDays; d < 1 || d > maxPlanHorizonDays {
+		return fmt.Errorf("plan_horizon_days must be 1-%d (the calendar mirror reaches no further), got %d",
+			maxPlanHorizonDays, d)
 	}
 	lo, hi := v.FocusBlockMinMinutes, v.FocusBlockMaxMinutes
 	if lo < minBlockMinutes || lo > maxBlockMinutes {
@@ -128,7 +137,7 @@ func DefaultsFrom(cfg *config.Config) Values {
 	if cfg == nil {
 		return v
 	}
-	v.SoftEventTitles = cfg.SoftTitles
+	v.SoftEventTitles = cfg.SoftEventTitles
 	v.TriageEnabled = cfg.Triage.Enabled
 	v.TriageDryRun = cfg.Triage.DryRun
 	v.TriageConfidenceThreshold = cfg.Triage.ConfidenceThreshold

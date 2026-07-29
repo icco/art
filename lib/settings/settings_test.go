@@ -2,7 +2,9 @@ package settings_test
 
 import (
 	"testing"
+	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/settings"
@@ -11,7 +13,7 @@ import (
 
 func seedCfg() *config.Config {
 	return &config.Config{
-		SoftTitles: models.NewSoftTitles("morning prep"),
+		SoftEventTitles: []string{"Morning Prep"},
 		Triage: config.TriageConfig{
 			Enabled: true, DryRun: false, BackfillDays: 14, ReconcileDays: 9,
 			ConfidenceThreshold: 0.7,
@@ -32,7 +34,8 @@ func TestLoadFallsBackToEnvConfig(t *testing.T) {
 	if got.TriageConfidenceThreshold != 0.7 {
 		t.Errorf("threshold = %v, want 0.7", got.TriageConfidenceThreshold)
 	}
-	if len(got.SoftEventTitles) != 1 || got.SoftEventTitles[0] != "morning prep" {
+	// Titles come through as written; normalization happens at match time.
+	if len(got.SoftEventTitles) != 1 || got.SoftEventTitles[0] != "Morning Prep" {
 		t.Errorf("soft titles = %v", got.SoftEventTitles)
 	}
 	// The planner knobs have no env var, so they take the built-in defaults.
@@ -160,6 +163,24 @@ func TestValidate(t *testing.T) {
 	for name, v := range cases {
 		if err := v.Validate(); err == nil {
 			t.Errorf("%s should be rejected", name)
+		}
+	}
+}
+
+// The plan window has to stay inside the synced events mirror. Past it the
+// planner sees an empty calendar and books over meetings it can't see.
+func TestValidateHorizonStopsAtTheMirror(t *testing.T) {
+	mirrorDays := int(calendar.FutureWindow / (24 * time.Hour))
+	v := settings.DefaultsFrom(nil)
+
+	v.PlanHorizonDays = mirrorDays - 1
+	if err := v.Validate(); err != nil {
+		t.Errorf("horizon %d days should be allowed: %v", v.PlanHorizonDays, err)
+	}
+	for _, d := range []int{mirrorDays, mirrorDays + 1, 365} {
+		v.PlanHorizonDays = d
+		if err := v.Validate(); err == nil {
+			t.Errorf("horizon %d days reaches past the %d-day mirror and should be rejected", d, mirrorDays)
 		}
 	}
 }

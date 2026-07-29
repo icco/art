@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/base64"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -101,8 +102,9 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.SoftTitles.Match("Morning Prep") || !cfg.SoftTitles.Match("Lunch") || !cfg.SoftTitles.Match("dinner decompress") {
-		t.Fatalf("default soft titles = %v, want the built-in placeholders", cfg.SoftTitles)
+	// Kept as written, not lowercased: these are shown in the settings UI.
+	if !slices.Equal(cfg.SoftEventTitles, DefaultSoftTitles) {
+		t.Fatalf("default soft titles = %v, want %v", cfg.SoftEventTitles, DefaultSoftTitles)
 	}
 
 	t.Setenv("SOFT_EVENT_TITLES", " Lunch ,,Nap")
@@ -110,8 +112,8 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.SoftTitles) != 2 || !cfg.SoftTitles.Match("lunch") || cfg.SoftTitles.Match("Morning Prep") {
-		t.Fatalf("soft titles = %v, want [lunch nap] and no defaults", cfg.SoftTitles)
+	if !slices.Equal(cfg.SoftEventTitles, []string{"Lunch", "Nap"}) {
+		t.Fatalf("soft titles = %v, want [Lunch Nap] trimmed and with no defaults", cfg.SoftEventTitles)
 	}
 
 	// Set-but-empty turns the feature off.
@@ -120,8 +122,8 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.SoftTitles) != 0 || cfg.SoftTitles.Match("Morning Prep") {
-		t.Fatalf("soft titles = %v, want empty", cfg.SoftTitles)
+	if len(cfg.SoftEventTitles) != 0 {
+		t.Fatalf("soft titles = %v, want empty", cfg.SoftEventTitles)
 	}
 }
 
