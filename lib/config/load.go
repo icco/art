@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/icco/art/lib/models"
 )
 
 // Config is the resolved runtime configuration for the art server.
@@ -25,7 +27,13 @@ type Config struct {
 	CredentialsEnv string
 	Triage         TriageConfig
 	RateLimitRPM   int
+	// SoftTitles are human-event summaries the planner may schedule over.
+	SoftTitles models.SoftTitles
 }
+
+// DefaultSoftTitles are the owner's standing placeholder blocks: real intent,
+// but overridable when nothing harder is free.
+var DefaultSoftTitles = []string{"Morning Catchup", "Dinner Decompress"}
 
 // TriageConfig controls the Gmail email-triage agent.
 type TriageConfig struct {
@@ -84,6 +92,13 @@ func Load() (*Config, error) {
 	if err := errors.Join(p.errs...); err != nil {
 		return nil, err
 	}
+
+	// Unset means the built-in list; set-but-empty disables soft events entirely.
+	softRaw := DefaultSoftTitles
+	if v, ok := os.LookupEnv("SOFT_EVENT_TITLES"); ok {
+		softRaw = strings.Split(v, ",")
+	}
+	c.SoftTitles = models.NewSoftTitles(softRaw...)
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {
 		e = strings.TrimSpace(strings.ToLower(e))

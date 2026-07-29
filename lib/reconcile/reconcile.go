@@ -31,6 +31,9 @@ type Runner struct {
 	DB  *gorm.DB
 	Cal CalendarService
 	TZ  *time.Location
+	// SoftTitles are placeholder events the planner is allowed to schedule
+	// over, so overlapping them is not a conflict worth retracting for.
+	SoftTitles models.SoftTitles
 	// Now is injectable for tests; nil means time.Now.
 	Now func() time.Time
 }
@@ -143,15 +146,20 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 }
 
 // hasHumanConflict reports whether a non-Art busy event overlaps the session,
-// using the same busy predicate as the planner's loadBusy.
+// using the same busy predicate as the planner's loadBusy. Soft-titled events
+// are excluded: the planner is allowed to book over them, so retracting for one
+// would undo that on the very next sync.
 func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session) (bool, error) {
-	var n int64
-	err := r.DB.WithContext(ctx).Model(&models.Event{}).
+	q := r.DB.WithContext(ctx).Model(&models.Event{}).
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
 		       AND (all_day = false OR event_type = 'outOfOffice')
 		       AND end_time > ? AND start_time < ?`,
-			s.AccountKind, s.ScheduledStart, s.ScheduledEnd).
-		Count(&n).Error
+			s.AccountKind, s.ScheduledStart, s.ScheduledEnd)
+	if len(r.SoftTitles) > 0 {
+		q = q.Where("lower(btrim(summary)) NOT IN (?)", []string(r.SoftTitles))
+	}
+	var n int64
+	err := q.Count(&n).Error
 	return n > 0, err
 }
 

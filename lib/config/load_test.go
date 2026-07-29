@@ -94,6 +94,37 @@ func TestLoadValidate(t *testing.T) {
 	}
 }
 
+func TestLoadSoftTitles(t *testing.T) {
+	setValidEnv(t)
+	_ = os.Unsetenv("SOFT_EVENT_TITLES")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.SoftTitles.Match("Morning Catchup") || !cfg.SoftTitles.Match("dinner decompress") {
+		t.Fatalf("default soft titles = %v, want the built-in placeholders", cfg.SoftTitles)
+	}
+
+	t.Setenv("SOFT_EVENT_TITLES", " Lunch ,,Nap")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.SoftTitles) != 2 || !cfg.SoftTitles.Match("lunch") || cfg.SoftTitles.Match("Morning Catchup") {
+		t.Fatalf("soft titles = %v, want [lunch nap] and no defaults", cfg.SoftTitles)
+	}
+
+	// Set-but-empty turns the feature off.
+	t.Setenv("SOFT_EVENT_TITLES", "")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.SoftTitles) != 0 || cfg.SoftTitles.Match("Morning Catchup") {
+		t.Fatalf("soft titles = %v, want empty", cfg.SoftTitles)
+	}
+}
+
 func setValidEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv("DATABASE_URL", "x")

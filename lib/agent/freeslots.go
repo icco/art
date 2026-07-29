@@ -10,16 +10,24 @@ import (
 	"gorm.io/gorm"
 )
 
-// Slot is a candidate free interval on a particular account.
+// Slot is a candidate free interval on a particular account. Soft is set when
+// the slot is only free because it overlaps a soft event (a placeholder block
+// Art is allowed to schedule over) — callers should prefer non-soft slots.
 type Slot struct {
 	AccountKind models.AccountKind
 	Start       time.Time
 	End         time.Time
+	Soft        bool
 }
 
 // FindFreeSlots returns up to maxSlots non-overlapping durationMin-long slots
 // inside [windowStart, windowEnd) that fall within a working_hours window
 // for slotKind (tz-interpreted) and don't clash with any event on the account.
+//
+// Events whose summary is in soft are not treated as clashes; the slots they
+// cover come back marked Soft and sorted after every hard-free slot, so a
+// caller that takes the first result still only lands on a soft event once the
+// genuinely free time is gone.
 func FindFreeSlots(
 	ctx context.Context,
 	db *gorm.DB,
@@ -29,6 +37,7 @@ func FindFreeSlots(
 	durationMin int,
 	windowStart, windowEnd time.Time,
 	maxSlots int,
+	soft models.SoftTitles,
 ) ([]Slot, error) {
 	if durationMin <= 0 {
 		return nil, nil
@@ -43,37 +52,73 @@ func FindFreeSlots(
 		return nil, nil
 	}
 
-	busy, err := loadBusy(ctx, db, accountKind, windowStart, windowEnd.Add(duration))
+	busy, err := loadBusy(ctx, db, accountKind, windowStart, windowEnd.Add(duration), soft)
 	if err != nil {
 		return nil, err
 	}
 
-	const step = 15 * time.Minute
-	var out []Slot
-	cursor := windowStart.Truncate(step)
-	if cursor.Before(windowStart) {
-		cursor = cursor.Add(step)
-	}
-	for !cursor.Add(duration).After(windowEnd) {
-		end := cursor.Add(duration)
-		if withinWorkingHours(cursor, end, hours, tz) && !overlapsAny(cursor, end, busy) {
-			out = append(out, Slot{AccountKind: accountKind, Start: cursor, End: end})
-			if maxSlots > 0 && len(out) >= maxSlots {
-				return out, nil
+	// scan walks the window for non-overlapping slots that clear working hours
+	// and every range in avoid, tagging each with isSoft.
+	scan := func(avoid []busyRange, isSoft bool) []Slot {
+		const step = 15 * time.Minute
+		var out []Slot
+		cursor := windowStart.Truncate(step)
+		if cursor.Before(windowStart) {
+			cursor = cursor.Add(step)
+		}
+		for !cursor.Add(duration).After(windowEnd) {
+			end := cursor.Add(duration)
+			if withinWorkingHours(cursor, end, hours, tz) && !overlapsAny(cursor, end, avoid) {
+				out = append(out, Slot{AccountKind: accountKind, Start: cursor, End: end, Soft: isSoft})
+				if maxSlots > 0 && len(out) >= maxSlots {
+					return out
+				}
+				cursor = end
+				continue
 			}
-			cursor = end
+			cursor = cursor.Add(step)
+		}
+		return out
+	}
+
+	// Hard pass: every event counts, so these slots need nobody's time.
+	out := scan(busy, false)
+	if len(soft) == 0 || (maxSlots > 0 && len(out) >= maxSlots) {
+		return out, nil
+	}
+
+	// Soft pass: placeholder events stop counting as busy, but the hard slots
+	// just chosen do — a soft slot must never shadow real free time.
+	relaxed := make([]busyRange, 0, len(busy)+len(out))
+	for _, b := range busy {
+		if !b.soft {
+			relaxed = append(relaxed, b)
+		}
+	}
+	for _, s := range out {
+		relaxed = append(relaxed, busyRange{start: s.Start, end: s.End})
+	}
+	for _, s := range scan(relaxed, true) {
+		// Slots a placeholder doesn't actually cover aren't soft; the hard pass
+		// already had its say on those.
+		if !overlapsAny(s.Start, s.End, busy) {
 			continue
 		}
-		cursor = cursor.Add(step)
+		out = append(out, s)
+		if maxSlots > 0 && len(out) >= maxSlots {
+			break
+		}
 	}
 	return out, nil
 }
 
 type busyRange struct {
 	start, end time.Time
+	// soft marks a placeholder event the planner may schedule over.
+	soft bool
 }
 
-func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time) ([]busyRange, error) {
+func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time, soft models.SoftTitles) ([]busyRange, error) {
 	var events []models.Event
 	if err := db.WithContext(ctx).
 		Where("account_kind = ? AND status <> 'cancelled' AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?",
@@ -84,7 +129,9 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 	}
 	out := make([]busyRange, 0, len(events))
 	for _, e := range events {
-		out = append(out, busyRange{start: e.StartTime, end: e.EndTime})
+		// Art's own blocks are never soft: double-booking them would stack two
+		// focus sessions on the same time.
+		out = append(out, busyRange{start: e.StartTime, end: e.EndTime, soft: !e.IsArtManaged && soft.Match(e.Summary)})
 	}
 	// Planned sessions are busy too; they have no Event row until the next sync.
 	var sessions []models.Session
@@ -126,6 +173,16 @@ func withinWorkingHours(start, end time.Time, hours []models.WorkingHour, tz *ti
 func overlapsAny(start, end time.Time, busy []busyRange) bool {
 	for _, b := range busy {
 		if b.end.After(start) && b.start.Before(end) {
+			return true
+		}
+	}
+	return false
+}
+
+// overlapsHard is overlapsAny ignoring soft (schedulable-over) ranges.
+func overlapsHard(start, end time.Time, busy []busyRange) bool {
+	for _, b := range busy {
+		if !b.soft && b.end.After(start) && b.start.Before(end) {
 			return true
 		}
 	}

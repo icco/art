@@ -46,6 +46,16 @@ curl -s -X PUT http://localhost:8080/working-hours \
   -d '[{"slot_kind":"work","day_of_week":1,"start_minute":540,"end_minute":1080}]'
 ```
 
+## Soft events
+
+Some events are placeholders rather than commitments — standing blocks like
+*Morning Catchup* or *Dinner Decompress*. List their exact titles in
+`SOFT_EVENT_TITLES` and the planner may schedule on top of them: their time
+shows up in `find_free_slots` marked `soft`, always ranked behind every
+genuinely free slot, so Art only takes it when a project or habit has nowhere
+else to go. Reconcile leaves those blocks alone too, instead of retracting them
+on the next sync. Everything else on your calendar stays hard.
+
 ## Use the TUI
 
 ```sh

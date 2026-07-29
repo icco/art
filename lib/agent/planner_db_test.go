@@ -82,7 +82,7 @@ func TestFindFreeSlotsHonorsBusy(t *testing.T) {
 	}
 	from := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
 	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
-	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5)
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestFindFreeSlotsAllDayEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60,
-		monday, tuesday.AddDate(0, 0, 1), 20)
+		monday, tuesday.AddDate(0, 0, 1), 20, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,6 +132,158 @@ func TestFindFreeSlotsAllDayEvents(t *testing.T) {
 		if s.Start.Before(tuesday) {
 			t.Fatalf("slot %v-%v booked over an all-day out-of-office", s.Start, s.End)
 		}
+	}
+}
+
+// A soft event opens its time up, but only as a last resort: every hard-free
+// slot must be offered ahead of it.
+func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	// A placeholder covering 9-11 and a real meeting covering 11-12.
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
+		Summary: "Morning Catchup", StartTime: monday9, EndTime: monday9.Add(2 * time.Hour),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "hard1",
+		Summary: "Standup", StartTime: monday9.Add(2 * time.Hour), EndTime: monday9.Add(3 * time.Hour),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
+	soft := models.NewSoftTitles("Morning Catchup")
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, soft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) == 0 {
+		t.Fatal("expected slots")
+	}
+	if slots[0].Soft || !slots[0].Start.Equal(monday9.Add(3*time.Hour)) {
+		t.Fatalf("first slot = %v (soft=%v), want the hard-free 12:00", slots[0].Start, slots[0].Soft)
+	}
+	var softStarts []time.Time
+	seenSoft := false
+	for _, s := range slots {
+		if s.Soft {
+			seenSoft = true
+			softStarts = append(softStarts, s.Start)
+			continue
+		}
+		if seenSoft {
+			t.Fatalf("hard slot %v came after a soft slot", s.Start)
+		}
+		if s.Start.Before(monday9.Add(3 * time.Hour)) {
+			t.Fatalf("slot %v before 12:00 should have been marked soft", s.Start)
+		}
+	}
+	if len(softStarts) != 2 {
+		t.Fatalf("soft slot starts = %v, want the two hours the placeholder covers", softStarts)
+	}
+	if !softStarts[0].Equal(monday9) {
+		t.Fatalf("first soft slot = %v, want 9:00", softStarts[0])
+	}
+
+	// Without the soft list the placeholder is ordinary busy time.
+	strict, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range strict {
+		if s.Soft || s.Start.Before(monday9.Add(3*time.Hour)) {
+			t.Fatalf("slot %v (soft=%v) should not exist without soft titles", s.Start, s.Soft)
+		}
+	}
+}
+
+// A short placeholder must not swallow the hard-free time next to it: the slot
+// starting after it wins over the one sitting on top of it.
+func TestFindFreeSlotsGivesHardTimeFirstRefusal(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	// Placeholder 9:00-9:30, then a real meeting eating 11:00 onward. A 60-min
+	// block fits at 9:30 without touching the placeholder.
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
+		Summary: "Morning Catchup", StartTime: monday9, EndTime: monday9.Add(30 * time.Minute),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "hard1",
+		Summary: "All-hands", StartTime: monday9.Add(2 * time.Hour), EndTime: monday9.Add(9 * time.Hour),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
+	soft := models.NewSoftTitles("Morning Catchup")
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, soft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) != 1 {
+		t.Fatalf("slots = %v, want just the 9:30 hard-free block", slots)
+	}
+	if slots[0].Soft || !slots[0].Start.Equal(monday9.Add(30*time.Minute)) {
+		t.Fatalf("slot = %v (soft=%v), want hard 9:30", slots[0].Start, slots[0].Soft)
+	}
+}
+
+// When the placeholder is the only thing left, its time does get offered.
+func TestFindFreeSlotsUsesSoftTimeAsLastResort(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
+		Summary: "Dinner Decompress", StartTime: monday9, EndTime: monday9.Add(time.Hour),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// The rest of the day is genuinely booked.
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "hard1",
+		Summary: "All-hands", StartTime: monday9.Add(time.Hour), EndTime: monday9.Add(9 * time.Hour),
+		Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
+	soft := models.NewSoftTitles("Dinner Decompress")
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, soft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) != 1 || !slots[0].Soft || !slots[0].Start.Equal(monday9) {
+		t.Fatalf("slots = %v, want one soft 9:00 block", slots)
 	}
 }
 
@@ -156,7 +308,7 @@ func TestFindFreeSlotsHonorsPlannedSessions(t *testing.T) {
 	}
 	from := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
 	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
-	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5)
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -59,6 +59,21 @@ func TestOverlapsAny(t *testing.T) {
 	}
 }
 
+func TestOverlapsHardIgnoresSoftRanges(t *testing.T) {
+	now := time.Date(2026, 5, 25, 10, 0, 0, 0, time.UTC)
+	busy := []busyRange{{start: now, end: now.Add(time.Hour), soft: true}}
+	if overlapsHard(now, now.Add(30*time.Minute), busy) {
+		t.Fatal("a soft range must not count as hard busy")
+	}
+	if !overlapsAny(now, now.Add(30*time.Minute), busy) {
+		t.Fatal("a soft range is still an overlap for labeling purposes")
+	}
+	busy = append(busy, busyRange{start: now.Add(30 * time.Minute), end: now.Add(90 * time.Minute)})
+	if !overlapsHard(now, now.Add(time.Hour), busy) {
+		t.Fatal("a hard range alongside a soft one must still block")
+	}
+}
+
 func TestHabitTargetCountPerWeek(t *testing.T) {
 	weekEnd := time.Now().Add(7 * 24 * time.Hour)
 	got := habitTargetCount(models.Cadence{Type: "per_week", Count: 3}, time.Now(), weekEnd)
