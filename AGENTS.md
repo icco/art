@@ -31,9 +31,9 @@ every scheduling invariant.
   in extended properties — that flag is how Art knows what it may modify.
 - The busy predicate lives in three places that must agree: `loadBusy` /
   `overlapsHard` (`lib/agent/freeslots.go`), `commit_focus_block`, and
-  `reconcile.hasHumanConflict` (raw SQL). Events titled in `SOFT_EVENT_TITLES`
-  (`cfg.SoftTitles`) are schedulable-over in all three; miss reconcile and the
-  next sync retracts what the planner just booked.
+  `reconcile.hasHumanConflict`. Titles in `SOFT_EVENT_TITLES` are
+  schedulable-over in all three — miss one and the next sync retracts what the
+  planner just booked.
 - Email triage classifies with Gemini structured output and records an
   `email_messages` row + an `agent_runs` row (`kind=triage`). Message bodies are
   never persisted. Refresh tokens are AES-256-GCM sealed (`lib/oauth`).

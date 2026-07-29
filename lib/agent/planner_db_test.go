@@ -135,8 +135,7 @@ func TestFindFreeSlotsAllDayEvents(t *testing.T) {
 	}
 }
 
-// A soft event opens its time up, but only as a last resort: every hard-free
-// slot must be offered ahead of it.
+// Every hard-free slot must be offered ahead of a soft one.
 func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
 	db := testdb.Open(t)
 	tz, _ := time.LoadLocation("America/Los_Angeles")
@@ -146,7 +145,7 @@ func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
 		t.Fatal(err)
 	}
 	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
-	// A placeholder covering 9-11 and a real meeting covering 11-12.
+	// Placeholder 9-11, real meeting 11-12.
 	if err := db.Create(&models.Event{
 		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
 		Summary: "Morning Prep", StartTime: monday9, EndTime: monday9.Add(2 * time.Hour),
@@ -208,8 +207,7 @@ func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
 	}
 }
 
-// A short placeholder must not swallow the hard-free time next to it: the slot
-// starting after it wins over the one sitting on top of it.
+// A short placeholder must not swallow the hard-free time beside it.
 func TestFindFreeSlotsGivesHardTimeFirstRefusal(t *testing.T) {
 	db := testdb.Open(t)
 	tz, _ := time.LoadLocation("America/Los_Angeles")
@@ -219,8 +217,7 @@ func TestFindFreeSlotsGivesHardTimeFirstRefusal(t *testing.T) {
 		t.Fatal(err)
 	}
 	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
-	// Placeholder 9:00-9:30, then a real meeting eating 11:00 onward. A 60-min
-	// block fits at 9:30 without touching the placeholder.
+	// Placeholder 9:00-9:30, meeting from 11:00. A 60-min block fits at 9:30.
 	if err := db.Create(&models.Event{
 		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
 		Summary: "Morning Prep", StartTime: monday9, EndTime: monday9.Add(30 * time.Minute),

@@ -10,9 +10,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// Slot is a candidate free interval on a particular account. Soft is set when
-// the slot is only free because it overlaps a soft event (a placeholder block
-// Art is allowed to schedule over) — callers should prefer non-soft slots.
+// Slot is a candidate free interval on a particular account. Soft means it is
+// only free because it sits on a placeholder event, so prefer non-soft slots.
 type Slot struct {
 	AccountKind models.AccountKind
 	Start       time.Time
@@ -24,10 +23,8 @@ type Slot struct {
 // inside [windowStart, windowEnd) that fall within a working_hours window
 // for slotKind (tz-interpreted) and don't clash with any event on the account.
 //
-// Events whose summary is in soft are not treated as clashes; the slots they
-// cover come back marked Soft and sorted after every hard-free slot, so a
-// caller that takes the first result still only lands on a soft event once the
-// genuinely free time is gone.
+// Events named in soft don't clash; the slots they cover come back marked Soft
+// after every hard-free slot, so taking the first result prefers real free time.
 func FindFreeSlots(
 	ctx context.Context,
 	db *gorm.DB,
@@ -57,8 +54,7 @@ func FindFreeSlots(
 		return nil, err
 	}
 
-	// scan walks the window for non-overlapping slots that clear working hours
-	// and every range in avoid, tagging each with isSoft.
+	// scan collects non-overlapping slots that clear working hours and avoid.
 	scan := func(avoid []busyRange, isSoft bool) []Slot {
 		const step = 15 * time.Minute
 		var out []Slot
@@ -81,14 +77,13 @@ func FindFreeSlots(
 		return out
 	}
 
-	// Hard pass: every event counts, so these slots need nobody's time.
 	out := scan(busy, false)
 	if len(soft) == 0 || (maxSlots > 0 && len(out) >= maxSlots) {
 		return out, nil
 	}
 
-	// Soft pass: placeholder events stop counting as busy, but the hard slots
-	// just chosen do — a soft slot must never shadow real free time.
+	// Placeholders stop counting as busy, but the hard slots just chosen start:
+	// a soft slot must never shadow real free time.
 	relaxed := make([]busyRange, 0, len(busy)+len(out))
 	for _, b := range busy {
 		if !b.soft {
@@ -99,8 +94,7 @@ func FindFreeSlots(
 		relaxed = append(relaxed, busyRange{start: s.Start, end: s.End})
 	}
 	for _, s := range scan(relaxed, true) {
-		// Slots a placeholder doesn't actually cover aren't soft; the hard pass
-		// already had its say on those.
+		// A slot no placeholder covers isn't soft — the hard pass already saw it.
 		if !overlapsAny(s.Start, s.End, busy) {
 			continue
 		}
@@ -129,8 +123,7 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 	}
 	out := make([]busyRange, 0, len(events))
 	for _, e := range events {
-		// Art's own blocks are never soft: double-booking them would stack two
-		// focus sessions on the same time.
+		// Art's own blocks are never soft, or two sessions would stack up.
 		out = append(out, busyRange{start: e.StartTime, end: e.EndTime, soft: !e.IsArtManaged && soft.Match(e.Summary)})
 	}
 	// Planned sessions are busy too; they have no Event row until the next sync.

@@ -5,14 +5,12 @@ import (
 	"strings"
 )
 
-// SoftTitles is the set of human-event summaries Art may schedule on top of.
-// They are placeholder blocks (e.g. "Morning Prep", "Dinner Decompress")
-// that reserve intent rather than a hard commitment, so the planner treats a
-// slot they cover as available-but-second-choice instead of busy.
+// SoftTitles are human-event summaries Art may schedule on top of: placeholder
+// blocks that reserve intent, not a commitment. The planner treats the time they
+// cover as available-but-second-choice rather than busy.
 type SoftTitles []string
 
-// NewSoftTitles normalizes raw titles for matching: trimmed, lowercased,
-// empties dropped.
+// NewSoftTitles normalizes titles for matching: trimmed, lowercased, no empties.
 func NewSoftTitles(raw ...string) SoftTitles {
 	out := make(SoftTitles, 0, len(raw))
 	for _, s := range raw {

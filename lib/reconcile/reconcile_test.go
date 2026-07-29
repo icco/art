@@ -172,8 +172,7 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
-	// The placeholder the planner was allowed to book over; casing and padding
-	// must not matter.
+	// Casing and padding must not matter.
 	seedSoftEvent(t, db, "ev-soft", "  morning prep ", start)
 
 	if err := r.Run(context.Background()); err != nil {
@@ -189,9 +188,7 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 	}
 }
 
-// The planner's matcher trims all Unicode whitespace, so reconcile has to as
-// well — a tab-padded title that reads soft when the block is booked must still
-// read soft when the block is checked, or it gets retracted a sync later.
+// A tab-padded title reads soft to the planner, so it must here too.
 func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)

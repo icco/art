@@ -146,14 +146,11 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 }
 
 // hasHumanConflict reports whether a non-Art busy event overlaps the session,
-// using the same busy predicate as the planner's loadBusy. Soft-titled events
-// are excluded: the planner is allowed to book over them, so retracting for one
-// would undo that on the very next sync.
-//
-// The title test runs in Go rather than SQL so it is bit-for-bit the predicate
-// the planner used. Postgres btrim() trims spaces only, where strings.TrimSpace
-// trims all Unicode whitespace — a title padded with a tab would read soft to
-// the planner and hard here, and the block would be retracted a sync later.
+// using the same busy predicate as the planner's loadBusy. Soft titles are
+// excluded — the planner may book over them, so retracting would undo that on
+// the next sync. The title test runs in Go, not SQL: btrim() trims spaces where
+// strings.TrimSpace trims all Unicode whitespace, and the two disagreeing is
+// exactly how a block gets booked and then retracted.
 func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session) (bool, error) {
 	var summaries []string
 	if err := r.DB.WithContext(ctx).Model(&models.Event{}).

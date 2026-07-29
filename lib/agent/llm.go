@@ -160,8 +160,7 @@ type findFreeSlotsArgs struct {
 type freeSlot struct {
 	StartISO string `json:"start"`
 	EndISO   string `json:"end"`
-	// Soft slots sit on top of a placeholder block (e.g. "Morning Prep").
-	// They are listed after every hard-free slot.
+	// Soft slots sit on a placeholder block and are listed last.
 	Soft bool `json:"soft"`
 }
 
@@ -394,8 +393,7 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	if err != nil {
 		return commitFocusBlockResult{}, err
 	}
-	// Soft events (placeholder blocks) are schedulable-over; everything else,
-	// including Art's own planned sessions, is not.
+	// Placeholders are schedulable-over; real events and sessions are not.
 	if overlapsHard(start, end, busy) {
 		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s overlaps an existing event or planned session", args.StartISO, args.EndISO)
 	}

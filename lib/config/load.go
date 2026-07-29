@@ -31,8 +31,7 @@ type Config struct {
 	SoftTitles models.SoftTitles
 }
 
-// DefaultSoftTitles are the owner's standing placeholder blocks: real intent,
-// but overridable when nothing harder is free.
+// DefaultSoftTitles are the owner's standing placeholder blocks.
 var DefaultSoftTitles = []string{"Morning Prep", "Lunch", "Dinner Decompress"}
 
 // TriageConfig controls the Gmail email-triage agent.
