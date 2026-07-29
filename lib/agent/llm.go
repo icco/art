@@ -160,7 +160,7 @@ type findFreeSlotsArgs struct {
 type freeSlot struct {
 	StartISO string `json:"start"`
 	EndISO   string `json:"end"`
-	// Soft slots sit on top of a placeholder block (e.g. "Morning Catchup").
+	// Soft slots sit on top of a placeholder block (e.g. "Morning Prep").
 	// They are listed after every hard-free slot.
 	Soft bool `json:"soft"`
 }

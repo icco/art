@@ -6,7 +6,7 @@ import (
 )
 
 // SoftTitles is the set of human-event summaries Art may schedule on top of.
-// They are placeholder blocks (e.g. "Morning Catchup", "Dinner Decompress")
+// They are placeholder blocks (e.g. "Morning Prep", "Dinner Decompress")
 // that reserve intent rather than a hard commitment, so the planner treats a
 // slot they cover as available-but-second-choice instead of busy.
 type SoftTitles []string

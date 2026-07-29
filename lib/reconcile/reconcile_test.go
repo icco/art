@@ -168,13 +168,13 @@ func seedSoftEvent(t *testing.T, db *gorm.DB, evID, summary string, start time.T
 func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Morning Catchup", "Dinner Decompress")
+	r.SoftTitles = models.NewSoftTitles("Morning Prep", "Dinner Decompress")
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
 	// The placeholder the planner was allowed to book over; casing and padding
 	// must not matter.
-	seedSoftEvent(t, db, "ev-soft", "  morning catchup ", start)
+	seedSoftEvent(t, db, "ev-soft", "  morning prep ", start)
 
 	if err := r.Run(context.Background()); err != nil {
 		t.Fatal(err)
@@ -192,11 +192,11 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 func TestReconcileStillRetractsWhenHardEventJoinsSoftOne(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Morning Catchup")
+	r.SoftTitles = models.NewSoftTitles("Morning Prep")
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
-	seedSoftEvent(t, db, "ev-soft", "Morning Catchup", start)
+	seedSoftEvent(t, db, "ev-soft", "Morning Prep", start)
 	seedSoftEvent(t, db, "ev-hard", "Dentist", start)
 
 	if err := r.Run(context.Background()); err != nil {

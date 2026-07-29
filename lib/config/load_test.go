@@ -101,7 +101,7 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.SoftTitles.Match("Morning Catchup") || !cfg.SoftTitles.Match("dinner decompress") {
+	if !cfg.SoftTitles.Match("Morning Prep") || !cfg.SoftTitles.Match("dinner decompress") {
 		t.Fatalf("default soft titles = %v, want the built-in placeholders", cfg.SoftTitles)
 	}
 
@@ -110,7 +110,7 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.SoftTitles) != 2 || !cfg.SoftTitles.Match("lunch") || cfg.SoftTitles.Match("Morning Catchup") {
+	if len(cfg.SoftTitles) != 2 || !cfg.SoftTitles.Match("lunch") || cfg.SoftTitles.Match("Morning Prep") {
 		t.Fatalf("soft titles = %v, want [lunch nap] and no defaults", cfg.SoftTitles)
 	}
 
@@ -120,7 +120,7 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if len(cfg.SoftTitles) != 0 || cfg.SoftTitles.Match("Morning Catchup") {
+	if len(cfg.SoftTitles) != 0 || cfg.SoftTitles.Match("Morning Prep") {
 		t.Fatalf("soft titles = %v, want empty", cfg.SoftTitles)
 	}
 }

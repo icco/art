@@ -49,7 +49,7 @@ curl -s -X PUT http://localhost:8080/working-hours \
 ## Soft events
 
 Some events are placeholders rather than commitments — standing blocks like
-*Morning Catchup* or *Dinner Decompress*. List their exact titles in
+*Morning Prep* or *Dinner Decompress*. List their exact titles in
 `SOFT_EVENT_TITLES` and the planner may schedule on top of them: their time
 shows up in `find_free_slots` marked `soft`, always ranked behind every
 genuinely free slot, so Art only takes it when a project or habit has nowhere

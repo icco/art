@@ -149,7 +149,7 @@ func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
 	// A placeholder covering 9-11 and a real meeting covering 11-12.
 	if err := db.Create(&models.Event{
 		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
-		Summary: "Morning Catchup", StartTime: monday9, EndTime: monday9.Add(2 * time.Hour),
+		Summary: "Morning Prep", StartTime: monday9, EndTime: monday9.Add(2 * time.Hour),
 		Status: "confirmed",
 	}).Error; err != nil {
 		t.Fatal(err)
@@ -163,7 +163,7 @@ func TestFindFreeSlotsRanksSoftEventsLast(t *testing.T) {
 	}
 
 	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
-	soft := models.NewSoftTitles("Morning Catchup")
+	soft := models.NewSoftTitles("Morning Prep")
 	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, soft)
 	if err != nil {
 		t.Fatal(err)
@@ -223,7 +223,7 @@ func TestFindFreeSlotsGivesHardTimeFirstRefusal(t *testing.T) {
 	// block fits at 9:30 without touching the placeholder.
 	if err := db.Create(&models.Event{
 		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "soft1",
-		Summary: "Morning Catchup", StartTime: monday9, EndTime: monday9.Add(30 * time.Minute),
+		Summary: "Morning Prep", StartTime: monday9, EndTime: monday9.Add(30 * time.Minute),
 		Status: "confirmed",
 	}).Error; err != nil {
 		t.Fatal(err)
@@ -237,7 +237,7 @@ func TestFindFreeSlotsGivesHardTimeFirstRefusal(t *testing.T) {
 	}
 
 	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
-	soft := models.NewSoftTitles("Morning Catchup")
+	soft := models.NewSoftTitles("Morning Prep")
 	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, monday9, to, 20, soft)
 	if err != nil {
 		t.Fatal(err)
