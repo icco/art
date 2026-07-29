@@ -152,6 +152,91 @@ func TestReconcileIgnoresOwnEventNoConflict(t *testing.T) {
 	}
 }
 
+// seedSoftEvent adds a human placeholder event with the given summary.
+func seedSoftEvent(t *testing.T, db *gorm.DB, evID, summary string, start time.Time) {
+	t.Helper()
+	e := models.Event{
+		AccountKind: models.AccountPersonal, CalendarID: "primary", GoogleEventID: evID,
+		Summary: summary, StartTime: start, EndTime: start.Add(time.Hour),
+		Status: "confirmed", EventType: "default",
+	}
+	if err := db.Create(&e).Error; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	r.SoftTitles = models.NewSoftTitles("Morning Prep", "Dinner Decompress")
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+	// Casing and padding must not matter.
+	seedSoftEvent(t, db, "ev-soft", "  morning prep ", start)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 0 {
+		t.Fatalf("soft event is not a conflict, got DeleteManaged %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 1 {
+		t.Fatalf("session over a soft event should survive, %d remain", n)
+	}
+}
+
+// A tab-padded title reads soft to the planner, so it must here too.
+func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	r.SoftTitles = models.NewSoftTitles("Lunch")
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+	seedSoftEvent(t, db, "ev-soft", "\tLunch\n", start)
+
+	if !r.SoftTitles.Match("\tLunch\n") {
+		t.Fatal("precondition: the planner's matcher treats this title as soft")
+	}
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 0 {
+		t.Fatalf("tab-padded soft title is not a conflict, got DeleteManaged %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 1 {
+		t.Fatalf("session should survive, %d remain", n)
+	}
+}
+
+func TestReconcileStillRetractsWhenHardEventJoinsSoftOne(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	r.SoftTitles = models.NewSoftTitles("Morning Prep")
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+	seedSoftEvent(t, db, "ev-soft", "Morning Prep", start)
+	seedSoftEvent(t, db, "ev-hard", "Dentist", start)
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 1 {
+		t.Fatalf("DeleteManaged calls = %v, want one for the real conflict", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 0 {
+		t.Fatalf("session should be retracted for the hard event, %d remain", n)
+	}
+}
+
 func TestReconcileSkipsWhenSyncStale(t *testing.T) {
 	cal := &fakeCal{}
 	db := testdb.Open(t)

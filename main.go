@@ -59,7 +59,7 @@ func run(log *zap.SugaredLogger) error {
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
 
 	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow, TZ: cfg.Timezone}
-	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone}
+	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone, SoftTitles: cfg.SoftTitles}
 	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
 

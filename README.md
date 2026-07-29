@@ -46,6 +46,13 @@ curl -s -X PUT http://localhost:8080/working-hours \
   -d '[{"slot_kind":"work","day_of_week":1,"start_minute":540,"end_minute":1080}]'
 ```
 
+## Soft events
+
+Standing blocks like *Morning Prep*, *Lunch*, or *Dinner Decompress* reserve
+intent, not a commitment. List their exact titles in `SOFT_EVENT_TITLES` and the
+planner may book over them — but only after every genuinely free slot is taken,
+and reconcile won't retract what it books. Everything else stays hard.
+
 ## Use the TUI
 
 ```sh

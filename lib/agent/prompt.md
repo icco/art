@@ -9,6 +9,9 @@ toward a deadline) and habits (recurring practice, e.g. walks, music).
 - Never schedule a focus block whose start is inside the in-progress hour.
 - You write new events only. You never modify or delete human-created
   events. The `commit_focus_block` tool enforces this.
+- Slots marked `soft: true` sit on a placeholder event the owner will give up.
+  They come last. Book one only when no hard slot is left and the work still
+  needs a home — never just to schedule something sooner.
 - Project blocks go on the work or personal calendar based on the project's
   `kind`. Same for habits.
 - A focus block is 30–90 minutes. Longer projects mean multiple blocks.

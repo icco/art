@@ -160,6 +160,8 @@ type findFreeSlotsArgs struct {
 type freeSlot struct {
 	StartISO string `json:"start"`
 	EndISO   string `json:"end"`
+	// Soft slots sit on a placeholder block and are listed last.
+	Soft bool `json:"soft"`
 }
 
 type findFreeSlotsResult struct {
@@ -194,7 +196,7 @@ func (c *llmCycle) tools() ([]tool.Tool, error) {
 	findSlots, err := functiontool.New[findFreeSlotsArgs, findFreeSlotsResult](
 		functiontool.Config{
 			Name:        "find_free_slots",
-			Description: "Return candidate free time slots that respect working hours and avoid existing events on the chosen account. The window is implicitly [planning_start, week_end).",
+			Description: "Return candidate free time slots that respect working hours and avoid existing events on the chosen account. Slots marked soft=true sit on a placeholder block and are listed last. The window is implicitly [planning_start, week_end).",
 		},
 		c.findFreeSlots,
 	)
@@ -330,7 +332,7 @@ func (c *llmCycle) findFreeSlots(_ adkagent.ToolContext, args findFreeSlotsArgs)
 	from, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
 	slots, err := FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone,
 		models.AccountKind(args.AccountKind), models.SlotKind(args.SlotKind),
-		args.DurationMin, from, windowEnd, maxResults)
+		args.DurationMin, from, windowEnd, maxResults, c.p.Cfg.SoftTitles)
 	if err != nil {
 		return findFreeSlotsResult{}, err
 	}
@@ -339,6 +341,7 @@ func (c *llmCycle) findFreeSlots(_ adkagent.ToolContext, args findFreeSlotsArgs)
 		out.Slots = append(out.Slots, freeSlot{
 			StartISO: s.Start.UTC().Format(time.RFC3339),
 			EndISO:   s.End.UTC().Format(time.RFC3339),
+			Soft:     s.Soft,
 		})
 	}
 	return out, nil
@@ -386,11 +389,12 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	}
 
 	acct := accountForKind(kind)
-	busy, err := loadBusy(ctx, c.p.DB, acct, start, end)
+	busy, err := loadBusy(ctx, c.p.DB, acct, start, end, c.p.Cfg.SoftTitles)
 	if err != nil {
 		return commitFocusBlockResult{}, err
 	}
-	if overlapsAny(start, end, busy) {
+	// Placeholders are schedulable-over; real events and sessions are not.
+	if overlapsHard(start, end, busy) {
 		return commitFocusBlockResult{}, fmt.Errorf("block %s-%s overlaps an existing event or planned session", args.StartISO, args.EndISO)
 	}
 
