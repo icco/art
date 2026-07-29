@@ -21,9 +21,9 @@ grid: **sync** every 10 min (mirrors both calendars, then reconciles the plan
 against that fresh mirror as its tail — `lib/reconcile`), **planner** every
 15 min, **triage** every 30 min. Within a shared slot they run
 sync → planner → triage. The planner is an ADK/Vertex Gemini agent
-(`lib/agent`) that books focus blocks over a rolling 30-day window
-(`PlanHorizon`); `commit_focus_block` is the server-side source of truth for
-every scheduling invariant.
+(`lib/agent`) that books focus blocks over a rolling window
+(`plan_horizon_days`); `commit_focus_block` is the server-side source of truth
+for every scheduling invariant.
 
 - Schema is owned by `gorm.AutoMigrate` over `lib/models`; UUID PKs are
   generated in Go (`BeforeCreate` + `google/uuid`). No migration files.
@@ -31,9 +31,15 @@ every scheduling invariant.
   in extended properties — that flag is how Art knows what it may modify.
 - The busy predicate lives in three places that must agree: `loadBusy` /
   `overlapsHard` (`lib/agent/freeslots.go`), `commit_focus_block`, and
-  `reconcile.hasHumanConflict`. Titles in `SOFT_EVENT_TITLES` are
-  schedulable-over in all three — miss one and the next sync retracts what the
-  planner just booked.
+  `reconcile.hasHumanConflict`. The soft titles are schedulable-over in all
+  three — miss one and the next sync retracts what the planner just booked.
+- `lib/settings` holds the runtime-editable config (soft titles, triage knobs,
+  planner bounds) in the `settings` table, seeded by the matching env vars. Read
+  it at use time — once per run — never at boot, or an edit needs a redeploy.
+  Its key list is an allowlist: secrets never go in the table or the API.
+- `lib/agent/prompt.md` must stay free of the numbers those settings own;
+  `instruction()` appends the run's live window and block bounds. A stale number
+  in the prompt makes the model book blocks `commit_focus_block` then rejects.
 - Email triage classifies with Gemini structured output and records an
   `email_messages` row + an `agent_runs` row (`kind=triage`). Message bodies are
   never persisted. Refresh tokens are AES-256-GCM sealed (`lib/oauth`).

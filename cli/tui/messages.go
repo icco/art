@@ -17,6 +17,8 @@ type habitsMsg struct{ habits []Habit }
 type sessionsMsg struct{ sessions []Session }
 type emailsMsg struct{ emails []Email }
 type runsMsg struct{ runs []AgentRun }
+type workingHoursMsg struct{ hours []WorkingHour }
+type settingsMsg struct{ settings Settings }
 
 type statusMsg string
 

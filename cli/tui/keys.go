@@ -11,9 +11,16 @@ type keyMap struct {
 	Habits    key.Binding
 	Digest    key.Binding
 	Sessions  key.Binding
+	Hours     key.Binding
+	Settings  key.Binding
 
 	PrevWeek key.Binding
 	NextWeek key.Binding
+
+	Up       key.Binding
+	Down     key.Binding
+	PrevKind key.Binding
+	NextKind key.Binding
 
 	Add    key.Binding
 	Edit   key.Binding
@@ -38,9 +45,16 @@ func defaultKeyMap() keyMap {
 		Habits:    key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "habits")),
 		Digest:    key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "digest")),
 		Sessions:  key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "sessions")),
+		Hours:     key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "hours")),
+		Settings:  key.NewBinding(key.WithKeys("8"), key.WithHelp("8", "settings")),
 
 		PrevWeek: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev week")),
 		NextWeek: key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next week")),
+
+		Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
+		Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
+		PrevKind: key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "kind")),
+		NextKind: key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "kind")),
 
 		Add:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
 		Edit:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
@@ -76,7 +90,10 @@ func (h pageHelp) ShortHelp() []key.Binding {
 // global run/back/help/quit keys.
 func (h pageHelp) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits, h.keys.Digest, h.keys.Sessions},
+		{
+			h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits,
+			h.keys.Digest, h.keys.Sessions, h.keys.Hours, h.keys.Settings,
+		},
 		h.page,
 		{h.keys.Replan, h.keys.Sync, h.keys.Triage, h.keys.Back, h.keys.Help, h.keys.Quit},
 	}

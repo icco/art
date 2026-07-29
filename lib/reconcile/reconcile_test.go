@@ -21,6 +21,11 @@ func (f *fakeCal) DeleteManaged(_ context.Context, account models.AccountKind, c
 	return f.err
 }
 
+// fakeSoft stands in for the settings store.
+type fakeSoft struct{ titles models.SoftTitles }
+
+func (f fakeSoft) SoftTitles(context.Context) (models.SoftTitles, error) { return f.titles, nil }
+
 // fixedNow anchors the pass; sessions sit comfortably inside the sync window.
 var fixedNow = time.Date(2026, 7, 6, 12, 0, 0, 0, time.UTC)
 
@@ -32,7 +37,7 @@ func newRunner(t *testing.T, cal CalendarService) (*Runner, *gorm.DB) {
 	if err := db.Create(&models.SyncState{AccountKind: models.AccountPersonal, CalendarID: "primary", LastSyncedAt: &synced}).Error; err != nil {
 		t.Fatal(err)
 	}
-	return &Runner{DB: db, Cal: cal, TZ: time.UTC, Now: func() time.Time { return fixedNow }}, db
+	return &Runner{DB: db, Cal: cal, TZ: time.UTC, Settings: fakeSoft{}, Now: func() time.Time { return fixedNow }}, db
 }
 
 func seedSession(t *testing.T, db *gorm.DB, evID string, start time.Time) models.Session {
@@ -168,7 +173,7 @@ func seedSoftEvent(t *testing.T, db *gorm.DB, evID, summary string, start time.T
 func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Morning Prep", "Dinner Decompress")
+	r.Settings = fakeSoft{models.NewSoftTitles("Morning Prep", "Dinner Decompress")}
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
@@ -192,13 +197,14 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Lunch")
+	soft := models.NewSoftTitles("Lunch")
+	r.Settings = fakeSoft{soft}
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
 	seedSoftEvent(t, db, "ev-soft", "\tLunch\n", start)
 
-	if !r.SoftTitles.Match("\tLunch\n") {
+	if !soft.Match("\tLunch\n") {
 		t.Fatal("precondition: the planner's matcher treats this title as soft")
 	}
 	if err := r.Run(context.Background()); err != nil {
@@ -217,7 +223,7 @@ func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
 func TestReconcileStillRetractsWhenHardEventJoinsSoftOne(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Morning Prep")
+	r.Settings = fakeSoft{models.NewSoftTitles("Morning Prep")}
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
@@ -244,7 +250,7 @@ func TestReconcileSkipsWhenSyncStale(t *testing.T) {
 	if err := db.Create(&models.SyncState{AccountKind: models.AccountPersonal, CalendarID: "primary", LastSyncedAt: &stale}).Error; err != nil {
 		t.Fatal(err)
 	}
-	r := &Runner{DB: db, Cal: cal, TZ: time.UTC, Now: func() time.Time { return fixedNow }}
+	r := &Runner{DB: db, Cal: cal, TZ: time.UTC, Settings: fakeSoft{}, Now: func() time.Time { return fixedNow }}
 	s := seedSession(t, db, "ev-gone", fixedNow.Add(24*time.Hour)) // would be deleted if fresh
 
 	if err := r.Run(context.Background()); err != nil {

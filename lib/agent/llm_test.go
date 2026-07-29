@@ -11,6 +11,7 @@ import (
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
+	"github.com/icco/art/lib/settings"
 	"github.com/icco/art/lib/testdb"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -21,8 +22,8 @@ func newCycle(t *testing.T) *llmCycle {
 	db := testdb.Open(t)
 	tz, _ := time.LoadLocation("America/Los_Angeles")
 	cfg := &config.Config{Timezone: tz}
-	p := &Planner{Cfg: cfg, DB: db}
-	return &llmCycle{p: p, summary: map[string]any{
+	p := &Planner{Cfg: cfg, DB: db, Settings: settings.New(db, nil)}
+	return &llmCycle{p: p, vals: settings.DefaultsFrom(nil), summary: map[string]any{
 		"projects_scheduled": 0,
 		"habits_scheduled":   0,
 		"errors":             []string{},
@@ -248,13 +249,12 @@ func TestCommitFocusBlockEnforcesInvariants(t *testing.T) {
 	c := newCycle(t)
 	c.ctx = context.Background()
 	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
-	tz := c.p.Cfg.Timezone
 	pj := &models.Project{Name: "P", Kind: models.SlotWork, TargetHours: 4, Status: models.ProjectActive}
 	if err := c.p.DB.Create(pj).Error; err != nil {
 		t.Fatal(err)
 	}
 
-	planFrom, _ := PlanWindow(time.Now(), tz)
+	planFrom, _ := c.planWindow()
 	iso := func(ts time.Time) string { return ts.UTC().Format(time.RFC3339) }
 	commit := func(start, end time.Time) error {
 		_, err := c.commitFocusBlock(nil, commitFocusBlockArgs{
@@ -323,7 +323,7 @@ func TestCommitFocusBlockOneHabitPerDay(t *testing.T) {
 		}
 	}
 
-	planFrom, windowEnd := PlanWindow(time.Now(), tz)
+	planFrom, windowEnd := c.planWindow()
 	// Use the first whole local day after planning start, so intra-day blocks
 	// are all in-window and share one calendar day.
 	day := startOfDay(planFrom, tz)

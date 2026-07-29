@@ -20,6 +20,7 @@ import (
 	"github.com/icco/art/lib/oauth"
 	"github.com/icco/art/lib/queue"
 	"github.com/icco/art/lib/reconcile"
+	"github.com/icco/art/lib/settings"
 	gutillog "github.com/icco/gutil/logging"
 	"go.uber.org/zap"
 )
@@ -58,10 +59,13 @@ func run(log *zap.SugaredLogger) error {
 	oauthStore := &oauth.Store{DB: gdb, Sealer: sealer}
 	oauthFlow := oauth.NewFlow(cfg.OAuth.ClientID, cfg.OAuth.ClientSecret, cfg.OAuth.RedirectURL, oauthStore)
 
+	// Env config seeds the settings store; DB rows win once written.
+	settingsStore := settings.New(gdb, cfg)
+
 	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow, TZ: cfg.Timezone}
-	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone, SoftTitles: cfg.SoftTitles}
-	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
-	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow}
+	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone, Settings: settingsStore}
+	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow, Settings: settingsStore}
+	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow, Settings: settingsStore}
 
 	worker := queue.New(gdb, syncRunner, reconciler, planner, triager)
 
@@ -72,6 +76,7 @@ func run(log *zap.SugaredLogger) error {
 		Jobs:     worker,
 		Triage:   triager,
 		Calendar: &calendar.Manager{OAuth: oauthFlow},
+		Settings: settingsStore,
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})
 

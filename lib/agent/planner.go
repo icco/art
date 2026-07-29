@@ -11,21 +11,29 @@ import (
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
+	"github.com/icco/art/lib/settings"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
-// Planner schedules focus blocks over a rolling 30-day window (PlanHorizon)
-// and never inside the in-progress hour. ADK orchestration wraps the same
+// Planner schedules focus blocks over a rolling window (plan_horizon_days) and
+// never inside the in-progress hour. ADK orchestration wraps the same
 // primitives as tools.
 type Planner struct {
-	Cfg   *config.Config
-	DB    *gorm.DB
-	OAuth *oauth.Flow
+	Cfg      *config.Config
+	DB       *gorm.DB
+	OAuth    *oauth.Flow
+	Settings *settings.Store
 }
 
 // Run executes a single planner pass and records the result as an AgentRun row.
 func (p *Planner) Run(ctx context.Context) error {
+	// Settings are read per run, so an edit lands on the next pass.
+	vals, err := p.Settings.Load(ctx)
+	if err != nil {
+		return err
+	}
+
 	run := models.AgentRun{Kind: models.AgentRunPlanner, StartedAt: time.Now(), Status: models.AgentRunRunning, Model: config.VertexModel}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
@@ -36,7 +44,7 @@ func (p *Planner) Run(ctx context.Context) error {
 		"habits_scheduled":   0,
 		"errors":             []string{},
 	}
-	runErr := p.llmPlan(ctx, summary)
+	runErr := p.llmPlan(ctx, vals, summary)
 	return p.finish(ctx, run.ID, summary, runErr)
 }
 
