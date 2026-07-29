@@ -100,6 +100,52 @@ func setEmailArchived(c *Client, id string, archived bool) tea.Cmd {
 	}
 }
 
+func loadWorkingHours(c *Client) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		hs, err := c.ListWorkingHours(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return workingHoursMsg{hs}
+	}
+}
+
+func saveWorkingHoursDay(c *Client, kind string, day int, windows []DayWindow) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		if err := c.SetWorkingHoursDay(ctx, kind, day, windows); err != nil {
+			return errMsg{err}
+		}
+		return statusMsg("working hours updated")
+	}
+}
+
+func loadSettings(c *Client) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		s, err := c.GetSettings(ctx)
+		if err != nil {
+			return errMsg{err}
+		}
+		return settingsMsg{s}
+	}
+}
+
+func saveSettings(c *Client, s Settings) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := bg()
+		defer cancel()
+		if _, err := c.UpdateSettings(ctx, s); err != nil {
+			return errMsg{err}
+		}
+		return statusMsg("settings saved")
+	}
+}
+
 func loadRuns(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := bg()

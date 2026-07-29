@@ -46,6 +46,27 @@ curl -s -X PUT http://localhost:8080/working-hours \
   -d '[{"slot_kind":"work","day_of_week":1,"start_minute":540,"end_minute":1080}]'
 ```
 
+A single day can change without resending the table:
+
+```sh
+curl -s -X PATCH http://localhost:8080/working-hours/work/1 \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '[{"start_minute":540,"end_minute":720},{"start_minute":780,"end_minute":1080}]'
+```
+
+## Settings
+
+`GET`/`PUT /settings` edits the knobs Art reads on every run — the soft event
+titles, the triage switches (enabled, dry run, confidence threshold, backfill
+and reconcile days), and the planner bounds (plan horizon in days, min/max focus
+block minutes). The env vars above seed them, so nothing changes until you write
+a value; after that the stored value wins, no redeploy needed.
+
+Only those keys exist. Owner emails, the OIDC audience, the encryption key, the
+database URL and the Google/Vertex credentials stay env-only, and so does
+`ART_TIMEZONE` — changing it would silently reinterpret every working-hours row
+and move existing plans.
+
 ## Soft events
 
 Standing blocks like *Morning Prep*, *Lunch*, or *Dinner Decompress* reserve
@@ -60,7 +81,8 @@ ART_API_URL=https://art.example.com art
 ```
 
 The TUI authenticates as *you* via `gcloud` — no stored secrets. `r` replans,
-`t` triages.
+`t` triages. `7` shows working hours as a grid (`e` edits the selected day) and
+`8` edits the settings above.
 
 ## Email triage
 

@@ -213,6 +213,64 @@ type Email struct {
 	ReceivedAt  time.Time `json:"received_at"`
 }
 
+// WorkingHour mirrors one allowed-time window. Minutes are minutes past
+// midnight in the server's timezone; EndMinute may be 1440 for midnight.
+type WorkingHour struct {
+	ID          string `json:"id,omitempty"`
+	SlotKind    string `json:"slot_kind"`
+	DayOfWeek   int    `json:"day_of_week"`
+	StartMinute int    `json:"start_minute"`
+	EndMinute   int    `json:"end_minute"`
+}
+
+// DayWindow is one window in a per-day working-hours patch; the kind and day
+// travel in the path.
+type DayWindow struct {
+	StartMinute int `json:"start_minute"`
+	EndMinute   int `json:"end_minute"`
+}
+
+// Settings mirrors the API settings resource: the runtime-editable knobs only.
+type Settings struct {
+	SoftEventTitles           []string `json:"soft_event_titles"`
+	TriageEnabled             bool     `json:"triage_enabled"`
+	TriageDryRun              bool     `json:"triage_dry_run"`
+	TriageConfidenceThreshold float64  `json:"triage_confidence_threshold"`
+	TriageBackfillDays        int      `json:"triage_backfill_days"`
+	TriageReconcileDays       int      `json:"triage_reconcile_days"`
+	PlanHorizonDays           int      `json:"plan_horizon_days"`
+	FocusBlockMinMinutes      int      `json:"focus_block_min_minutes"`
+	FocusBlockMaxMinutes      int      `json:"focus_block_max_minutes"`
+}
+
+// ListWorkingHours returns every configured working-hours window.
+func (c *Client) ListWorkingHours(ctx context.Context) ([]WorkingHour, error) {
+	var out []WorkingHour
+	return out, c.do(ctx, "GET", "/working-hours", nil, &out)
+}
+
+// SetWorkingHoursDay replaces the windows for one kind and weekday (0=Sunday).
+// An empty list clears the day. The server echoes the whole table, but callers
+// reload instead of consuming it, so the response is discarded.
+func (c *Client) SetWorkingHoursDay(ctx context.Context, kind string, day int, windows []DayWindow) error {
+	if windows == nil {
+		windows = []DayWindow{}
+	}
+	return c.do(ctx, "PATCH", fmt.Sprintf("/working-hours/%s/%d", kind, day), windows, nil)
+}
+
+// GetSettings returns the current runtime settings.
+func (c *Client) GetSettings(ctx context.Context) (Settings, error) {
+	var out Settings
+	return out, c.do(ctx, "GET", "/settings", nil, &out)
+}
+
+// UpdateSettings writes s and returns the stored result.
+func (c *Client) UpdateSettings(ctx context.Context, s Settings) (Settings, error) {
+	var out Settings
+	return out, c.do(ctx, "PUT", "/settings", s, &out)
+}
+
 // ListProjects returns all projects visible to the caller.
 func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
 	var out []Project

@@ -197,13 +197,14 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)
-	r.SoftTitles = models.NewSoftTitles("Lunch")
+	soft := models.NewSoftTitles("Lunch")
+	r.Settings = fakeSoft{soft}
 	start := fixedNow.Add(24 * time.Hour)
 	s := seedSession(t, db, "ev-art", start)
 	seedEvent(t, db, "ev-art", start, true)
 	seedSoftEvent(t, db, "ev-soft", "\tLunch\n", start)
 
-	if !r.SoftTitles.Match("\tLunch\n") {
+	if !soft.Match("\tLunch\n") {
 		t.Fatal("precondition: the planner's matcher treats this title as soft")
 	}
 	if err := r.Run(context.Background()); err != nil {
