@@ -189,6 +189,34 @@ func TestReconcileKeepsSessionOverSoftEvent(t *testing.T) {
 	}
 }
 
+// The planner's matcher trims all Unicode whitespace, so reconcile has to as
+// well — a tab-padded title that reads soft when the block is booked must still
+// read soft when the block is checked, or it gets retracted a sync later.
+func TestReconcileSoftMatchTrimsLikeThePlanner(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	r.SoftTitles = models.NewSoftTitles("Lunch")
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+	seedSoftEvent(t, db, "ev-soft", "\tLunch\n", start)
+
+	if !r.SoftTitles.Match("\tLunch\n") {
+		t.Fatal("precondition: the planner's matcher treats this title as soft")
+	}
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 0 {
+		t.Fatalf("tab-padded soft title is not a conflict, got DeleteManaged %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 1 {
+		t.Fatalf("session should survive, %d remain", n)
+	}
+}
+
 func TestReconcileStillRetractsWhenHardEventJoinsSoftOne(t *testing.T) {
 	cal := &fakeCal{}
 	r, db := newRunner(t, cal)

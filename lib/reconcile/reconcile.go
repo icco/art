@@ -149,18 +149,27 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 // using the same busy predicate as the planner's loadBusy. Soft-titled events
 // are excluded: the planner is allowed to book over them, so retracting for one
 // would undo that on the very next sync.
+//
+// The title test runs in Go rather than SQL so it is bit-for-bit the predicate
+// the planner used. Postgres btrim() trims spaces only, where strings.TrimSpace
+// trims all Unicode whitespace — a title padded with a tab would read soft to
+// the planner and hard here, and the block would be retracted a sync later.
 func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session) (bool, error) {
-	q := r.DB.WithContext(ctx).Model(&models.Event{}).
+	var summaries []string
+	if err := r.DB.WithContext(ctx).Model(&models.Event{}).
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
 		       AND (all_day = false OR event_type = 'outOfOffice')
 		       AND end_time > ? AND start_time < ?`,
-			s.AccountKind, s.ScheduledStart, s.ScheduledEnd)
-	if len(r.SoftTitles) > 0 {
-		q = q.Where("lower(btrim(summary)) NOT IN (?)", []string(r.SoftTitles))
+			s.AccountKind, s.ScheduledStart, s.ScheduledEnd).
+		Pluck("summary", &summaries).Error; err != nil {
+		return false, err
 	}
-	var n int64
-	err := q.Count(&n).Error
-	return n > 0, err
+	for _, summary := range summaries {
+		if !r.SoftTitles.Match(summary) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (r *Runner) finish(ctx context.Context, id string, summary map[string]any, runErr error) error {
