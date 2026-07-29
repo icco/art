@@ -101,7 +101,7 @@ func TestLoadSoftTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if !cfg.SoftTitles.Match("Morning Prep") || !cfg.SoftTitles.Match("dinner decompress") {
+	if !cfg.SoftTitles.Match("Morning Prep") || !cfg.SoftTitles.Match("Lunch") || !cfg.SoftTitles.Match("dinner decompress") {
 		t.Fatalf("default soft titles = %v, want the built-in placeholders", cfg.SoftTitles)
 	}
 
