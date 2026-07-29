@@ -10,6 +10,7 @@ import (
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
+	"github.com/icco/art/lib/settings"
 	"github.com/icco/art/lib/testdb"
 )
 
@@ -27,7 +28,8 @@ func newPlanner(t *testing.T) *agent.Planner {
 		},
 	}
 	flow := oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: db})
-	return &agent.Planner{Cfg: cfg, DB: db, OAuth: flow}
+	// Settings is required, like DB and OAuth: Run loads it on every pass.
+	return &agent.Planner{Cfg: cfg, DB: db, OAuth: flow, Settings: settings.New(db, cfg)}
 }
 
 func cmpOr(a, b string) string {

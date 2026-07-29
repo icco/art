@@ -53,6 +53,27 @@ func TestWorkingHoursCursorSelectsCell(t *testing.T) {
 	}
 }
 
+// Left and right must move opposite ways, not both forward.
+func TestWorkingHoursKindNavigationIsBidirectional(t *testing.T) {
+	var page Page = newWorkingHoursPage(nil)
+	if got := page.(workingHoursPage).kind; got != 0 {
+		t.Fatalf("kind starts at %d, want 0", got)
+	}
+	page, _ = page.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	if got := page.(workingHoursPage).kind; got != 1 {
+		t.Fatalf("right moved to %d, want 1", got)
+	}
+	page, _ = page.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := page.(workingHoursPage).kind; got != 0 {
+		t.Fatalf("left moved to %d, want back to 0", got)
+	}
+	// Left from the first column wraps to the last.
+	page, _ = page.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := page.(workingHoursPage).kind; got != len(slotKinds)-1 {
+		t.Fatalf("left from the first column landed on %d, want %d", got, len(slotKinds)-1)
+	}
+}
+
 func TestWorkingHoursSubmitPatchesOneDay(t *testing.T) {
 	var rec capturedReq
 	server := captureServer(t, &rec, http.StatusOK)

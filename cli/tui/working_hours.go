@@ -79,7 +79,9 @@ func (p workingHoursPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 		p.day = (p.day + len(dayNames) - 1) % len(dayNames)
 	case key.Matches(m, p.keys.Down):
 		p.day = (p.day + 1) % len(dayNames)
-	case key.Matches(m, p.keys.PrevKind), key.Matches(m, p.keys.NextKind):
+	case key.Matches(m, p.keys.PrevKind):
+		p.kind = (p.kind + len(slotKinds) - 1) % len(slotKinds)
+	case key.Matches(m, p.keys.NextKind):
 		p.kind = (p.kind + 1) % len(slotKinds)
 	case key.Matches(m, p.keys.Edit):
 		p.form, p.fd = newHoursForm(p.hours, slotKinds[p.kind], p.day, p.width, p.height)
