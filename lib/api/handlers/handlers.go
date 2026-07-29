@@ -8,6 +8,7 @@ import (
 
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/settings"
 	gutillog "github.com/icco/gutil/logging"
 	gutilrender "github.com/icco/gutil/render"
 	"gorm.io/gorm"
@@ -24,6 +25,7 @@ type Handlers struct {
 	Jobs     JobsService
 	Triage   TriageService
 	Calendar CalendarService
+	Settings *settings.Store
 }
 
 // OAuthService and friends decouple handlers from the concrete oauth,

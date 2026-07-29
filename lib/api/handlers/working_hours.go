@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/icco/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -82,6 +84,91 @@ func (h *Handlers) WorkingHoursReplace(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		writeServerError(w, r, "working_hours replace", err)
+		return
+	}
+	h.WorkingHoursList(w, r)
+}
+
+// dayWindowReq is one window in a per-day patch; kind and day come from the path.
+type dayWindowReq struct {
+	StartMinute int `json:"start_minute"`
+	EndMinute   int `json:"end_minute"`
+}
+
+// WorkingHoursPatchDay replaces the windows for one slot kind and weekday,
+// leaving the rest of the table alone. An empty list clears the day.
+func (h *Handlers) WorkingHoursPatchDay(w http.ResponseWriter, r *http.Request) {
+	kind := models.SlotKind(chi.URLParam(r, "kind"))
+	if !kind.Valid() {
+		writeError(w, r, http.StatusBadRequest, "kind must be 'work' or 'personal'")
+		return
+	}
+	day, err := strconv.Atoi(chi.URLParam(r, "day"))
+	if err != nil || day < 0 || day > 6 {
+		writeError(w, r, http.StatusBadRequest, "day must be 0-6")
+		return
+	}
+	var windows []dayWindowReq
+	if err := decodeJSON(r, &windows); err != nil {
+		writeError(w, r, http.StatusBadRequest, err.Error())
+		return
+	}
+	reqs := make([]workingHourReq, len(windows))
+	for i, win := range windows {
+		reqs[i] = workingHourReq{
+			SlotKind: string(kind), DayOfWeek: day,
+			StartMinute: win.StartMinute, EndMinute: win.EndMinute,
+		}
+		if err := reqs[i].validate(); err != nil {
+			writeError(w, r, http.StatusBadRequest, fmt.Sprintf("window %d: %v", i, err))
+			return
+		}
+	}
+
+	// Overlap is judged against the table the patch would produce, so read the
+	// untouched rows in the same transaction that writes.
+	var badReq error
+	err = h.DB.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
+		var others []models.WorkingHour
+		if err := tx.Where("NOT (slot_kind = ? AND day_of_week = ?)", kind, day).Find(&others).Error; err != nil {
+			return err
+		}
+		all := make([]workingHourReq, 0, len(others)+len(reqs))
+		for _, o := range others {
+			all = append(all, workingHourReq{
+				SlotKind: string(o.SlotKind), DayOfWeek: o.DayOfWeek,
+				StartMinute: o.StartMinute, EndMinute: o.EndMinute,
+			})
+		}
+		all = append(all, reqs...)
+		if err := validateNoOverlap(all); err != nil {
+			badReq = err
+			return err
+		}
+
+		if err := tx.Where("slot_kind = ? AND day_of_week = ?", kind, day).
+			Delete(&models.WorkingHour{}).Error; err != nil {
+			return err
+		}
+		for _, req := range reqs {
+			wh := models.WorkingHour{
+				SlotKind:    models.SlotKind(req.SlotKind),
+				DayOfWeek:   req.DayOfWeek,
+				StartMinute: req.StartMinute,
+				EndMinute:   req.EndMinute,
+			}
+			if err := tx.Create(&wh).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if badReq != nil {
+		writeError(w, r, http.StatusBadRequest, badReq.Error())
+		return
+	}
+	if err != nil {
+		writeServerError(w, r, "working_hours patch day", err)
 		return
 	}
 	h.WorkingHoursList(w, r)

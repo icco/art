@@ -7,6 +7,7 @@ import (
 
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/settings"
 	"github.com/icco/art/lib/testdb"
 	gutillog "github.com/icco/gutil/logging"
 )
@@ -19,7 +20,8 @@ func TestRunAllDisabled(t *testing.T) {
 	}
 	ctx := gutillog.NewContext(context.Background(), log)
 
-	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{Enabled: false}}, DB: db}
+	cfg := &config.Config{Triage: config.TriageConfig{Enabled: false}}
+	r := &Runner{Cfg: cfg, DB: db, Settings: settings.New(db, cfg)}
 	if err := r.RunAll(ctx); err != nil {
 		t.Fatalf("disabled RunAll: %v", err)
 	}
@@ -54,7 +56,8 @@ func TestRunAllSkipsWhenLockHeld(t *testing.T) {
 		t.Fatalf("test could not take lock: %v %v", locked, err)
 	}
 
-	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{Enabled: true}}, DB: db}
+	cfg := &config.Config{Triage: config.TriageConfig{Enabled: true}}
+	r := &Runner{Cfg: cfg, DB: db, Settings: settings.New(db, cfg)}
 	if err := r.RunAll(ctx); err != nil {
 		t.Fatalf("locked RunAll should skip cleanly: %v", err)
 	}
@@ -77,7 +80,7 @@ func TestFinishRecordsSummary(t *testing.T) {
 	}
 
 	counts := map[string]int{"archive": 3, "reply": 1}
-	if err := r.finish(context.Background(), run.ID, counts, nil, 100, 40); err != nil {
+	if err := r.finish(context.Background(), run.ID, true, counts, nil, 100, 40); err != nil {
 		t.Fatal(err)
 	}
 
@@ -104,7 +107,7 @@ func TestFinishRecordsSummary(t *testing.T) {
 	if err := db.Create(&run2).Error; err != nil {
 		t.Fatal(err)
 	}
-	if err := r.finish(context.Background(), run2.ID, map[string]int{}, []string{"boom"}, 0, 0); err != nil {
+	if err := r.finish(context.Background(), run2.ID, true, map[string]int{}, []string{"boom"}, 0, 0); err != nil {
 		t.Fatal(err)
 	}
 	var got2 models.AgentRun

@@ -316,10 +316,19 @@ type Job struct {
 	LastError   string     `gorm:"type:text;not null;default:''" json:"last_error"`
 }
 
+// Setting is one runtime-editable configuration value. Keys are an allowlist
+// owned by lib/settings; secrets and deploy-time config stay in the env.
+type Setting struct {
+	Base
+	Key   string `gorm:"type:varchar(64);uniqueIndex;not null" json:"key"`
+	Value string `gorm:"type:text;not null;default:''" json:"value"`
+}
+
 // All returns the models in AutoMigrate order.
 func All() []any {
 	return []any{
 		&Account{},
+		&Setting{},
 		&WorkingHour{},
 		&Project{},
 		&Habit{},

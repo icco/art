@@ -11,6 +11,7 @@ import (
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
+	"github.com/icco/art/lib/settings"
 	gutillog "github.com/icco/gutil/logging"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -26,13 +27,19 @@ type Runner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB
 	OAuth *oauth.Flow
+	// Settings is read once per pass, so an edit lands on the next run.
+	Settings *settings.Store
 }
 
 // RunAll triages both inboxes. It returns an error only for fatal setup
 // failures; per-account problems are recorded in the run summary.
 func (r *Runner) RunAll(ctx context.Context) error {
 	log := gutillog.FromContext(ctx)
-	if !r.Cfg.Triage.Enabled {
+	vals, err := r.Settings.Load(ctx)
+	if err != nil {
+		return err
+	}
+	if !vals.TriageEnabled {
 		log.Infow("triage disabled, skipping")
 		return nil
 	}
@@ -71,18 +78,18 @@ func (r *Runner) RunAll(ctx context.Context) error {
 
 	counts := map[string]int{}
 	var runErrs []string
-	tokensIn, tokensOut := r.triageAccounts(ctx, run.ID, counts, &runErrs)
+	tokensIn, tokensOut := r.triageAccounts(ctx, run.ID, vals, counts, &runErrs)
 
-	return r.finish(ctx, run.ID, counts, runErrs, tokensIn, tokensOut)
+	return r.finish(ctx, run.ID, vals.TriageDryRun, counts, runErrs, tokensIn, tokensOut)
 }
 
-func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[string]int, runErrs *[]string) (tokensIn, tokensOut int) {
+func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings.Values, counts map[string]int, runErrs *[]string) (tokensIn, tokensOut int) {
 	log := gutillog.FromContext(ctx)
 
 	// Corrections come from decisions Nat has manually reversed. There is no
 	// autonomous reconcile pass: detecting reversals would mean inspecting mail
 	// Art has already moved out of the inbox, and Art only reads the inbox.
-	corrections, err := buildCorrections(ctx, r.DB, r.Cfg.Triage.ReconcileDays, maxCorrections)
+	corrections, err := buildCorrections(ctx, r.DB, vals.TriageReconcileDays, maxCorrections)
 	if err != nil {
 		log.Warnw("building corrections failed", "err", err)
 	}
@@ -96,10 +103,10 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 	triager := &Triager{
 		DB:                  r.DB,
 		Classifier:          classifier,
-		BackfillDays:        r.Cfg.Triage.BackfillDays,
+		BackfillDays:        vals.TriageBackfillDays,
 		MaxPerRun:           r.Cfg.Triage.MaxPerRun,
-		ConfidenceThreshold: r.Cfg.Triage.ConfidenceThreshold,
-		DryRun:              r.Cfg.Triage.DryRun,
+		ConfidenceThreshold: vals.TriageConfidenceThreshold,
+		DryRun:              vals.TriageDryRun,
 	}
 
 	// Triage new inbox mail for each linked account.
@@ -115,7 +122,7 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 		if err != nil {
 			*runErrs = append(*runErrs, fmt.Sprintf("%s: %v", kind, err))
 		}
-		log.Infow("triaged account", "account", kind, "processed", n, "dry_run", r.Cfg.Triage.DryRun)
+		log.Infow("triaged account", "account", kind, "processed", n, "dry_run", vals.TriageDryRun)
 	}
 	return classifier.TokensIn(), classifier.TokensOut()
 }
@@ -123,9 +130,9 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, counts map[st
 // maxCorrections bounds how many recent reversals feed the classifier prompt.
 const maxCorrections = 15
 
-func (r *Runner) finish(ctx context.Context, id string, counts map[string]int, runErrs []string, tokensIn, tokensOut int) error {
+func (r *Runner) finish(ctx context.Context, id string, dryRun bool, counts map[string]int, runErrs []string, tokensIn, tokensOut int) error {
 	summary := map[string]any{
-		"dry_run": r.Cfg.Triage.DryRun,
+		"dry_run": dryRun,
 		"errors":  runErrs,
 	}
 	for cat, n := range counts {

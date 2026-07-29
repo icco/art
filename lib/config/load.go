@@ -34,6 +34,14 @@ type Config struct {
 // DefaultSoftTitles are the owner's standing placeholder blocks.
 var DefaultSoftTitles = []string{"Morning Prep", "Lunch", "Dinner Decompress"}
 
+// Triage defaults, shared with lib/settings so a settings row and an unset env
+// var agree on the fallback.
+const (
+	DefaultTriageBackfillDays        = 7
+	DefaultTriageReconcileDays       = 7
+	DefaultTriageConfidenceThreshold = 0.8
+)
+
 // TriageConfig controls the Gmail email-triage agent.
 type TriageConfig struct {
 	Enabled             bool
@@ -81,10 +89,10 @@ func Load() (*Config, error) {
 		Triage: TriageConfig{
 			Enabled:             p.boolVar("TRIAGE_ENABLED", true),
 			DryRun:              p.boolVar("TRIAGE_DRY_RUN", false),
-			BackfillDays:        p.intVar("TRIAGE_BACKFILL_DAYS", 7),
+			BackfillDays:        p.intVar("TRIAGE_BACKFILL_DAYS", DefaultTriageBackfillDays),
 			MaxPerRun:           p.intVar("TRIAGE_MAX_PER_RUN", 1000),
-			ConfidenceThreshold: p.floatVar("TRIAGE_CONFIDENCE_THRESHOLD", 0.8),
-			ReconcileDays:       p.intVar("TRIAGE_RECONCILE_DAYS", 7),
+			ConfidenceThreshold: p.floatVar("TRIAGE_CONFIDENCE_THRESHOLD", DefaultTriageConfidenceThreshold),
+			ReconcileDays:       p.intVar("TRIAGE_RECONCILE_DAYS", DefaultTriageReconcileDays),
 		},
 		RateLimitRPM: p.intVar("RATE_LIMIT_RPM", 120),
 	}

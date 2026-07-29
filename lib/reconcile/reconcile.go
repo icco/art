@@ -26,14 +26,19 @@ type CalendarService interface {
 	DeleteManaged(ctx context.Context, account models.AccountKind, calendarID, eventID string) error
 }
 
+// SoftTitler supplies the placeholder-event titles the planner may book over;
+// satisfied by *settings.Store.
+type SoftTitler interface {
+	SoftTitles(ctx context.Context) (models.SoftTitles, error)
+}
+
 // Runner heals planned sessions against the events mirror on each pass.
 type Runner struct {
 	DB  *gorm.DB
 	Cal CalendarService
 	TZ  *time.Location
-	// SoftTitles are placeholder events the planner is allowed to schedule
-	// over, so overlapping them is not a conflict worth retracting for.
-	SoftTitles models.SoftTitles
+	// Settings is read once per pass, so an edit lands on the next sync.
+	Settings SoftTitler
 	// Now is injectable for tests; nil means time.Now.
 	Now func() time.Time
 }
@@ -65,6 +70,11 @@ func (r *Runner) reconcile(ctx context.Context, summary map[string]any) error {
 		return nil
 	}
 
+	soft, err := r.Settings.SoftTitles(ctx)
+	if err != nil {
+		return err
+	}
+
 	windowStart := now.Add(-calendar.HistoryWindow)
 	windowEnd := now.Add(calendar.FutureWindow)
 
@@ -76,7 +86,7 @@ func (r *Runner) reconcile(ctx context.Context, summary map[string]any) error {
 		return err
 	}
 	for _, s := range sessions {
-		if err := r.reconcileOne(ctx, summary, s); err != nil {
+		if err := r.reconcileOne(ctx, summary, s, soft); err != nil {
 			return err
 		}
 	}
@@ -93,7 +103,7 @@ func (r *Runner) mirrorFresh(ctx context.Context, now time.Time) bool {
 	return latest != nil && now.Sub(*latest) <= freshness
 }
 
-func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s models.Session) error {
+func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s models.Session, soft models.SoftTitles) error {
 	log := gutillog.FromContext(ctx)
 
 	var ev models.Event
@@ -128,7 +138,7 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 		s.ScheduledStart, s.ScheduledEnd = ev.StartTime, ev.EndTime
 	}
 
-	conflict, err := r.hasHumanConflict(ctx, s)
+	conflict, err := r.hasHumanConflict(ctx, s, soft)
 	if err != nil {
 		return err
 	}
@@ -151,7 +161,7 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 // the next sync. The title test runs in Go, not SQL: btrim() trims spaces where
 // strings.TrimSpace trims all Unicode whitespace, and the two disagreeing is
 // exactly how a block gets booked and then retracted.
-func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session) (bool, error) {
+func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session, soft models.SoftTitles) (bool, error) {
 	var summaries []string
 	if err := r.DB.WithContext(ctx).Model(&models.Event{}).
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
@@ -162,7 +172,7 @@ func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session) (bool, 
 		return false, err
 	}
 	for _, summary := range summaries {
-		if !r.SoftTitles.Match(summary) {
+		if !soft.Match(summary) {
 			return true, nil
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/art/lib/settings"
 	adkagent "google.golang.org/adk/agent"
 	"google.golang.org/adk/agent/llmagent"
 	"google.golang.org/adk/model/gemini"
@@ -36,16 +37,19 @@ var systemInstruction string
 //
 // ctx is the parent context; agent.ToolContext does not carry one.
 // mu guards summary and clients: ADK runs tool calls in parallel goroutines.
+// vals is the settings snapshot for this run: the prompt and the tools must
+// agree on the window and block bounds, so both read the same copy.
 type llmCycle struct {
 	p       *Planner
 	ctx     context.Context
+	vals    settings.Values
 	mu      sync.Mutex
 	summary map[string]any
 	clients map[models.AccountKind]*calendar.Client
 }
 
-func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
-	cycle := &llmCycle{p: p, ctx: ctx, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
+func (p *Planner) llmPlan(ctx context.Context, vals settings.Values, summary map[string]any) error {
+	cycle := &llmCycle{p: p, ctx: ctx, vals: vals, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
 
 	model, err := gemini.NewModel(ctx, config.VertexModel, &genai.ClientConfig{
 		Project:  p.Cfg.Vertex.ProjectID,
@@ -102,16 +106,24 @@ func (p *Planner) llmPlan(ctx context.Context, summary map[string]any) error {
 	return lastErr
 }
 
+// instruction appends the run's live numbers to the static prompt: the prompt
+// itself must stay free of them or the model works to stale bounds that
+// commit_focus_block then rejects.
 func (c *llmCycle) instruction() string {
 	now := time.Now().In(c.p.Cfg.Timezone)
-	from, end := PlanWindow(time.Now(), c.p.Cfg.Timezone)
-	return fmt.Sprintf("%s\n\nNow: %s\nPlan window: [%s, %s) in %s.",
+	from, end := c.planWindow()
+	return fmt.Sprintf("%s\n\nNow: %s\nPlan window: [%s, %s) in %s.\nFocus block length: %d-%d minutes.",
 		systemInstruction,
 		now.Format(time.RFC3339),
 		from.In(c.p.Cfg.Timezone).Format(time.RFC3339),
 		end.In(c.p.Cfg.Timezone).Format(time.RFC3339),
 		c.p.Cfg.Timezone.String(),
+		c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes,
 	)
+}
+
+func (c *llmCycle) planWindow() (time.Time, time.Time) {
+	return PlanWindow(time.Now(), c.p.Cfg.Timezone, c.vals.PlanHorizon())
 }
 
 // ---- tool args / results ----
@@ -244,7 +256,7 @@ func (c *llmCycle) listState(_ adkagent.ToolContext, _ listStateArgs) (listState
 		out.Projects = append(out.Projects, info)
 	}
 
-	windowStart, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
+	windowStart, windowEnd := c.planWindow()
 
 	var habits []models.Habit
 	if err := c.p.DB.WithContext(ctx).Where("active = ?", true).Find(&habits).Error; err != nil {
@@ -329,10 +341,10 @@ func (c *llmCycle) findFreeSlots(_ adkagent.ToolContext, args findFreeSlotsArgs)
 	if maxResults <= 0 {
 		maxResults = 5
 	}
-	from, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
+	from, windowEnd := c.planWindow()
 	slots, err := FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone,
 		models.AccountKind(args.AccountKind), models.SlotKind(args.SlotKind),
-		args.DurationMin, from, windowEnd, maxResults, c.p.Cfg.SoftTitles)
+		args.DurationMin, from, windowEnd, maxResults, c.vals.SoftTitles())
 	if err != nil {
 		return findFreeSlotsResult{}, err
 	}
@@ -364,10 +376,13 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 
 	// Enforce the same invariants as the deterministic planner. The LLM
 	// should respect these via the prompt, but tools are the source of truth.
-	if d := end.Sub(start); d < 30*time.Minute || d > 90*time.Minute {
-		return commitFocusBlockResult{}, fmt.Errorf("block must be 30-90 minutes, got %s", d)
+	lo := time.Duration(c.vals.FocusBlockMinMinutes) * time.Minute
+	hi := time.Duration(c.vals.FocusBlockMaxMinutes) * time.Minute
+	if d := end.Sub(start); d < lo || d > hi {
+		return commitFocusBlockResult{}, fmt.Errorf("block must be %d-%d minutes, got %s",
+			c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes, d)
 	}
-	planFrom, windowEnd := PlanWindow(time.Now(), c.p.Cfg.Timezone)
+	planFrom, windowEnd := c.planWindow()
 	if start.Before(planFrom) {
 		return commitFocusBlockResult{}, fmt.Errorf("start %s is before planning start %s", start, planFrom)
 	}
@@ -389,7 +404,7 @@ func (c *llmCycle) commitFocusBlock(_ adkagent.ToolContext, args commitFocusBloc
 	}
 
 	acct := accountForKind(kind)
-	busy, err := loadBusy(ctx, c.p.DB, acct, start, end, c.p.Cfg.SoftTitles)
+	busy, err := loadBusy(ctx, c.p.DB, acct, start, end, c.vals.SoftTitles())
 	if err != nil {
 		return commitFocusBlockResult{}, err
 	}
