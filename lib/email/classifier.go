@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
 	"google.golang.org/genai"
@@ -36,6 +37,10 @@ type Classifier struct {
 	client      *genai.Client
 	model       string
 	corrections string
+	// guard stops the run once the day's LLM budget is spent. It lives here
+	// rather than in the Triager because this is the only place that actually
+	// spends money, so the check cannot be bypassed by a new caller.
+	guard *cost.Guard
 
 	tokensIn  int
 	tokensOut int
@@ -43,7 +48,7 @@ type Classifier struct {
 
 // NewClassifier builds a Gemini client on the Vertex backend, mirroring the
 // planner's configuration.
-func NewClassifier(ctx context.Context, cfg *config.Config, corrections string) (*Classifier, error) {
+func NewClassifier(ctx context.Context, cfg *config.Config, corrections string, guard *cost.Guard) (*Classifier, error) {
 	client, err := genai.NewClient(ctx, &genai.ClientConfig{
 		Project:  cfg.Vertex.ProjectID,
 		Location: cfg.Vertex.Location,
@@ -52,7 +57,7 @@ func NewClassifier(ctx context.Context, cfg *config.Config, corrections string) 
 	if err != nil {
 		return nil, fmt.Errorf("genai client: %w", err)
 	}
-	return &Classifier{client: client, model: config.VertexModel, corrections: corrections}, nil
+	return &Classifier{client: client, model: config.TriageModel, corrections: corrections, guard: guard}, nil
 }
 
 // TokensIn reports cumulative prompt tokens across all Classify calls.
@@ -61,19 +66,38 @@ func (c *Classifier) TokensIn() int { return c.tokensIn }
 // TokensOut reports cumulative output tokens across all Classify calls.
 func (c *Classifier) TokensOut() int { return c.tokensOut }
 
-// Classify returns the model's triage decision for a single message.
+// Classify returns the model's triage decision for a single message. It returns
+// *cost.ErrBudgetExhausted without calling the model once the day's budget is
+// gone; the caller should stop rather than retry.
 func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classification, error) {
+	if c.guard != nil {
+		if err := c.guard.Allow(); err != nil {
+			return Classification{}, err
+		}
+	}
 	resp, err := c.client.Models.GenerateContent(ctx, c.model, genai.Text(userPrompt(m)), &genai.GenerateContentConfig{
 		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemInstruction + c.corrections}}},
 		ResponseMIMEType:  "application/json",
 		ResponseSchema:    classificationSchema(),
+		// Sorting one email into three buckets needs no chain of thought, and
+		// thinking tokens bill as output. Only Flash honours a zero budget.
+		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](0)},
 	})
 	if err != nil {
 		return Classification{}, err
 	}
 	if resp.UsageMetadata != nil {
-		c.tokensIn += int(resp.UsageMetadata.PromptTokenCount)
-		c.tokensOut += int(resp.UsageMetadata.CandidatesTokenCount)
+		u := resp.UsageMetadata
+		in := int(u.PromptTokenCount)
+		// ThoughtsTokenCount is billed as output but is NOT part of
+		// CandidatesTokenCount. Omitting it here is what made a month of spend
+		// read as roughly a quarter of its real size.
+		out := int(u.CandidatesTokenCount) + int(u.ThoughtsTokenCount)
+		c.tokensIn += in
+		c.tokensOut += out
+		if c.guard != nil {
+			c.guard.Record(c.model, in, out)
+		}
 	}
 
 	return parseClassification(resp.Text())
