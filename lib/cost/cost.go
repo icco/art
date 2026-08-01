@@ -13,7 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// Rate is the list price in USD per million tokens for one model.
 type Rate struct {
 	InPerMillion  float64
 	OutPerMillion float64
@@ -29,7 +28,6 @@ var rates = map[string]Rate{
 // unknownModelRate prices an unlisted model at the dearest rate, never free.
 var unknownModelRate = Rate{InPerMillion: 1.25, OutPerMillion: 10.00}
 
-// RateFor returns the price for a model, and whether it was known.
 func RateFor(model string) (Rate, bool) {
 	r, ok := rates[model]
 	if !ok {
@@ -38,7 +36,6 @@ func RateFor(model string) (Rate, bool) {
 	return r, true
 }
 
-// USD prices one call's token usage.
 func USD(model string, tokensIn, tokensOut int) float64 {
 	r, _ := RateFor(model)
 	return float64(tokensIn)/1e6*r.InPerMillion + float64(tokensOut)/1e6*r.OutPerMillion
@@ -86,7 +83,6 @@ type Guard struct {
 	spent  float64
 }
 
-// NewGuard reads today's spend so far and returns a guard for the remainder.
 func NewGuard(ctx context.Context, db *gorm.DB, tz *time.Location, budgetUSD float64) (*Guard, error) {
 	spent, err := SpentToday(ctx, db, tz)
 	if err != nil {
@@ -95,7 +91,6 @@ func NewGuard(ctx context.Context, db *gorm.DB, tz *time.Location, budgetUSD flo
 	return &Guard{budget: budgetUSD, spent: spent}, nil
 }
 
-// Allow reports whether another model call may be made.
 func (g *Guard) Allow() error {
 	if g.budget <= 0 || g.spent < g.budget {
 		return nil
@@ -108,8 +103,6 @@ func (g *Guard) Record(model string, tokensIn, tokensOut int) {
 	g.spent += USD(model, tokensIn, tokensOut)
 }
 
-// SpentUSD is the day's spend including everything recorded on this guard.
 func (g *Guard) SpentUSD() float64 { return g.spent }
 
-// BudgetUSD is the ceiling this guard enforces; zero means unlimited.
 func (g *Guard) BudgetUSD() float64 { return g.budget }
