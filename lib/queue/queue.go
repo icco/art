@@ -103,11 +103,19 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 
 // claimSQL claims the next due job; kinds sharing a slot run
 // sync → planner → triage.
+//
+// The due-time bound is a parameter, not the database's now(). Every run_at is
+// written from Go's clock (Seed, Enqueue, Finish, Reap), so comparing it
+// against the database's clock straddles two clocks that need not agree. When
+// the app's clock runs even milliseconds ahead of Postgres's, every freshly
+// written run_at sits in the database's future and NOTHING is ever claimed —
+// the queue stops dead, silently, with no error anywhere. One clock decides
+// both when a job is due and when it may run.
 const claimSQL = `
-UPDATE jobs SET status = 'running', started_at = now(), attempts = attempts + 1, updated_at = now()
+UPDATE jobs SET status = 'running', started_at = ?, attempts = attempts + 1, updated_at = ?
 WHERE id = (
 	SELECT id FROM jobs
-	WHERE status = 'pending' AND run_at <= now()
+	WHERE status = 'pending' AND run_at <= ?
 	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'planner' THEN 1 ELSE 2 END
 	LIMIT 1
 	FOR UPDATE SKIP LOCKED
@@ -117,7 +125,8 @@ RETURNING *`
 // Claim returns the next due job marked running, or ErrNoJob.
 func (q *Queue) Claim(ctx context.Context) (models.Job, error) {
 	var job models.Job
-	res := q.DB.WithContext(ctx).Raw(claimSQL).Scan(&job)
+	now := q.now()
+	res := q.DB.WithContext(ctx).Raw(claimSQL, now, now, now).Scan(&job)
 	if res.Error != nil {
 		return models.Job{}, res.Error
 	}
