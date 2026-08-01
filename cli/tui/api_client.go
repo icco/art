@@ -241,6 +241,7 @@ type Settings struct {
 	PlanHorizonDays           int      `json:"plan_horizon_days"`
 	FocusBlockMinMinutes      int      `json:"focus_block_min_minutes"`
 	FocusBlockMaxMinutes      int      `json:"focus_block_max_minutes"`
+	DailyBudgetUSD            float64  `json:"daily_budget_usd"`
 }
 
 // ListWorkingHours returns every configured working-hours window.

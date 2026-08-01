@@ -118,9 +118,10 @@ func TestSettingsPageRendersAndSubmits(t *testing.T) {
 		SoftEventTitles: []string{"Lunch"}, TriageEnabled: true,
 		TriageConfidenceThreshold: 0.8, TriageBackfillDays: 7, TriageReconcileDays: 7,
 		PlanHorizonDays: 30, FocusBlockMinMinutes: 30, FocusBlockMaxMinutes: 90,
+		DailyBudgetUSD: 2,
 	}})
 	view := page.View()
-	for _, want := range []string{"Plan horizon days", "30", "Lunch", "30-90"} {
+	for _, want := range []string{"Plan horizon days", "30", "Lunch", "30-90", "$2.00/day"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("settings view missing %q:\n%s", want, view)
 		}
@@ -131,6 +132,7 @@ func TestSettingsPageRendersAndSubmits(t *testing.T) {
 		softTitles: "Lunch, Dinner Decompress", triageEnabled: true, triageDryRun: true,
 		threshold: "0.6", backfillDays: "10", reconcileDays: "4",
 		horizonDays: "21", blockMinMinute: "25", blockMaxMinute: "100",
+		dailyBudget: "1.5",
 	}
 	if msg, ok := p.submitForm()().(errMsg); ok {
 		t.Fatalf("submit errored: %v", msg)
@@ -141,6 +143,10 @@ func TestSettingsPageRendersAndSubmits(t *testing.T) {
 	var got Settings
 	if err := json.Unmarshal(rec.body, &got); err != nil {
 		t.Fatalf("decode: %v (%s)", err, rec.body)
+	}
+	// The budget must survive a form submit: sending 0 would turn the cap off.
+	if got.DailyBudgetUSD != 1.5 {
+		t.Errorf("daily budget = %v, want 1.5", got.DailyBudgetUSD)
 	}
 	if got.PlanHorizonDays != 21 || got.FocusBlockMinMinutes != 25 || got.FocusBlockMaxMinutes != 100 {
 		t.Errorf("payload numbers wrong: %+v", got)

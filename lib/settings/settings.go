@@ -32,6 +32,7 @@ const (
 	KeyPlanHorizonDays           = "plan_horizon_days"
 	KeyFocusBlockMinMinutes      = "focus_block_min_minutes"
 	KeyFocusBlockMaxMinutes      = "focus_block_max_minutes"
+	KeyDailyBudgetUSD            = "daily_budget_usd"
 )
 
 // Defaults for the planner knobs, which have no env var of their own.
@@ -40,6 +41,14 @@ const (
 	DefaultFocusBlockMinMinutes = 30
 	DefaultFocusBlockMaxMinutes = 90
 )
+
+// DefaultDailyBudgetUSD caps what art may spend on Vertex AI per day. Triage is
+// the only spender left, and at Flash prices with thinking off it runs about a
+// quarter of this — so the ceiling is headroom, not a squeeze.
+const DefaultDailyBudgetUSD = 2.0
+
+// maxDailyBudgetUSD is a sanity rail against a fat-fingered setting.
+const maxDailyBudgetUSD = 100.0
 
 // Accepted ranges. The upper bounds are sanity rails, not policy: a horizon of
 // years would make every planner run scan the whole calendar.
@@ -62,6 +71,7 @@ func Keys() []string {
 		KeySoftEventTitles, KeyTriageEnabled, KeyTriageDryRun,
 		KeyTriageConfidenceThreshold, KeyTriageBackfillDays, KeyTriageReconcileDays,
 		KeyPlanHorizonDays, KeyFocusBlockMinMinutes, KeyFocusBlockMaxMinutes,
+		KeyDailyBudgetUSD,
 	}
 }
 
@@ -76,6 +86,7 @@ type Values struct {
 	PlanHorizonDays           int      `json:"plan_horizon_days"`
 	FocusBlockMinMinutes      int      `json:"focus_block_min_minutes"`
 	FocusBlockMaxMinutes      int      `json:"focus_block_max_minutes"`
+	DailyBudgetUSD            float64  `json:"daily_budget_usd"`
 }
 
 // SoftTitles normalizes the soft-event titles for matching.
@@ -113,6 +124,9 @@ func (v Values) Validate() error {
 	if lo > hi {
 		return fmt.Errorf("focus_block_min_minutes (%d) must not exceed focus_block_max_minutes (%d)", lo, hi)
 	}
+	if b := v.DailyBudgetUSD; b < 0 || b > maxDailyBudgetUSD {
+		return fmt.Errorf("daily_budget_usd must be 0-%v (0 disables the cap), got %v", maxDailyBudgetUSD, b)
+	}
 	for _, t := range v.SoftEventTitles {
 		if strings.TrimSpace(t) == "" {
 			return errors.New("soft_event_titles must not contain blank entries")
@@ -133,6 +147,7 @@ func DefaultsFrom(cfg *config.Config) Values {
 		PlanHorizonDays:           DefaultPlanHorizonDays,
 		FocusBlockMinMinutes:      DefaultFocusBlockMinMinutes,
 		FocusBlockMaxMinutes:      DefaultFocusBlockMaxMinutes,
+		DailyBudgetUSD:            DefaultDailyBudgetUSD,
 	}
 	if cfg == nil {
 		return v
@@ -219,6 +234,10 @@ func apply(v *Values, key, raw string) {
 		applyInt(&v.FocusBlockMinMinutes, raw)
 	case KeyFocusBlockMaxMinutes:
 		applyInt(&v.FocusBlockMaxMinutes, raw)
+	case KeyDailyBudgetUSD:
+		if f, err := strconv.ParseFloat(raw, 64); err == nil {
+			v.DailyBudgetUSD = f
+		}
 	}
 }
 
@@ -249,6 +268,7 @@ func encode(v Values) ([]models.Setting, error) {
 		KeyPlanHorizonDays:           strconv.Itoa(v.PlanHorizonDays),
 		KeyFocusBlockMinMinutes:      strconv.Itoa(v.FocusBlockMinMinutes),
 		KeyFocusBlockMaxMinutes:      strconv.Itoa(v.FocusBlockMaxMinutes),
+		KeyDailyBudgetUSD:            strconv.FormatFloat(v.DailyBudgetUSD, 'f', -1, 64),
 	}
 	rows := make([]models.Setting, 0, len(vals))
 	for _, k := range Keys() {

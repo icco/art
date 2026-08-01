@@ -22,6 +22,7 @@ type settingsForm struct {
 	horizonDays    string
 	blockMinMinute string
 	blockMaxMinute string
+	dailyBudget    string
 }
 
 // settingsPage edits the runtime settings. Deploy-time config (timezone, owner
@@ -111,6 +112,12 @@ func (fd *settingsForm) settings() (Settings, error) {
 	if err != nil {
 		return Settings{}, fmt.Errorf("confidence threshold %q is not a number", fd.threshold)
 	}
+	// The form must round-trip this: submitting without it would send 0 and
+	// silently turn the daily spend cap off.
+	budget, err := strconv.ParseFloat(strings.TrimSpace(fd.dailyBudget), 64)
+	if err != nil {
+		return Settings{}, fmt.Errorf("daily budget %q is not a number", fd.dailyBudget)
+	}
 	nums := map[string]string{
 		"backfill days":     fd.backfillDays,
 		"reconcile days":    fd.reconcileDays,
@@ -136,6 +143,7 @@ func (fd *settingsForm) settings() (Settings, error) {
 		PlanHorizonDays:           parsed["plan horizon days"],
 		FocusBlockMinMinutes:      parsed["min block minutes"],
 		FocusBlockMaxMinutes:      parsed["max block minutes"],
+		DailyBudgetUSD:            budget,
 	}, nil
 }
 
@@ -172,6 +180,7 @@ func (p settingsPage) View() string {
 		{"Triage reconcile days", strconv.Itoa(s.TriageReconcileDays)},
 		{"Plan horizon days", strconv.Itoa(s.PlanHorizonDays)},
 		{"Focus block minutes", fmt.Sprintf("%d-%d", s.FocusBlockMinMinutes, s.FocusBlockMaxMinutes)},
+		{"Daily LLM budget", budgetLabel(s.DailyBudgetUSD)},
 	}
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Settings") + "\n\n")
@@ -200,6 +209,7 @@ func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
 		horizonDays:    strconv.Itoa(s.PlanHorizonDays),
 		blockMinMinute: strconv.Itoa(s.FocusBlockMinMinutes),
 		blockMaxMinute: strconv.Itoa(s.FocusBlockMaxMinutes),
+		dailyBudget:    strconv.FormatFloat(s.DailyBudgetUSD, 'f', -1, 64),
 	}
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Soft event titles (comma separated)").Value(&fd.softTitles),
@@ -211,9 +221,18 @@ func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
 		huh.NewInput().Title("Plan horizon days").Value(&fd.horizonDays).Validate(validateInt),
 		huh.NewInput().Title("Min focus block minutes").Value(&fd.blockMinMinute).Validate(validateInt),
 		huh.NewInput().Title("Max focus block minutes").Value(&fd.blockMaxMinute).Validate(validateInt),
+		huh.NewInput().Title("Daily LLM budget in USD (0 = unlimited)").Value(&fd.dailyBudget).Validate(validateFloat),
 	))
 	if w > 0 {
 		form = form.WithWidth(w).WithHeight(ht)
 	}
 	return form, fd
+}
+
+// budgetLabel renders the daily Vertex AI ceiling; zero means the cap is off.
+func budgetLabel(usd float64) string {
+	if usd <= 0 {
+		return "unlimited"
+	}
+	return "$" + strconv.FormatFloat(usd, 'f', 2, 64) + "/day"
 }
