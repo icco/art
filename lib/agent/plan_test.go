@@ -422,6 +422,78 @@ func TestFillHabitRejectsBadKind(t *testing.T) {
 	}
 }
 
+// TestFillProjectReachesTheCalendar is the happy path. Every other loop test
+// asserts something did NOT happen, so a fillProject that never books would
+// pass them all. Here the only thing standing between the loop and a booked
+// event is the unlinked test calendar account, so a "not linked" error proves
+// it sized a block, found a slot, and cleared every invariant in commitFocus.
+func TestFillProjectReachesTheCalendar(t *testing.T) {
+	c := newCycle(t)
+	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
+	openAllHours(t, c, models.SlotWork)
+	pj := &models.Project{Name: "P", Kind: models.SlotWork, TargetHours: 4, Status: models.ProjectActive}
+	if err := c.p.DB.Create(pj).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	c.fillProject(context.Background(), projectInfo{
+		ID: pj.ID, Name: pj.Name, Kind: string(models.SlotWork), HoursRemaining: 4,
+	})
+
+	// Each iteration tries every candidate in the batch, then gives up once no
+	// slot was bookable — so expect one error per candidate, and no second
+	// iteration on top of that.
+	errs, _ := c.summary["errors"].([]string)
+	if len(errs) == 0 {
+		t.Fatal("fillProject booked nothing and reported nothing: it never reached commitFocus")
+	}
+	if len(errs) > slotOversample {
+		t.Errorf("want at most %d attempts before giving up, got %d: %v", slotOversample, len(errs), errs)
+	}
+	for _, e := range errs {
+		// "minutes" would mean the block was sized outside 30-90 — e.g. a
+		// math.Min inversion asking for all 4 remaining hours at once.
+		if contains(e, "minutes") {
+			t.Errorf("block sized wrong rather than reaching the client: %v", e)
+		}
+		if !contains(e, "not linked") {
+			t.Errorf("want the unlinked-account error, got %v", e)
+		}
+	}
+}
+
+// TestFillHabitBooksAcrossDistinctDays proves the habit loop iterates candidate
+// slots instead of giving up on the first failure, and spreads across days.
+func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
+	c := newCycle(t)
+	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
+	openAllHours(t, c, models.SlotPersonal)
+	h := &models.Habit{
+		Name: "Walk", Kind: models.SlotPersonal, BlockDurationMinutes: 60,
+		Active: true, Cadence: datatypes.JSON(`{"type":"per_week","count":3}`),
+	}
+	if err := c.p.DB.Create(h).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	c.fillHabit(context.Background(), habitInfo{
+		ID: h.ID, Name: h.Name, Kind: string(models.SlotPersonal),
+		BlockMinutes: 60, TargetInWindow: 2, ScheduledInWindow: 0,
+	})
+
+	errs, _ := c.summary["errors"].([]string)
+	// fillHabit continues past a failed commit, so both needed blocks are
+	// attempted; one error would mean it bailed after the first.
+	if len(errs) < 2 {
+		t.Fatalf("want at least two attempts for a shortfall of two, got %v", errs)
+	}
+	for _, e := range errs {
+		if !contains(e, "not linked") {
+			t.Errorf("every attempt should reach the client, got %v", e)
+		}
+	}
+}
+
 // TestPlanEmptyState is the whole pass over an empty DB: it must succeed and
 // call nothing.
 func TestPlanEmptyState(t *testing.T) {
