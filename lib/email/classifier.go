@@ -37,9 +37,8 @@ type Classifier struct {
 	client      *genai.Client
 	model       string
 	corrections string
-	// guard stops the run once the day's LLM budget is spent. It lives here
-	// rather than in the Triager because this is the only place that actually
-	// spends money, so the check cannot be bypassed by a new caller.
+	// guard stops the run once the day's budget is spent. It lives here, not in
+	// the Triager, because this is the only place that spends money.
 	guard *cost.Guard
 
 	tokensIn  int
@@ -79,8 +78,8 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemInstruction + c.corrections}}},
 		ResponseMIMEType:  "application/json",
 		ResponseSchema:    classificationSchema(),
-		// Sorting one email into three buckets needs no chain of thought, and
-		// thinking tokens bill as output. Only Flash honours a zero budget.
+		// Three-way sorting needs no chain of thought, and thinking bills as
+		// output. Only Flash honours a zero budget.
 		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](0)},
 	})
 	if err != nil {
@@ -89,9 +88,8 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 	if resp.UsageMetadata != nil {
 		u := resp.UsageMetadata
 		in := int(u.PromptTokenCount)
-		// ThoughtsTokenCount is billed as output but is NOT part of
-		// CandidatesTokenCount. Omitting it here is what made a month of spend
-		// read as roughly a quarter of its real size.
+		// ThoughtsTokenCount bills as output but is NOT in CandidatesTokenCount;
+		// omitting it made a month of spend read far under its real size.
 		out := int(u.CandidatesTokenCount) + int(u.ThoughtsTokenCount)
 		c.tokensIn += in
 		c.tokensOut += out

@@ -26,8 +26,8 @@ func TestUSDKnownModel(t *testing.T) {
 	}
 }
 
-// TestUSDUnknownModelPricesHigh pins the fail-safe: an unrecognised model must
-// be priced, and priced expensively, so it cannot slip past the ceiling.
+// TestUSDUnknownModelPricesHigh: an unrecognised model must be priced, and
+// priced high, so it can't slip past the ceiling.
 func TestUSDUnknownModelPricesHigh(t *testing.T) {
 	r, known := RateFor("gemini-9-ultra")
 	if known {

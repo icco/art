@@ -110,9 +110,8 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 
 		cls, err := t.Classifier.Classify(ctx, msg)
 		if err != nil {
-			// A spent budget applies to every remaining message, so stop
-			// instead of failing once per message. Untagged mail is retried by
-			// a later run, which re-reads the budget for the new day.
+			// A spent budget applies to every remaining message, so stop rather
+			// than fail per message. A later run retries the untagged mail.
 			var exhausted *cost.ErrBudgetExhausted
 			if errors.As(err, &exhausted) {
 				log.Warnw("triage: stopping, daily budget spent",

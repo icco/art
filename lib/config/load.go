@@ -59,18 +59,14 @@ type OAuthConfig struct {
 	RedirectURL  string
 }
 
-// TriageModel is the model used to classify inbox mail — the only place art
-// calls an LLM at all, now that planning is deterministic.
+// TriageModel classifies inbox mail — the only LLM call art makes now that
+// planning is deterministic.
 //
-// Flash, not Pro, and deliberately: triage is a short bounded classification
-// into three categories, which Flash does about as well for roughly a quarter
-// the price per token. It also accepts ThinkingBudget: 0, which Pro does not —
-// 2.5 Pro always thinks, bills those tokens as output, and reports them in
-// ThoughtsTokenCount rather than CandidatesTokenCount. That combination is how
-// a month of spend stayed invisible; see lib/cost.
+// Flash, not Pro: a three-way classification doesn't need Pro, and only Flash
+// honours ThinkingBudget: 0. Pro always thinks and bills it as output.
 //
-// There is deliberately no single shared model constant. One name governing
-// every call site is what let an expensive model spread silently.
+// Deliberately not a shared model constant — one name governing every call
+// site is how an expensive model spread silently.
 const TriageModel = "gemini-2.5-flash"
 
 // VertexConfig holds Vertex AI project and region settings for the LLM.

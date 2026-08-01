@@ -91,8 +91,8 @@ func (f *fakeClassifier) Classify(_ context.Context, m *gmail.Message) (Classifi
 	return f.byID[m.ID], nil
 }
 
-// budgetSpentClassifier refuses every call the way a spent Guard does, and
-// counts attempts so the test can prove the loop stopped instead of retrying.
+// budgetSpentClassifier refuses like a spent Guard, counting attempts so the
+// test can prove the loop stopped rather than retried.
 type budgetSpentClassifier struct{ calls int }
 
 func (f *budgetSpentClassifier) Classify(context.Context, *gmail.Message) (Classification, error) {
@@ -100,8 +100,8 @@ func (f *budgetSpentClassifier) Classify(context.Context, *gmail.Message) (Class
 	return Classification{}, &cost.ErrBudgetExhausted{SpentUSD: 2.5, BudgetUSD: 2.0}
 }
 
-// TestRunAccountStopsOnBudgetExhausted pins the cost ceiling's whole point: a
-// spent budget must end the run, not fail once per message and keep calling.
+// TestRunAccountStopsOnBudgetExhausted: a spent budget must end the run, not
+// fail once per message and keep calling.
 func TestRunAccountStopsOnBudgetExhausted(t *testing.T) {
 	db := testdb.Open(t)
 	gm := &fakeGmail{

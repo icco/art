@@ -25,13 +25,11 @@ books focus blocks over a rolling window (`plan_horizon_days`) by walking
 projects deadline-ascending, then habits one-per-day. `commitFocus` is the
 server-side source of truth for every scheduling invariant.
 
-- **The planner deliberately calls no model.** It used to be an ADK/Vertex
-  Gemini agent, which cost $737 in July 2026 — ~96 full re-plans a day of a
-  prompt that spelled out a `for` loop, with `tokens_in`/`tokens_out` recorded
-  as 0 so none of it showed up anywhere but the billing console. If you are
-  tempted to reintroduce an LLM here, the scheduling rules are mechanical and
-  the invariants are already enforced in code; there is nothing for a model to
-  decide.
+- **The planner deliberately calls no model.** It was an ADK/Vertex Gemini
+  agent that cost $737 in July 2026: ~96 re-plans a day of a prompt that
+  spelled out a `for` loop, with tokens recorded as 0 so it showed up only in
+  the billing console. Don't reintroduce an LLM — the rules are mechanical and
+  the invariants are enforced in code.
 
 - Schema is owned by `gorm.AutoMigrate` over `lib/models`; UUID PKs are
   generated in Go (`BeforeCreate` + `google/uuid`). No migration files.
@@ -46,11 +44,10 @@ server-side source of truth for every scheduling invariant.
   it at use time — once per run — never at boot, or an edit needs a redeploy.
   Its key list is an allowlist: secrets never go in the table or the API.
 - `lib/cost` prices recorded tokens and enforces `daily_budget_usd` (default
-  $2). Triage is the only LLM caller, so that ceiling is the whole of art's cost
-  control. Two traps it exists to prevent: `ThoughtsTokenCount` is billed as
-  output but is **not** included in `CandidatesTokenCount`, and gemini-2.5-pro
-  cannot disable thinking (only Flash honours `ThinkingBudget: 0`). Any new
-  model call must record both counts and go through the guard.
+  $2); triage is the only LLM caller. Two traps: `ThoughtsTokenCount` bills as
+  output but is **not** in `CandidatesTokenCount`, and gemini-2.5-pro can't
+  disable thinking (only Flash honours `ThinkingBudget: 0`). Any new model call
+  must record both counts and go through the guard.
 - Email triage classifies with Gemini Flash structured output and records an
   `email_messages` row + an `agent_runs` row (`kind=triage`). Message bodies are
   never persisted. Refresh tokens are AES-256-GCM sealed (`lib/oauth`).

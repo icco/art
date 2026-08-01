@@ -16,17 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// slotOversample is how many candidate slots to ask for per block still needed.
-// Candidates get skipped (a day already used, an overlap that appeared since
-// the last sync), so asking for exactly `need` would usually under-book.
+// slotOversample is how many candidates to request per block needed: some get
+// skipped (day already used, a new overlap), so asking for `need` under-books.
 const slotOversample = 4
 
-// cycle is the per-run state shared by the planning pass: the settings snapshot
-// that the loop and commitFocus both read, calendar clients opened lazily per
-// account, and the summary persisted on the agent_runs row.
-//
-// This is single-goroutine. It replaced an ADK agent whose tool calls ran in
-// parallel goroutines and therefore needed a mutex; the loop does not.
+// cycle is the per-run state: the settings snapshot the loop and commitFocus
+// both read, lazily-opened calendar clients, and the agent_runs summary.
+// Single-goroutine — the ADK agent it replaced needed a mutex; a loop doesn't.
 type cycle struct {
 	p       *Planner
 	vals    settings.Values
@@ -34,14 +30,12 @@ type cycle struct {
 	clients map[models.AccountKind]*calendar.Client
 }
 
-// plan books focus blocks for every active project and habit that still needs
-// them: projects deadline-ascending until their target hours are met, then
-// habits spread at most one per day across the plan window.
+// plan books blocks for every project and habit still short: projects
+// deadline-ascending until target hours are met, then habits one per day.
 //
-// This was an LLM agent, but its prompt spelled out exactly this loop with no
-// judgement anywhere in it — so it ran gemini-2.5-pro 96 times a day to
-// re-derive a `for` loop. The invariants still live in commitFocus, which
-// remains the single source of truth for what may be booked.
+// This was an LLM agent whose prompt spelled out exactly this loop, running
+// gemini-2.5-pro 96x/day to re-derive a `for` loop. commitFocus remains the
+// single source of truth for what may be booked.
 func (c *cycle) plan(ctx context.Context) error {
 	projects, habits, err := c.loadState(ctx)
 	if err != nil {
@@ -79,9 +73,8 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 		deadline = d
 	}
 
-	// One block per iteration so its length always reflects the hours still
-	// left. Each commit writes a session row, so the next find_free_slots
-	// query already excludes what was just booked.
+	// One block per iteration so its length tracks the hours still left. Each
+	// commit writes a session row, so the next query excludes it.
 	for remaining >= minHours {
 		minutes := int(math.Round(math.Min(remaining, maxHours) * 60))
 		slots, err := c.freeSlots(ctx, acct, kind, minutes, slotOversample)
@@ -102,8 +95,8 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 			booked = true
 			break
 		}
-		// Nothing in this batch was usable; another pass would query the same
-		// rows and reach the same answer.
+		// Nothing in this batch was usable; another pass would reach the same
+		// answer.
 		if !booked {
 			return
 		}
@@ -121,9 +114,8 @@ func (c *cycle) fillHabit(ctx context.Context, h habitInfo) {
 		c.addErr(fmt.Sprintf("habit %s: invalid kind %q", h.Name, h.Kind))
 		return
 	}
-	// commitFocus rejects any block outside the focus-block bounds, so a habit
-	// configured outside them can never be booked. Say so once instead of
-	// failing every candidate slot.
+	// commitFocus rejects blocks outside these bounds, so such a habit can
+	// never be booked. Say so once, not per candidate slot.
 	if h.BlockMinutes < c.vals.FocusBlockMinMinutes || h.BlockMinutes > c.vals.FocusBlockMaxMinutes {
 		c.addErr(fmt.Sprintf("habit %s: block %d min is outside the allowed %d-%d",
 			h.Name, h.BlockMinutes, c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes))
@@ -135,8 +127,8 @@ func (c *cycle) fillHabit(ctx context.Context, h habitInfo) {
 		c.addErr(fmt.Sprintf("habit %s: find slots: %v", h.Name, err))
 		return
 	}
-	// Spread across days locally too: commitFocus enforces one-per-day against
-	// the DB, but tracking it here avoids a doomed round trip per extra slot.
+	// commitFocus enforces one-per-day against the DB; tracking it here avoids
+	// a doomed round trip per extra slot.
 	used := map[string]bool{}
 	for _, s := range slots {
 		if need == 0 {
@@ -183,9 +175,9 @@ type habitInfo struct {
 	ScheduledInWindow int
 }
 
-// loadState reads the active projects (deadline-ascending) and active habits
-// with their per-window shortfall. Working hours are not returned: only
-// FindFreeSlots and commitFocus consult them, and both query directly.
+// loadState reads active projects (deadline-ascending) and active habits with
+// their per-window shortfall. Working hours aren't returned: FindFreeSlots and
+// commitFocus query them directly.
 func (c *cycle) loadState(ctx context.Context) ([]projectInfo, []habitInfo, error) {
 	var projects []models.Project
 	if err := c.p.DB.WithContext(ctx).
@@ -273,13 +265,11 @@ func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64
 
 // ---- commit ----
 
-// commitFocus creates the calendar event and its session row for one block.
+// commitFocus creates the calendar event and session row for one block.
 //
-// Every check here predates the deterministic loop: they existed because the
-// LLM that chose these times was untrusted. They are kept deliberately. The
-// caller now generates times from the same primitives, so a rejection means a
-// real race (a human booked the slot since the last sync) — not a model
-// mistake — and that is exactly the case worth failing on.
+// Every check here existed because the LLM choosing these times was untrusted,
+// and all are kept: a rejection now means a real race with a human calendar
+// edit, which is exactly what's worth failing on.
 func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourceID string, start, end time.Time) error {
 	if !source.Valid() {
 		return fmt.Errorf("source must be 'project' or 'habit'")
@@ -371,8 +361,7 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 	}
 	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			// The event already had a session: a retry converged on the same
-			// deterministic ID. Treat it as booked.
+			// A retry converged on the same deterministic ID: already booked.
 			var existing models.Session
 			if lookupErr := c.p.DB.WithContext(ctx).First(&existing, "google_event_id = ?", ev.Id).Error; lookupErr == nil {
 				return nil

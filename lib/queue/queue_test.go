@@ -18,11 +18,9 @@ func fixedQueue(t *testing.T) (*Queue, time.Time) {
 	return &Queue{DB: testdb.Open(t), Now: func() time.Time { return now }}, now
 }
 
-// TestClaimJudgesDuenessByTheGoClock pins a bug that stopped the queue dead.
-// run_at is always written from Go's clock, so due-ness must be judged by that
-// same clock; comparing against the database's now() means an app clock even
-// milliseconds ahead of Postgres leaves every fresh row in the database's
-// future and nothing is ever claimed — silently, with no error.
+// TestClaimJudgesDuenessByTheGoClock pins a bug that stopped the queue dead:
+// run_at is written from Go's clock, so comparing it against the database's
+// now() means an app clock milliseconds ahead claims nothing, silently.
 func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
 	db := testdb.Open(t)
 	ctx := context.Background()
@@ -36,16 +34,8 @@ func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
 	if _, err := q.Claim(ctx); err != nil {
 		t.Fatalf("a job seeded as due must be claimable when the app clock leads the database's: %v", err)
 	}
-
-	// The bound must still be a real bound: a job scheduled past the clock
-	// (a backoff retry, or the next grid slot) stays unclaimed.
-	db2 := testdb.Open(t)
-	fixed := time.Date(2026, 7, 4, 10, 20, 0, 0, time.UTC)
-	q2 := &Queue{DB: db2, Now: func() time.Time { return fixed }}
-	mustJob(t, q2, models.JobPlanner, models.JobPending, fixed.Add(time.Minute), 0)
-	if _, err := q2.Claim(ctx); !errors.Is(err, ErrNoJob) {
-		t.Fatalf("a job scheduled in the future must not be claimed, got %v", err)
-	}
+	// TestClaimOrderAndDueness covers the other direction: still unclaimable
+	// when run_at is genuinely ahead of the clock.
 }
 
 func mustJob(t *testing.T, q *Queue, kind models.JobKind, status models.JobStatus, runAt time.Time, attempts int) models.Job {

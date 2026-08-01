@@ -95,8 +95,8 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 		log.Warnw("building corrections failed", "err", err)
 	}
 
-	// Price the day before spending any more of it. Triage is the only LLM
-	// caller left, so this ceiling is the whole of art's cost control.
+	// Triage is the only LLM caller left, so this ceiling is art's whole cost
+	// control.
 	guard, err := cost.NewGuard(ctx, r.DB, r.Cfg.Timezone, vals.DailyBudgetUSD)
 	if err != nil {
 		*runErrs = append(*runErrs, "budget: "+err.Error())
