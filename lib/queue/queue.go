@@ -42,13 +42,18 @@ func backoff(attempt int) time.Duration {
 
 // cadence is how often a kind repeats: sync (which reconciles as its tail) runs
 // every 10 minutes so manual calendar edits are caught quickly; the planner
-// runs every 15 minutes and triage every 30.
+// runs hourly and triage every 30 minutes.
+//
+// The planner ran every 15 minutes when it was an LLM agent, which meant ~96
+// full re-plans a day. It is deterministic now, so a pass is nearly free — but
+// hourly is still the honest cadence for a rolling 30-day window, and sync
+// already retracts blocks that clash within minutes.
 func cadence(kind models.JobKind) time.Duration {
 	switch kind {
 	case models.JobSync:
 		return 10 * time.Minute
 	case models.JobPlanner:
-		return 15 * time.Minute
+		return time.Hour
 	case models.JobTriage:
 		return 30 * time.Minute
 	default:

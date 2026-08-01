@@ -135,8 +135,8 @@ func TestFinishTerminalChainsNextSlot(t *testing.T) {
 	if err := q.DB.First(&next, "kind = ? AND status = ?", models.JobPlanner, models.JobPending).Error; err != nil {
 		t.Fatalf("chained job: %v", err)
 	}
-	// Planner runs every 15 min: from 10:20 the next grid slot is 10:30.
-	wantSlot := time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)
+	// Planner runs hourly: from 10:20 the next grid slot is 11:00.
+	wantSlot := time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)
 	if !next.RunAt.Equal(wantSlot) {
 		t.Fatalf("want next run on grid %v, got %v", wantSlot, next.RunAt)
 	}
@@ -159,10 +159,10 @@ func TestFinishChainsPerKindGrid(t *testing.T) {
 		kind models.JobKind
 		want time.Time
 	}{
-		// From 10:20: sync every 10m → 10:30, planner every 15m → 10:30,
+		// From 10:20: sync every 10m → 10:30, planner hourly → 11:00,
 		// triage every 30m → 10:30.
 		{models.JobSync, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
-		{models.JobPlanner, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		{models.JobPlanner, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
 		{models.JobTriage, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
 	}
 	for _, c := range cases {

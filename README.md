@@ -5,7 +5,8 @@ Calendars for **projects** (target hours toward a deadline) and **habits**
 (recurring practice) over a rolling 30-day window — writing new events only,
 never touching events you made.
 
-It also triages both Gmail inboxes with Gemini: archives bulk mail and labels
+Scheduling is deterministic — no LLM involved. It also triages both Gmail
+inboxes with Gemini Flash, under a daily spend cap: archives bulk mail and labels
 what needs a reply, reading, or thought. Its only actions are applying labels
 and archiving — it never drafts, sends, or deletes mail, and only ever reads the
 inbox. Every action is reversible and recorded.
