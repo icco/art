@@ -37,8 +37,7 @@ type Classifier struct {
 	client      *genai.Client
 	model       string
 	corrections string
-	// guard stops the run once the day's budget is spent. It lives here, not in
-	// the Triager, because this is the only place that spends money.
+	// guard lives here, not in the Triager: this is the only place that spends.
 	guard *cost.Guard
 
 	tokensIn  int
@@ -78,8 +77,7 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemInstruction + c.corrections}}},
 		ResponseMIMEType:  "application/json",
 		ResponseSchema:    classificationSchema(),
-		// Three-way sorting needs no chain of thought, and thinking bills as
-		// output. Only Flash honours a zero budget.
+		// Three-way sorting needs no reasoning, and thinking bills as output.
 		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](0)},
 	})
 	if err != nil {
@@ -89,8 +87,7 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 		u := resp.UsageMetadata
 		in := int(u.PromptTokenCount)
 		// ThoughtsTokenCount bills as output but is NOT in CandidatesTokenCount.
-		// Measured on one email against 2.5-pro: 77 candidate tokens, 658
-		// thinking. Omitting it undercounted output by ~9.5x.
+		// Measured on 2.5-pro: 77 candidate vs 658 thinking, a ~9.5x undercount.
 		out := int(u.CandidatesTokenCount) + int(u.ThoughtsTokenCount)
 		c.tokensIn += in
 		c.tokensOut += out

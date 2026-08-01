@@ -19,8 +19,8 @@ func fixedQueue(t *testing.T) (*Queue, time.Time) {
 }
 
 // TestClaimJudgesDuenessByTheGoClock pins a bug that stopped the queue dead:
-// run_at is written from Go's clock, so comparing it against the database's
-// now() means an app clock milliseconds ahead claims nothing, silently.
+// run_at comes from Go's clock, so comparing it to the database's now() meant
+// an app clock milliseconds ahead claimed nothing.
 func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
 	db := testdb.Open(t)
 	ctx := context.Background()
@@ -34,8 +34,7 @@ func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
 	if _, err := q.Claim(ctx); err != nil {
 		t.Fatalf("a job seeded as due must be claimable when the app clock leads the database's: %v", err)
 	}
-	// TestClaimOrderAndDueness covers the other direction: still unclaimable
-	// when run_at is genuinely ahead of the clock.
+	// TestClaimOrderAndDueness covers the other direction.
 }
 
 func mustJob(t *testing.T, q *Queue, kind models.JobKind, status models.JobStatus, runAt time.Time, attempts int) models.Job {

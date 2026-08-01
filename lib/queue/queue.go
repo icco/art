@@ -44,9 +44,8 @@ func backoff(attempt int) time.Duration {
 // every 10 minutes so manual calendar edits are caught quickly; the planner
 // runs hourly and triage every 30 minutes.
 //
-// The planner ran every 15 min as an LLM agent (~96 re-plans/day). It's
-// deterministic now, so a pass is nearly free — but hourly is the honest
-// cadence for a 30-day window, and sync retracts clashes within minutes.
+// The planner ran every 15 min as an LLM agent; hourly is enough for a 30-day
+// window now that a pass is free, and sync retracts clashes within minutes.
 func cadence(kind models.JobKind) time.Duration {
 	switch kind {
 	case models.JobSync:
@@ -103,9 +102,8 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 // claimSQL claims the next due job; kinds sharing a slot run
 // sync → planner → triage.
 //
-// The due-time bound is a parameter, not the database's now(): every run_at is
-// written from Go's clock, and if the app's clock runs even milliseconds ahead
-// of Postgres's, nothing is ever claimed and the queue stops dead silently.
+// The bound is a parameter, not the database's now(): run_at is written from
+// Go's clock, and an app clock milliseconds ahead would claim nothing at all.
 const claimSQL = `
 UPDATE jobs SET status = 'running', started_at = ?, attempts = attempts + 1, updated_at = ?
 WHERE id = (

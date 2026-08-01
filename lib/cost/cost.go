@@ -1,8 +1,7 @@
-// Package cost prices recorded token counts and enforces a daily ceiling.
+// Package cost prices recorded tokens and enforces a daily ceiling.
 //
-// art ran up $737 of Vertex AI in a month unnoticed because the planner
-// recorded tokens_in/tokens_out as 0, so spend appeared only in the billing
-// console. Cost not written down next to the work is cost nobody sees.
+// art spent $737 in a month unnoticed: the planner recorded 0 tokens, so the
+// cost showed up only in the billing console.
 package cost
 
 import (
@@ -20,16 +19,14 @@ type Rate struct {
 	OutPerMillion float64
 }
 
-// rates holds Vertex AI list prices — an estimate, not an invoice. It ignores
-// tiering and caching, which only lower the real charge; erring high means the
-// guard trips early rather than late.
+// rates holds Vertex AI list prices. An estimate: ignoring tiering and caching
+// errs high, so the guard trips early rather than late.
 var rates = map[string]Rate{
 	"gemini-2.5-flash": {InPerMillion: 0.30, OutPerMillion: 2.50},
 	"gemini-2.5-pro":   {InPerMillion: 1.25, OutPerMillion: 10.00},
 }
 
-// unknownModelRate prices a model absent from the table at the most expensive
-// rate, so it over-reports rather than slipping past the ceiling unpriced.
+// unknownModelRate prices an unlisted model at the dearest rate, never free.
 var unknownModelRate = Rate{InPerMillion: 1.25, OutPerMillion: 10.00}
 
 // RateFor returns the price for a model, and whether it was known.
@@ -47,8 +44,7 @@ func USD(model string, tokensIn, tokensOut int) float64 {
 	return float64(tokensIn)/1e6*r.InPerMillion + float64(tokensOut)/1e6*r.OutPerMillion
 }
 
-// SpentToday sums priced token usage for runs started since midnight in tz.
-// An empty model contributes nothing: a deterministic planner run has no cost.
+// SpentToday sums priced usage since midnight in tz; an empty model is free.
 func SpentToday(ctx context.Context, db *gorm.DB, tz *time.Location) (float64, error) {
 	now := time.Now().In(tz)
 	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, tz)
@@ -73,8 +69,7 @@ func SpentToday(ctx context.Context, db *gorm.DB, tz *time.Location) (float64, e
 	return total, nil
 }
 
-// ErrBudgetExhausted reports that today's ceiling is already reached, so the
-// caller must not start LLM work.
+// ErrBudgetExhausted means today's ceiling is reached; make no further calls.
 type ErrBudgetExhausted struct {
 	SpentUSD  float64
 	BudgetUSD float64
@@ -84,9 +79,8 @@ func (e *ErrBudgetExhausted) Error() string {
 	return fmt.Sprintf("daily LLM budget exhausted: $%.4f spent of $%.2f", e.SpentUSD, e.BudgetUSD)
 }
 
-// Guard tracks spend against a daily ceiling: Allow before each model call,
-// Record after. A budget of zero or less means unlimited, so a misconfigured
-// setting can't silently stop triage forever.
+// Guard caps daily spend: Allow before each call, Record after. A budget of
+// zero or less means unlimited, so a bad setting can't stop triage forever.
 type Guard struct {
 	budget float64
 	spent  float64
@@ -109,8 +103,7 @@ func (g *Guard) Allow() error {
 	return &ErrBudgetExhausted{SpentUSD: g.spent, BudgetUSD: g.budget}
 }
 
-// Record adds a completed call's cost so the ceiling applies within a run;
-// otherwise one run could overshoot by its whole batch before the next noticed.
+// Record applies cost within a run, so one run can't overshoot by its batch.
 func (g *Guard) Record(model string, tokensIn, tokensOut int) {
 	g.spent += USD(model, tokensIn, tokensOut)
 }

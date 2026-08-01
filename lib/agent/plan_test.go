@@ -29,8 +29,7 @@ func newCycle(t *testing.T) *cycle {
 	}}
 }
 
-// openAllHours frees every day for slotKind, isolating the invariant under
-// test from working-hours filtering.
+// openAllHours frees every day for slotKind.
 func openAllHours(t *testing.T, c *cycle, kind models.SlotKind) {
 	t.Helper()
 	for d := range 7 {
@@ -189,8 +188,8 @@ func TestCommitFocusRejectsBadSource(t *testing.T) {
 	}
 }
 
-// TestCommitFocusEnforcesInvariants: every check existed because an LLM chose
-// the times, so these guarantees must survive its removal.
+// TestCommitFocusEnforcesInvariants: these guarantees must survive the LLM's
+// removal, since they existed because it chose the times.
 func TestCommitFocusEnforcesInvariants(t *testing.T) {
 	c := newCycle(t)
 	ctx := context.Background()
@@ -333,8 +332,8 @@ func TestIntVal(t *testing.T) {
 
 // ---- deterministic loop ----
 
-// TestFillProjectStopsWhenNothingBookable: with no working hours there are no
-// slots, so the loop must return rather than spin.
+// TestFillProjectStopsWhenNothingBookable: no hours means no slots, so the
+// loop must return rather than spin.
 func TestFillProjectStopsWhenNothingBookable(t *testing.T) {
 	c := newCycle(t)
 	c.fillProject(context.Background(), projectInfo{
@@ -383,8 +382,8 @@ func TestFillProjectRejectsBadDeadline(t *testing.T) {
 	}
 }
 
-// TestFillHabitRejectsOutOfBoundsBlock pins the early exit: commitFocus would
-// reject every slot, so the loop must say so once, not per candidate.
+// TestFillHabitRejectsOutOfBoundsBlock: commitFocus would reject every slot,
+// so the loop must say so once.
 func TestFillHabitRejectsOutOfBoundsBlock(t *testing.T) {
 	c := newCycle(t)
 	c.fillHabit(context.Background(), habitInfo{
@@ -420,10 +419,9 @@ func TestFillHabitRejectsBadKind(t *testing.T) {
 	}
 }
 
-// TestFillProjectReachesTheCalendar is the happy path — every other loop test
-// asserts a non-event, which a fillProject that never books would also pass.
-// Reaching "not linked" proves it sized a block, found a slot, and cleared
-// every invariant in commitFocus.
+// TestFillProjectReachesTheCalendar is the happy path: a planner that never
+// books would pass every negative test. Reaching "not linked" proves it sized
+// a block, found a slot, and cleared commitFocus.
 func TestFillProjectReachesTheCalendar(t *testing.T) {
 	c := newCycle(t)
 	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
@@ -437,8 +435,7 @@ func TestFillProjectReachesTheCalendar(t *testing.T) {
 		ID: pj.ID, Name: pj.Name, Kind: string(models.SlotWork), HoursRemaining: 4,
 	})
 
-	// Each iteration tries every candidate, then gives up: one error per
-	// candidate, and no second iteration.
+	// Each iteration tries every candidate, then gives up.
 	errs, _ := c.summary["errors"].([]string)
 	if len(errs) == 0 {
 		t.Fatal("fillProject booked nothing and reported nothing: it never reached commitFocus")
@@ -447,8 +444,7 @@ func TestFillProjectReachesTheCalendar(t *testing.T) {
 		t.Errorf("want at most %d attempts before giving up, got %d: %v", slotOversample, len(errs), errs)
 	}
 	for _, e := range errs {
-		// "minutes" would mean a mis-sized block — e.g. a math.Min inversion
-		// asking for all 4 remaining hours at once.
+		// "minutes" would mean a mis-sized block, e.g. all 4 hours at once.
 		if contains(e, "minutes") {
 			t.Errorf("block sized wrong rather than reaching the client: %v", e)
 		}
@@ -458,8 +454,7 @@ func TestFillProjectReachesTheCalendar(t *testing.T) {
 	}
 }
 
-// TestFillHabitBooksAcrossDistinctDays proves the habit loop iterates
-// candidates instead of giving up on the first failure.
+// TestFillHabitBooksAcrossDistinctDays: the loop keeps trying candidates.
 func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	c := newCycle(t)
 	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
@@ -478,7 +473,7 @@ func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	})
 
 	errs, _ := c.summary["errors"].([]string)
-	// fillHabit continues past a failed commit, so both blocks are attempted.
+	// fillHabit continues past a failure, so both blocks are attempted.
 	if len(errs) < 2 {
 		t.Fatalf("want at least two attempts for a shortfall of two, got %v", errs)
 	}
@@ -489,8 +484,7 @@ func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	}
 }
 
-// TestPlanEmptyState is the whole pass over an empty DB: it must succeed and
-// call nothing.
+// TestPlanEmptyState: a pass over an empty DB succeeds and books nothing.
 func TestPlanEmptyState(t *testing.T) {
 	c := newCycle(t)
 	if err := c.plan(context.Background()); err != nil {

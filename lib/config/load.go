@@ -59,14 +59,11 @@ type OAuthConfig struct {
 	RedirectURL  string
 }
 
-// TriageModel classifies inbox mail — the only LLM call art makes now that
-// planning is deterministic.
+// TriageModel classifies inbox mail — art's only LLM call.
 //
-// Flash, not Pro: a three-way classification doesn't need Pro, and only Flash
-// honours ThinkingBudget: 0. Pro always thinks and bills it as output.
-//
-// Deliberately not a shared model constant — one name governing every call
-// site is how an expensive model spread silently.
+// Flash, not Pro: only Flash honours ThinkingBudget: 0, and Pro always thinks
+// and bills it as output. Not a shared constant — one name governing every
+// call site is how Pro spread.
 const TriageModel = "gemini-2.5-flash"
 
 // VertexConfig holds Vertex AI project and region settings for the LLM.

@@ -25,11 +25,10 @@ books focus blocks over a rolling window (`plan_horizon_days`) by walking
 projects deadline-ascending, then habits one-per-day. `commitFocus` is the
 server-side source of truth for every scheduling invariant.
 
-- **The planner deliberately calls no model.** It was an ADK/Vertex Gemini
-  agent that cost $737 in July 2026: ~96 re-plans a day of a prompt that
-  spelled out a `for` loop, with tokens recorded as 0 so it showed up only in
-  the billing console. Don't reintroduce an LLM — the rules are mechanical and
-  the invariants are enforced in code.
+- **The planner deliberately calls no model.** As an ADK/Vertex Gemini agent it
+  cost $737 in July 2026: ~96 re-plans a day of a prompt that spelled out a
+  `for` loop, recording 0 tokens so it showed up only in the billing console.
+  Don't reintroduce an LLM; the rules are mechanical.
 
 - Schema is owned by `gorm.AutoMigrate` over `lib/models`; UUID PKs are
   generated in Go (`BeforeCreate` + `google/uuid`). No migration files.
@@ -45,9 +44,9 @@ server-side source of truth for every scheduling invariant.
   Its key list is an allowlist: secrets never go in the table or the API.
 - `lib/cost` prices recorded tokens and enforces `daily_budget_usd` (default
   $2); triage is the only LLM caller. Two traps: `ThoughtsTokenCount` bills as
-  output but is **not** in `CandidatesTokenCount`, and gemini-2.5-pro can't
-  disable thinking (only Flash honours `ThinkingBudget: 0`). Any new model call
-  must record both counts and go through the guard.
+  output but is **not** in `CandidatesTokenCount` (measured ~9.5x undercount),
+  and only Flash honours `ThinkingBudget: 0`. New model calls must record both
+  counts and go through the guard.
 - Email triage classifies with Gemini Flash structured output and records an
   `email_messages` row + an `agent_runs` row (`kind=triage`). Message bodies are
   never persisted. Refresh tokens are AES-256-GCM sealed (`lib/oauth`).

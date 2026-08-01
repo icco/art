@@ -16,13 +16,10 @@ import (
 	"gorm.io/gorm"
 )
 
-// slotOversample is how many candidates to request per block needed: some get
-// skipped (day already used, a new overlap), so asking for `need` under-books.
+// slotOversample requests spare candidates per block: some get skipped.
 const slotOversample = 4
 
-// cycle is the per-run state: the settings snapshot the loop and commitFocus
-// both read, lazily-opened calendar clients, and the agent_runs summary.
-// Single-goroutine — the ADK agent it replaced needed a mutex; a loop doesn't.
+// cycle is the per-run state: settings snapshot, lazy calendar clients, summary.
 type cycle struct {
 	p       *Planner
 	vals    settings.Values
@@ -30,12 +27,9 @@ type cycle struct {
 	clients map[models.AccountKind]*calendar.Client
 }
 
-// plan books blocks for every project and habit still short: projects
-// deadline-ascending until target hours are met, then habits one per day.
+// plan books projects deadline-ascending, then habits one per day.
 //
-// This was an LLM agent whose prompt spelled out exactly this loop, running
-// gemini-2.5-pro 96x/day to re-derive a `for` loop. commitFocus remains the
-// single source of truth for what may be booked.
+// This was an LLM agent whose prompt spelled out exactly this loop.
 func (c *cycle) plan(ctx context.Context) error {
 	projects, habits, err := c.loadState(ctx)
 	if err != nil {
@@ -50,8 +44,7 @@ func (c *cycle) plan(ctx context.Context) error {
 	return nil
 }
 
-// fillProject books blocks for one project until its remaining hours are met,
-// no slot fits before its deadline, or the plan window runs out.
+// fillProject books until target hours are met or nothing fits.
 func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 	minHours := float64(c.vals.FocusBlockMinMinutes) / 60
 	maxHours := float64(c.vals.FocusBlockMaxMinutes) / 60
@@ -73,8 +66,8 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 		deadline = d
 	}
 
-	// One block per iteration so its length tracks the hours still left. Each
-	// commit writes a session row, so the next query excludes it.
+	// One block per iteration so its length tracks the hours left; each commit
+	// writes a session row the next query excludes.
 	for remaining >= minHours {
 		minutes := int(math.Round(math.Min(remaining, maxHours) * 60))
 		slots, err := c.freeSlots(ctx, acct, kind, minutes, slotOversample)
@@ -95,8 +88,7 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 			booked = true
 			break
 		}
-		// Nothing in this batch was usable; another pass would reach the same
-		// answer.
+		// No candidate worked; another pass would repeat it.
 		if !booked {
 			return
 		}
@@ -114,8 +106,7 @@ func (c *cycle) fillHabit(ctx context.Context, h habitInfo) {
 		c.addErr(fmt.Sprintf("habit %s: invalid kind %q", h.Name, h.Kind))
 		return
 	}
-	// commitFocus rejects blocks outside these bounds, so such a habit can
-	// never be booked. Say so once, not per candidate slot.
+	// commitFocus would reject every slot; say so once, not per candidate.
 	if h.BlockMinutes < c.vals.FocusBlockMinMinutes || h.BlockMinutes > c.vals.FocusBlockMaxMinutes {
 		c.addErr(fmt.Sprintf("habit %s: block %d min is outside the allowed %d-%d",
 			h.Name, h.BlockMinutes, c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes))
@@ -127,8 +118,7 @@ func (c *cycle) fillHabit(ctx context.Context, h habitInfo) {
 		c.addErr(fmt.Sprintf("habit %s: find slots: %v", h.Name, err))
 		return
 	}
-	// commitFocus enforces one-per-day against the DB; tracking it here avoids
-	// a doomed round trip per extra slot.
+	// commitFocus enforces this too; tracking it here saves a round trip.
 	used := map[string]bool{}
 	for _, s := range slots {
 		if need == 0 {
@@ -175,9 +165,8 @@ type habitInfo struct {
 	ScheduledInWindow int
 }
 
-// loadState reads active projects (deadline-ascending) and active habits with
-// their per-window shortfall. Working hours aren't returned: FindFreeSlots and
-// commitFocus query them directly.
+// loadState reads active projects (deadline-ascending) and habits with their
+// shortfall. Working hours aren't returned: the callers query them directly.
 func (c *cycle) loadState(ctx context.Context) ([]projectInfo, []habitInfo, error) {
 	var projects []models.Project
 	if err := c.p.DB.WithContext(ctx).
@@ -267,9 +256,8 @@ func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64
 
 // commitFocus creates the calendar event and session row for one block.
 //
-// Every check here existed because the LLM choosing these times was untrusted,
-// and all are kept: a rejection now means a real race with a human calendar
-// edit, which is exactly what's worth failing on.
+// The checks date from when an LLM chose these times and are all kept: a
+// rejection now means a real race with a human calendar edit.
 func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourceID string, start, end time.Time) error {
 	if !source.Valid() {
 		return fmt.Errorf("source must be 'project' or 'habit'")
@@ -313,8 +301,7 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 			start.Format(time.RFC3339), end.Format(time.RFC3339))
 	}
 
-	// A habit gets at most one block per calendar day (config tz): its weekly
-	// cadence must spread across days rather than stack onto one.
+	// At most one block per habit per calendar day, so cadence spreads out.
 	if source == models.SourceHabit {
 		dayStart := startOfDay(start, c.p.Cfg.Timezone)
 		var n int64
