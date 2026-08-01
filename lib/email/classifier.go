@@ -88,8 +88,9 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 	if resp.UsageMetadata != nil {
 		u := resp.UsageMetadata
 		in := int(u.PromptTokenCount)
-		// ThoughtsTokenCount bills as output but is NOT in CandidatesTokenCount;
-		// omitting it made a month of spend read far under its real size.
+		// ThoughtsTokenCount bills as output but is NOT in CandidatesTokenCount.
+		// Measured on one email against 2.5-pro: 77 candidate tokens, 658
+		// thinking. Omitting it undercounted output by ~9.5x.
 		out := int(u.CandidatesTokenCount) + int(u.ThoughtsTokenCount)
 		c.tokensIn += in
 		c.tokensOut += out
