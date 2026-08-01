@@ -8,6 +8,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
@@ -34,7 +35,9 @@ func (p *Planner) Run(ctx context.Context) error {
 		return err
 	}
 
-	run := models.AgentRun{Kind: models.AgentRunPlanner, StartedAt: time.Now(), Status: models.AgentRunRunning, Model: config.VertexModel}
+	// Model is empty: planning calls no model. Kept on the row so a run that
+	// predates this change stays distinguishable from one that follows it.
+	run := models.AgentRun{Kind: models.AgentRunPlanner, StartedAt: time.Now(), Status: models.AgentRunRunning}
 	if err := p.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
 	}
@@ -44,7 +47,8 @@ func (p *Planner) Run(ctx context.Context) error {
 		"habits_scheduled":   0,
 		"errors":             []string{},
 	}
-	runErr := p.llmPlan(ctx, vals, summary)
+	c := &cycle{p: p, vals: vals, summary: summary, clients: map[models.AccountKind]*calendar.Client{}}
+	runErr := c.plan(ctx)
 	return p.finish(ctx, run.ID, summary, runErr)
 }
 
