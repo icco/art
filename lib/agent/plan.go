@@ -28,8 +28,6 @@ type cycle struct {
 }
 
 // plan books projects deadline-ascending, then habits one per day.
-//
-// This was an LLM agent whose prompt spelled out exactly this loop.
 func (c *cycle) plan(ctx context.Context) error {
 	projects, habits, err := c.loadState(ctx)
 	if err != nil {
@@ -66,8 +64,6 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 		deadline = d
 	}
 
-	// One block per iteration so its length tracks the hours left; each commit
-	// writes a session row the next query excludes.
 	for remaining >= minHours {
 		minutes := int(math.Round(math.Min(remaining, maxHours) * 60))
 		slots, err := c.freeSlots(ctx, acct, kind, minutes, slotOversample)
@@ -88,7 +84,6 @@ func (c *cycle) fillProject(ctx context.Context, pj projectInfo) {
 			booked = true
 			break
 		}
-		// No candidate worked; another pass would repeat it.
 		if !booked {
 			return
 		}
@@ -118,7 +113,6 @@ func (c *cycle) fillHabit(ctx context.Context, h habitInfo) {
 		c.addErr(fmt.Sprintf("habit %s: find slots: %v", h.Name, err))
 		return
 	}
-	// commitFocus enforces this too; tracking it here saves a round trip.
 	used := map[string]bool{}
 	for _, s := range slots {
 		if need == 0 {
@@ -145,8 +139,6 @@ func (c *cycle) freeSlots(ctx context.Context, acct models.AccountKind, kind mod
 	from, end := c.planWindow()
 	return FindFreeSlots(ctx, c.p.DB, c.p.Cfg.Timezone, acct, kind, durationMin, from, end, maxSlots, c.vals.SoftTitles())
 }
-
-// ---- state ----
 
 type projectInfo struct {
 	ID             string
@@ -252,8 +244,6 @@ func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64
 	return out, nil
 }
 
-// ---- commit ----
-
 // commitFocus creates the calendar event and session row for one block.
 //
 // The checks date from when an LLM chose these times and are all kept: a
@@ -348,7 +338,6 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 	}
 	if err := c.p.DB.WithContext(ctx).Create(&sess).Error; err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			// A retry converged on the same deterministic ID: already booked.
 			var existing models.Session
 			if lookupErr := c.p.DB.WithContext(ctx).First(&existing, "google_event_id = ?", ev.Id).Error; lookupErr == nil {
 				return nil

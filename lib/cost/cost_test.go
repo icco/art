@@ -15,28 +15,26 @@ func closeTo(got, want float64) bool { return math.Abs(got-want) < 1e-9 }
 
 func TestUSDKnownModel(t *testing.T) {
 	// 1M in + 1M out on Flash = $0.30 + $2.50.
-	if got := USD("gemini-2.5-flash", 1_000_000, 1_000_000); !closeTo(got, 2.80) {
+	if got := usd("gemini-2.5-flash", 1_000_000, 1_000_000); !closeTo(got, 2.80) {
 		t.Errorf("flash 1M/1M = %v, want 2.80", got)
 	}
-	if got := USD("gemini-2.5-pro", 1_000_000, 1_000_000); !closeTo(got, 11.25) {
+	if got := usd("gemini-2.5-pro", 1_000_000, 1_000_000); !closeTo(got, 11.25) {
 		t.Errorf("pro 1M/1M = %v, want 11.25", got)
 	}
-	if got := USD("gemini-2.5-flash", 0, 0); got != 0 {
+	if got := usd("gemini-2.5-flash", 0, 0); got != 0 {
 		t.Errorf("zero tokens = %v, want 0", got)
 	}
 }
 
-// TestUSDUnknownModelPricesHigh: an unrecognised model must be priced, and
-// priced high, so it can't slip past the ceiling.
 func TestUSDUnknownModelPricesHigh(t *testing.T) {
-	r, known := RateFor("gemini-9-ultra")
+	r, known := rateFor("gemini-9-ultra")
 	if known {
 		t.Fatal("expected an unknown model")
 	}
 	if r != unknownModelRate {
 		t.Errorf("unknown model rate = %+v, want %+v", r, unknownModelRate)
 	}
-	if USD("gemini-9-ultra", 1_000_000, 0) <= 0 {
+	if usd("gemini-9-ultra", 1_000_000, 0) <= 0 {
 		t.Error("an unknown model must still cost something")
 	}
 }

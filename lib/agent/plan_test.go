@@ -29,7 +29,6 @@ func newCycle(t *testing.T) *cycle {
 	}}
 }
 
-// openAllHours frees every day for slotKind.
 func openAllHours(t *testing.T, c *cycle, kind models.SlotKind) {
 	t.Helper()
 	for d := range 7 {
@@ -330,10 +329,6 @@ func TestIntVal(t *testing.T) {
 	}
 }
 
-// ---- deterministic loop ----
-
-// TestFillProjectStopsWhenNothingBookable: no hours means no slots, so the
-// loop must return rather than spin.
 func TestFillProjectStopsWhenNothingBookable(t *testing.T) {
 	c := newCycle(t)
 	c.fillProject(context.Background(), projectInfo{
@@ -435,7 +430,6 @@ func TestFillProjectReachesTheCalendar(t *testing.T) {
 		ID: pj.ID, Name: pj.Name, Kind: string(models.SlotWork), HoursRemaining: 4,
 	})
 
-	// Each iteration tries every candidate, then gives up.
 	errs, _ := c.summary["errors"].([]string)
 	if len(errs) == 0 {
 		t.Fatal("fillProject booked nothing and reported nothing: it never reached commitFocus")
@@ -454,7 +448,6 @@ func TestFillProjectReachesTheCalendar(t *testing.T) {
 	}
 }
 
-// TestFillHabitBooksAcrossDistinctDays: the loop keeps trying candidates.
 func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	c := newCycle(t)
 	c.p.OAuth = oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: c.p.DB})
@@ -473,7 +466,6 @@ func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	})
 
 	errs, _ := c.summary["errors"].([]string)
-	// fillHabit continues past a failure, so both blocks are attempted.
 	if len(errs) < 2 {
 		t.Fatalf("want at least two attempts for a shortfall of two, got %v", errs)
 	}
@@ -484,7 +476,6 @@ func TestFillHabitBooksAcrossDistinctDays(t *testing.T) {
 	}
 }
 
-// TestPlanEmptyState: a pass over an empty DB succeeds and books nothing.
 func TestPlanEmptyState(t *testing.T) {
 	c := newCycle(t)
 	if err := c.plan(context.Background()); err != nil {
