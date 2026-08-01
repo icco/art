@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
@@ -88,6 +89,48 @@ type fakeClassifier struct{ byID map[string]Classification }
 
 func (f *fakeClassifier) Classify(_ context.Context, m *gmail.Message) (Classification, error) {
 	return f.byID[m.ID], nil
+}
+
+// budgetSpentClassifier refuses like a spent Guard, counting attempts so the
+// test can prove the loop stopped rather than retried.
+type budgetSpentClassifier struct{ calls int }
+
+func (f *budgetSpentClassifier) Classify(context.Context, *gmail.Message) (Classification, error) {
+	f.calls++
+	return Classification{}, &cost.ErrBudgetExhausted{SpentUSD: 2.5, BudgetUSD: 2.0}
+}
+
+// TestRunAccountStopsOnBudgetExhausted: a spent budget must end the run, not
+// fail once per message and keep calling.
+func TestRunAccountStopsOnBudgetExhausted(t *testing.T) {
+	db := testdb.Open(t)
+	gm := &fakeGmail{
+		ids: []string{"m1", "m2", "m3"},
+		msgs: map[string]*gmail.Message{
+			"m1": {ID: "m1"}, "m2": {ID: "m2"}, "m3": {ID: "m3"},
+		},
+	}
+	cl := &budgetSpentClassifier{}
+	tr := &Triager{DB: db, Classifier: cl, BackfillDays: 14, MaxPerRun: 50, ConfidenceThreshold: 0.8}
+
+	summary := map[string]int{}
+	runID := uuid.NewString()
+	processed, err := tr.RunAccount(context.Background(), runID, models.AccountPersonal, gm, summary)
+	if err != nil {
+		t.Fatalf("a spent budget is not a run failure: %v", err)
+	}
+	if processed != 0 {
+		t.Errorf("processed = %d, want 0", processed)
+	}
+	if cl.calls != 1 {
+		t.Errorf("classifier called %d times, want 1 — the loop must stop, not retry per message", cl.calls)
+	}
+	if summary["budget_stopped"] != 1 {
+		t.Errorf("budget_stopped = %d, want 1", summary["budget_stopped"])
+	}
+	if len(gm.modifyCalls) != 0 {
+		t.Errorf("no mail should be touched after the budget is spent, got %v", gm.modifyCalls)
+	}
 }
 
 func newTriager(t *testing.T, dryRun bool, byID map[string]Classification) (*Triager, *fakeGmail) {

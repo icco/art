@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/icco/art/lib/config"
+	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/oauth"
@@ -70,7 +71,7 @@ func (r *Runner) RunAll(ctx context.Context) error {
 		Kind:      models.AgentRunTriage,
 		StartedAt: time.Now(),
 		Status:    models.AgentRunRunning,
-		Model:     config.VertexModel,
+		Model:     config.TriageModel,
 	}
 	if err := r.DB.WithContext(ctx).Create(&run).Error; err != nil {
 		return err
@@ -94,7 +95,21 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 		log.Warnw("building corrections failed", "err", err)
 	}
 
-	classifier, err := NewClassifier(ctx, r.Cfg, corrections)
+	// Triage is the only LLM caller left, so this ceiling is art's whole cost
+	// control.
+	guard, err := cost.NewGuard(ctx, r.DB, r.Cfg.Timezone, vals.DailyBudgetUSD)
+	if err != nil {
+		*runErrs = append(*runErrs, "budget: "+err.Error())
+		return 0, 0
+	}
+	if err := guard.Allow(); err != nil {
+		log.Warnw("skipping triage: daily budget spent",
+			"spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
+		*runErrs = append(*runErrs, err.Error())
+		return 0, 0
+	}
+
+	classifier, err := NewClassifier(ctx, r.Cfg, corrections, guard)
 	if err != nil {
 		*runErrs = append(*runErrs, "classifier: "+err.Error())
 		return 0, 0
@@ -124,6 +139,7 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 		}
 		log.Infow("triaged account", "account", kind, "processed", n, "dry_run", vals.TriageDryRun)
 	}
+	log.Infow("triage spend", "spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
 	return classifier.TokensIn(), classifier.TokensOut()
 }
 

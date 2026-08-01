@@ -19,6 +19,7 @@ type settingsReq struct {
 	PlanHorizonDays           *int      `json:"plan_horizon_days"`
 	FocusBlockMinMinutes      *int      `json:"focus_block_min_minutes"`
 	FocusBlockMaxMinutes      *int      `json:"focus_block_max_minutes"`
+	DailyBudgetUSD            *float64  `json:"daily_budget_usd"`
 }
 
 func (req settingsReq) apply(v *settings.Values) {
@@ -31,6 +32,7 @@ func (req settingsReq) apply(v *settings.Values) {
 	assign(&v.PlanHorizonDays, req.PlanHorizonDays)
 	assign(&v.FocusBlockMinMinutes, req.FocusBlockMinMinutes)
 	assign(&v.FocusBlockMaxMinutes, req.FocusBlockMaxMinutes)
+	assign(&v.DailyBudgetUSD, req.DailyBudgetUSD)
 }
 
 func assign[T any](dst *T, src *T) {

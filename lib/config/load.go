@@ -59,9 +59,12 @@ type OAuthConfig struct {
 	RedirectURL  string
 }
 
-// VertexModel is hardcoded to the latest GA Gemini model on Vertex AI.
-// Update here when Google ships a newer GA release.
-const VertexModel = "gemini-2.5-pro"
+// TriageModel classifies inbox mail — art's only LLM call.
+//
+// Flash, not Pro: only Flash honours ThinkingBudget: 0, and Pro always thinks
+// and bills it as output. Not a shared constant — one name governing every
+// call site is how Pro spread.
+const TriageModel = "gemini-2.5-flash"
 
 // VertexConfig holds Vertex AI project and region settings for the LLM.
 type VertexConfig struct {

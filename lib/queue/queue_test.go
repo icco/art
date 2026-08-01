@@ -18,6 +18,25 @@ func fixedQueue(t *testing.T) (*Queue, time.Time) {
 	return &Queue{DB: testdb.Open(t), Now: func() time.Time { return now }}, now
 }
 
+// TestClaimJudgesDuenessByTheGoClock pins a bug that stopped the queue dead:
+// run_at comes from Go's clock, so comparing it to the database's now() meant
+// an app clock milliseconds ahead claimed nothing.
+func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
+	db := testdb.Open(t)
+	ctx := context.Background()
+	// An hour ahead of the database stands in for ordinary container drift.
+	ahead := time.Now().Add(time.Hour)
+	q := &Queue{DB: db, Now: func() time.Time { return ahead }}
+
+	if err := q.Seed(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := q.Claim(ctx); err != nil {
+		t.Fatalf("a job seeded as due must be claimable when the app clock leads the database's: %v", err)
+	}
+	// TestClaimOrderAndDueness covers the other direction.
+}
+
 func mustJob(t *testing.T, q *Queue, kind models.JobKind, status models.JobStatus, runAt time.Time, attempts int) models.Job {
 	t.Helper()
 	j := models.Job{Kind: kind, Status: status, RunAt: runAt, Attempts: attempts, MaxAttempts: maxAttempts}
@@ -135,8 +154,8 @@ func TestFinishTerminalChainsNextSlot(t *testing.T) {
 	if err := q.DB.First(&next, "kind = ? AND status = ?", models.JobPlanner, models.JobPending).Error; err != nil {
 		t.Fatalf("chained job: %v", err)
 	}
-	// Planner runs every 15 min: from 10:20 the next grid slot is 10:30.
-	wantSlot := time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)
+	// Planner runs hourly: from 10:20 the next grid slot is 11:00.
+	wantSlot := time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)
 	if !next.RunAt.Equal(wantSlot) {
 		t.Fatalf("want next run on grid %v, got %v", wantSlot, next.RunAt)
 	}
@@ -159,10 +178,10 @@ func TestFinishChainsPerKindGrid(t *testing.T) {
 		kind models.JobKind
 		want time.Time
 	}{
-		// From 10:20: sync every 10m → 10:30, planner every 15m → 10:30,
+		// From 10:20: sync every 10m → 10:30, planner hourly → 11:00,
 		// triage every 30m → 10:30.
 		{models.JobSync, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
-		{models.JobPlanner, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
+		{models.JobPlanner, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
 		{models.JobTriage, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
 	}
 	for _, c := range cases {

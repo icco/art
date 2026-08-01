@@ -2,9 +2,11 @@ package email
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
+	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
 	gutillog "github.com/icco/gutil/logging"
@@ -108,6 +110,15 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 
 		cls, err := t.Classifier.Classify(ctx, msg)
 		if err != nil {
+			// A spent budget applies to every remaining message, so stop rather
+			// than fail per message. A later run retries the untagged mail.
+			var exhausted *cost.ErrBudgetExhausted
+			if errors.As(err, &exhausted) {
+				log.Warnw("triage: stopping, daily budget spent",
+					"account", kind, "remaining", len(ids)-processed, "err", err)
+				summary["budget_stopped"]++
+				return processed, nil
+			}
 			// Gemini safety-blocks, rate limits, and invalid output are
 			// non-fatal: leave the message untagged so a later run retries it,
 			// and move on to the rest.

@@ -12,7 +12,10 @@ import (
 )
 
 // maxBodyChars bounds how much plaintext we feed the classifier per message.
-const maxBodyChars = 4000
+// Sender, subject and snippet carry most of the archive/reply signal; the body
+// is a tiebreaker, so a short prefix buys nearly all the accuracy of a long one
+// at a fraction of the prompt.
+const maxBodyChars = 1500
 
 // Message is the extracted, classifier-ready view of a Gmail message. Bodies
 // are held only in memory for the duration of a run; we never persist them.
