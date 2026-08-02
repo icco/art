@@ -11,14 +11,14 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.16.0
 	github.com/google/uuid v1.6.0
-	github.com/icco/gutil v0.0.0-20260630032459-de9e83f7fbb2
+	github.com/icco/gutil v1.0.3
 	github.com/prometheus/client_golang v1.24.1
 	github.com/unrolled/secure v1.17.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/net v0.57.0
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.291.0
-	google.golang.org/genai v1.65.0
+	google.golang.org/genai v1.66.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.6.1
 	gorm.io/gorm v1.31.2
@@ -50,7 +50,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
-	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-sql-driver/mysql v1.10.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
@@ -88,8 +88,8 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260724162435-b2f20204f0df // indirect
-	google.golang.org/grpc v1.82.1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260729162451-8efbd57d26e0 // indirect
+	google.golang.org/grpc v1.83.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gorm.io/driver/mysql v1.6.0 // indirect
 )

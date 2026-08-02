@@ -14,6 +14,7 @@ import (
 	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/gutil/vertex"
 	"google.golang.org/genai"
 )
 
@@ -34,7 +35,7 @@ type Classification struct {
 // time. corrections holds a feedback block (from the reconcile pass) appended
 // to the system instruction so the model learns from Nat's reversals.
 type Classifier struct {
-	client      *genai.Client
+	v           *vertex.Client
 	model       string
 	corrections string
 	// guard lives here, not in the Triager: this is the only place that spends.
@@ -47,15 +48,15 @@ type Classifier struct {
 // NewClassifier builds a Gemini client on the Vertex backend, mirroring the
 // planner's configuration.
 func NewClassifier(ctx context.Context, cfg *config.Config, corrections string, guard *cost.Guard) (*Classifier, error) {
-	client, err := genai.NewClient(ctx, &genai.ClientConfig{
+	v, err := vertex.New(ctx, vertex.Config{
 		Project:  cfg.Vertex.ProjectID,
 		Location: cfg.Vertex.Location,
-		Backend:  genai.BackendVertexAI,
+		Model:    config.TriageModel,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("genai client: %w", err)
 	}
-	return &Classifier{client: client, model: config.TriageModel, corrections: corrections, guard: guard}, nil
+	return &Classifier{v: v, model: config.TriageModel, corrections: corrections, guard: guard}, nil
 }
 
 // TokensIn reports cumulative prompt tokens across all Classify calls.
@@ -73,30 +74,29 @@ func (c *Classifier) Classify(ctx context.Context, m *gmail.Message) (Classifica
 			return Classification{}, err
 		}
 	}
-	resp, err := c.client.Models.GenerateContent(ctx, c.model, genai.Text(userPrompt(m)), &genai.GenerateContentConfig{
-		SystemInstruction: &genai.Content{Parts: []*genai.Part{{Text: systemInstruction + c.corrections}}},
-		ResponseMIMEType:  "application/json",
-		ResponseSchema:    classificationSchema(),
+	resp, err := c.v.Generate(ctx, vertex.Request{
+		System: systemInstruction + c.corrections,
+		Parts:  vertex.Text(userPrompt(m)),
+		Schema: classificationSchema(),
 		// Three-way sorting needs no reasoning, and thinking bills as output.
-		ThinkingConfig: &genai.ThinkingConfig{ThinkingBudget: genai.Ptr[int32](0)},
+		ThinkingBudget: vertex.NoThinking(),
 	})
+	// Usage is recorded before the error check on purpose: a call that produced
+	// no usable text still spent tokens, and the budget has to see them.
+	// vertex.Usage.Out already folds in thinking tokens, which genai reports
+	// separately and excludes from CandidatesTokenCount.
+	if resp != nil {
+		c.tokensIn += resp.Usage.In
+		c.tokensOut += resp.Usage.Out
+		if c.guard != nil && (resp.Usage.In > 0 || resp.Usage.Out > 0) {
+			c.guard.Record(c.model, resp.Usage.In, resp.Usage.Out)
+		}
+	}
 	if err != nil {
 		return Classification{}, err
 	}
-	if resp.UsageMetadata != nil {
-		u := resp.UsageMetadata
-		in := int(u.PromptTokenCount)
-		// ThoughtsTokenCount bills as output but is NOT in CandidatesTokenCount.
-		// Measured on 2.5-pro: 77 candidate vs 658 thinking, a ~9.5x undercount.
-		out := int(u.CandidatesTokenCount) + int(u.ThoughtsTokenCount)
-		c.tokensIn += in
-		c.tokensOut += out
-		if c.guard != nil {
-			c.guard.Record(c.model, in, out)
-		}
-	}
 
-	return parseClassification(resp.Text())
+	return parseClassification(resp.Text)
 }
 
 func parseClassification(text string) (Classification, error) {
