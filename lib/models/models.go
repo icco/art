@@ -235,16 +235,19 @@ type Session struct {
 // Event mirrors a Google Calendar event pulled into the local database.
 type Event struct {
 	Base
-	AccountKind        AccountKind    `gorm:"type:varchar(16);not null;uniqueIndex:idx_event_lookup,priority:1;index:idx_event_window,priority:1" json:"account_kind"`
-	CalendarID         string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:2" json:"calendar_id"`
-	GoogleEventID      string         `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:3" json:"google_event_id"`
-	Summary            string         `gorm:"type:text;not null;default:''" json:"summary"`
-	Description        string         `gorm:"type:text;not null;default:''" json:"description"`
-	StartTime          time.Time      `gorm:"not null;index:idx_event_window,priority:2" json:"start_time"`
-	EndTime            time.Time      `gorm:"not null" json:"end_time"`
-	AllDay             bool           `gorm:"not null;default:false" json:"all_day"`
-	AttendeeCount      int            `gorm:"not null;default:0" json:"attendee_count"`
-	EventType          string         `gorm:"type:varchar(32);not null;default:'default'" json:"event_type"`
+	AccountKind   AccountKind `gorm:"type:varchar(16);not null;uniqueIndex:idx_event_lookup,priority:1;index:idx_event_window,priority:1" json:"account_kind"`
+	CalendarID    string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:2" json:"calendar_id"`
+	GoogleEventID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:3" json:"google_event_id"`
+	Summary       string      `gorm:"type:text;not null;default:''" json:"summary"`
+	Description   string      `gorm:"type:text;not null;default:''" json:"description"`
+	StartTime     time.Time   `gorm:"not null;index:idx_event_window,priority:2" json:"start_time"`
+	EndTime       time.Time   `gorm:"not null" json:"end_time"`
+	AllDay        bool        `gorm:"not null;default:false" json:"all_day"`
+	AttendeeCount int         `gorm:"not null;default:0" json:"attendee_count"`
+	EventType     string      `gorm:"type:varchar(32);not null;default:'default'" json:"event_type"`
+	// Transparency is Google's free/busy flag: "transparent" means the event
+	// does not consume time. Empty or "opaque" means busy.
+	Transparency       string         `gorm:"type:varchar(16);not null;default:''" json:"transparency"`
 	IsArtManaged       bool           `gorm:"not null;default:false;index" json:"is_art_managed"`
 	Status             string         `gorm:"type:varchar(32);not null;default:'confirmed'" json:"status"`
 	ExtendedProperties datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"extended_properties"`

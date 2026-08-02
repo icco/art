@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -49,7 +50,7 @@ func FindFreeSlots(
 		return nil, nil
 	}
 
-	busy, err := loadBusy(ctx, db, accountKind, windowStart, windowEnd.Add(duration), soft)
+	busy, err := loadBusy(ctx, db, windowStart, windowEnd.Add(duration), soft)
 	if err != nil {
 		return nil, err
 	}
@@ -112,13 +113,24 @@ type busyRange struct {
 	soft bool
 }
 
-func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time, soft models.SoftTitles) ([]busyRange, error) {
+func loadBusy(ctx context.Context, db *gorm.DB, from, to time.Time, soft models.SoftTitles) ([]busyRange, error) {
+	owned, err := calendar.OwnedCalendarIDs(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	// Busy spans both calendars: the owner can only be in one place, so a work
+	// meeting blocks a personal block and vice versa. Scoping to account_kind
+	// would let Art book focus time on top of a meeting on the other calendar.
+	q := db.WithContext(ctx).
+		Where(`status <> 'cancelled' AND transparency <> 'transparent'
+		       AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?`,
+			from, to)
+	// No linked account yet: treat every calendar as the owner's rather than none.
+	if len(owned) > 0 {
+		q = q.Where("calendar_id IN ?", owned)
+	}
 	var events []models.Event
-	if err := db.WithContext(ctx).
-		Where("account_kind = ? AND status <> 'cancelled' AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?",
-			kind, from, to).
-		Order("start_time").
-		Find(&events).Error; err != nil {
+	if err := q.Order("start_time").Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make([]busyRange, 0, len(events))
@@ -129,8 +141,8 @@ func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, t
 	// Planned sessions are busy too; they have no Event row until the next sync.
 	var sessions []models.Session
 	if err := db.WithContext(ctx).
-		Where("account_kind = ? AND status = ? AND scheduled_end > ? AND scheduled_start < ?",
-			kind, models.SessionPlanned, from, to).
+		Where("status = ? AND scheduled_end > ? AND scheduled_start < ?",
+			models.SessionPlanned, from, to).
 		Find(&sessions).Error; err != nil {
 		return nil, err
 	}

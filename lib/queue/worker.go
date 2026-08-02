@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/models"
 	gutillog "github.com/icco/gutil/logging"
 	"gorm.io/gorm"
@@ -77,6 +78,9 @@ func (w *Worker) Start(ctx context.Context) error {
 	}
 	if err := w.Queue.DropRetiredKinds(ctx); err != nil {
 		return fmt.Errorf("queue drop retired kinds: %w", err)
+	}
+	if err := calendar.PruneForeignCalendars(ctx, w.Queue.DB); err != nil {
+		return fmt.Errorf("prune foreign calendars: %w", err)
 	}
 	if err := w.Queue.Seed(ctx); err != nil {
 		return fmt.Errorf("queue seed: %w", err)
