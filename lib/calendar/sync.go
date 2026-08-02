@@ -205,6 +205,7 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 		AllDay:             allDay,
 		AttendeeCount:      len(ev.Attendees),
 		EventType:          eventType,
+		Transparency:       ev.Transparency,
 		IsArtManaged:       artManaged,
 		Status:             ev.Status,
 		ExtendedProperties: datatypes.JSON(extJSON),
@@ -214,7 +215,7 @@ func (s *Syncer) upsertEvent(ctx context.Context, calendarID string, ev *calenda
 			Columns: []clause.Column{{Name: "account_kind"}, {Name: "calendar_id"}, {Name: "google_event_id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
 				"summary", "description", "start_time", "end_time", "all_day",
-				"attendee_count", "event_type", "is_art_managed", "status",
+				"attendee_count", "event_type", "transparency", "is_art_managed", "status",
 				"extended_properties", "updated_at",
 			}),
 		}).

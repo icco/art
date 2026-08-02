@@ -115,7 +115,8 @@ type busyRange struct {
 func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time, soft models.SoftTitles) ([]busyRange, error) {
 	var events []models.Event
 	if err := db.WithContext(ctx).
-		Where("account_kind = ? AND status <> 'cancelled' AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?",
+		Where(`account_kind = ? AND status <> 'cancelled' AND transparency <> 'transparent'
+		       AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?`,
 			kind, from, to).
 		Order("start_time").
 		Find(&events).Error; err != nil {

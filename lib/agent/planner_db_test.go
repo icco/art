@@ -320,3 +320,47 @@ func TestFindFreeSlotsHonorsPlannedSessions(t *testing.T) {
 		t.Fatal("expected at least one free slot in 9-18 window")
 	}
 }
+
+// TestFindFreeSlotsIgnoresTransparentEvents pins Google's free/busy semantics:
+// an event marked "transparent" (Free) does not consume time, so Art may book
+// over it. Previously every timed event blocked regardless.
+func TestFindFreeSlotsIgnoresTransparentEvents(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotWork, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A Free hold covering the whole window: it must not block anything.
+	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "primary", GoogleEventID: "free1",
+		Summary: "Optional standup", StartTime: monday9, EndTime: monday9.Add(9 * time.Hour),
+		Status: "confirmed", Transparency: "transparent",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	from := monday9
+	to := time.Date(2026, 5, 25, 18, 0, 0, 0, tz)
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) == 0 {
+		t.Fatal("a Free event must not consume the whole window")
+	}
+
+	// The same event marked busy blocks it, so the predicate is really the flag.
+	if err := db.Model(&models.Event{}).Where("google_event_id = ?", "free1").
+		Update("transparency", "opaque").Error; err != nil {
+		t.Fatal(err)
+	}
+	slots, err = agent.FindFreeSlots(context.Background(), db, tz, models.AccountWork, models.SlotWork, 60, from, to, 5, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) != 0 {
+		t.Fatalf("an opaque event must block, got %d slots", len(slots))
+	}
+}

@@ -174,6 +174,7 @@ func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session, soft mo
 	if err := r.DB.WithContext(ctx).Model(&models.Event{}).
 		Select("summary, coalesce(extended_properties::text, '') AS extended_properties").
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
+		       AND transparency <> 'transparent'
 		       AND (all_day = false OR event_type = 'outOfOffice')
 		       AND end_time > ? AND start_time < ?`,
 			s.AccountKind, s.ScheduledStart, s.ScheduledEnd).

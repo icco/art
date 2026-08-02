@@ -337,3 +337,34 @@ func TestReconcileSkipsWhenSyncStale(t *testing.T) {
 		t.Fatalf("summary = %s, want skipped_stale true", run.Summary)
 	}
 }
+
+// TestReconcileIgnoresTransparentOverlap: a Free event is not a conflict, so a
+// block sitting under one must not be retracted.
+func TestReconcileIgnoresTransparentOverlap(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+
+	free := models.Event{
+		AccountKind: models.AccountPersonal, CalendarID: "primary", GoogleEventID: "ev-free",
+		StartTime: start, EndTime: start.Add(time.Hour), Status: "confirmed",
+		EventType: "default", Summary: "Optional standup", Transparency: "transparent",
+	}
+	if err := db.Create(&free).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 0 {
+		t.Errorf("a Free event is not a conflict, got %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 1 {
+		t.Errorf("session should survive under a Free event, %d remain", n)
+	}
+}
