@@ -51,6 +51,23 @@ func TestDecideAction(t *testing.T) {
 	}
 }
 
+func TestMailingListLabelIDs(t *testing.T) {
+	got := mailingListLabelIDs(map[string]string{
+		"mailinglist":             "L1",
+		"mailinglist/golang-nuts": "L2",
+		"mailinglistings":         "L3",
+		"art/triaged":             "L4",
+	})
+	slices.Sort(got)
+	want := []string{"L1", "L2"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v want %v — the label and its sublabels, nothing else", got, want)
+	}
+	if ids := mailingListLabelIDs(map[string]string{"art/triaged": "L4"}); len(ids) != 0 {
+		t.Errorf("an account without the label must yield none, got %v", ids)
+	}
+}
+
 // --- fakes ---
 
 type fakeGmail struct {
@@ -81,6 +98,8 @@ func (f *fakeGmail) LabelIDsByName(context.Context) (map[string]string, error) {
 	}
 	if f.hasMailingList {
 		all[gmail.LabelMailingList] = "L_MAILINGLIST"
+		all[gmail.LabelMailingList+"/golang-nuts"] = "L_ML_GOLANG"
+		all[gmail.LabelMailingList+"ings"] = "L_NOT_ML"
 	}
 	return all, nil
 }
@@ -261,7 +280,10 @@ func TestRunAccountNeverArchivesMailingList(t *testing.T) {
 	}
 	tr, gm := newTriager(t, false, byID)
 	gm.hasMailingList = true
-	gm.msgs["m1"].LabelIDs = []string{"L_MAILINGLIST"}
+	// A message filed under a sublabel carries only that sublabel's ID, and
+	// "mailinglistings" is a different label that must not be protected.
+	gm.msgs["m1"].LabelIDs = []string{"L_ML_GOLANG"}
+	gm.msgs["m2"].LabelIDs = []string{"L_NOT_ML"}
 
 	counts := map[string]int{}
 	if _, err := tr.RunAccount(context.Background(), uuid.NewString(), models.AccountPersonal, gm, counts); err != nil {

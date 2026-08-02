@@ -79,6 +79,21 @@ func decideAction(cat models.EmailCategory, confidence, threshold float64, maili
 	return d
 }
 
+// mailingListLabelIDs picks the mailinglist label and any sublabel of it out of
+// a lowercased name->id map. Gmail treats "mailinglist/golang-nuts" as its own
+// label and does not tag the message with the parent, so an exact-name match
+// alone would miss every message that is actually filed under a list.
+func mailingListLabelIDs(byLowerName map[string]string) []string {
+	prefix := strings.ToLower(gmail.LabelMailingList)
+	var ids []string
+	for name, id := range byLowerName {
+		if name == prefix || strings.HasPrefix(name, prefix+"/") {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // RunAccount triages one account's inbox. It returns the number of messages
 // processed and accumulates per-category counts into summary.
 func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.AccountKind, gm Gmailer, summary map[string]int) (int, error) {
@@ -88,12 +103,12 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 	}
 
 	// Nat's mailinglist label is not one art creates, so look it up rather than
-	// ensure it — an account without the label just yields an empty ID.
+	// ensure it — an account without the label yields an empty set.
 	allLabels, err := gm.LabelIDsByName(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list labels: %w", err)
 	}
-	mailingListID := allLabels[strings.ToLower(gmail.LabelMailingList)]
+	mailingListIDs := mailingListLabelIDs(allLabels)
 
 	query := fmt.Sprintf("in:inbox -label:%q newer_than:%dd", gmail.LabelTriaged, t.BackfillDays)
 	ids, err := gm.FetchMessageIDs(ctx, query, t.MaxPerRun)
@@ -137,7 +152,9 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			summary["errors"]++
 			continue
 		}
-		mailingList := mailingListID != "" && slices.Contains(msg.LabelIDs, mailingListID)
+		mailingList := slices.ContainsFunc(msg.LabelIDs, func(id string) bool {
+			return slices.Contains(mailingListIDs, id)
+		})
 		if mailingList && cls.Category == models.EmailArchive {
 			summary["mailinglist_kept"]++
 		}
