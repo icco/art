@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/icco/art/lib/calendar"
@@ -161,22 +162,40 @@ func (r *Runner) reconcileOne(ctx context.Context, summary map[string]any, s mod
 // the next sync. The title test runs in Go, not SQL: btrim() trims spaces where
 // strings.TrimSpace trims all Unicode whitespace, and the two disagreeing is
 // exactly how a block gets booked and then retracted.
+//
+// Mirrors of Art's own block are excluded too: a third-party calendar sync
+// copies it to the other calendar as "Busy", which is not art-managed and so
+// read as a conflict — Art retracted its own reflection every cycle.
 func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session, soft models.SoftTitles) (bool, error) {
-	var summaries []string
+	var rows []struct {
+		Summary            string
+		ExtendedProperties string
+	}
 	if err := r.DB.WithContext(ctx).Model(&models.Event{}).
+		Select("summary, coalesce(extended_properties::text, '') AS extended_properties").
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
 		       AND (all_day = false OR event_type = 'outOfOffice')
 		       AND end_time > ? AND start_time < ?`,
 			s.AccountKind, s.ScheduledStart, s.ScheduledEnd).
-		Pluck("summary", &summaries).Error; err != nil {
+		Scan(&rows).Error; err != nil {
 		return false, err
 	}
-	for _, summary := range summaries {
-		if !soft.Match(summary) {
-			return true, nil
+	for _, row := range rows {
+		if soft.Match(row.Summary) || isMirrorOf(row.ExtendedProperties, s.GoogleEventID) {
+			continue
 		}
+		return true, nil
 	}
 	return false, nil
+}
+
+// isMirrorOf reports whether an event's extended properties reference eventID,
+// which means some sync tool created it as a copy of that event.
+func isMirrorOf(extendedProperties string, eventID *string) bool {
+	if eventID == nil || *eventID == "" || extendedProperties == "" {
+		return false
+	}
+	return strings.Contains(extendedProperties, *eventID)
 }
 
 func (r *Runner) finish(ctx context.Context, id string, summary map[string]any, runErr error) error {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/icco/art/lib/models"
 	"github.com/icco/art/lib/testdb"
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )
 
@@ -134,6 +135,72 @@ func TestReconcileRetractsOnHumanConflict(t *testing.T) {
 	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
 	if n != 0 {
 		t.Fatalf("conflicting session should be retracted, %d remain", n)
+	}
+}
+
+// TestReconcileIgnoresSyncMirrorOfOwnBlock pins the loop that kept Art from
+// ever scheduling anything: a third-party sync copied its block to the other
+// calendar as "Busy", tagged with Art's own event ID, and reconcile retracted
+// against that reflection 4x an hour.
+func TestReconcileIgnoresSyncMirrorOfOwnBlock(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+
+	// The shadow: not art-managed, but its properties name Art's event.
+	shadow := models.Event{
+		AccountKind: models.AccountPersonal, CalendarID: "other@example.com",
+		GoogleEventID: "ev-shadow", StartTime: start, EndTime: start.Add(time.Hour),
+		Status: "confirmed", EventType: "default", IsArtManaged: false, Summary: "Busy",
+		ExtendedProperties: datatypes.JSON(`{"private":{"cron.sync":"true","cron.syncOriginalEventId":"ev-art"}}`),
+	}
+	if err := db.Create(&shadow).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 0 {
+		t.Errorf("Art must not retract against a mirror of its own block, got %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 1 {
+		t.Errorf("session should survive, %d remain", n)
+	}
+}
+
+// A genuine "Busy" event that is not a mirror must still retract.
+func TestReconcileRetractsOnUnrelatedBusyEvent(t *testing.T) {
+	cal := &fakeCal{}
+	r, db := newRunner(t, cal)
+	start := fixedNow.Add(24 * time.Hour)
+	s := seedSession(t, db, "ev-art", start)
+	seedEvent(t, db, "ev-art", start, true)
+
+	other := models.Event{
+		AccountKind: models.AccountPersonal, CalendarID: "other@example.com",
+		GoogleEventID: "ev-busy", StartTime: start, EndTime: start.Add(time.Hour),
+		Status: "confirmed", EventType: "default", IsArtManaged: false, Summary: "Busy",
+		ExtendedProperties: datatypes.JSON(`{"private":{"cron.syncOriginalEventId":"someone-elses-event"}}`),
+	}
+	if err := db.Create(&other).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(cal.calls) != 1 {
+		t.Errorf("a real conflict must still retract, got %v", cal.calls)
+	}
+	var n int64
+	db.Model(&models.Session{}).Where("id = ?", s.ID).Count(&n)
+	if n != 0 {
+		t.Errorf("conflicting session should be retracted, %d remain", n)
 	}
 }
 
