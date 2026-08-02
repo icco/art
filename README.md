@@ -91,8 +91,10 @@ Runs every 30 minutes over **inbox mail only**. Archive removes `INBOX`
 and adds `Art/Archived` (mail stays in All Mail); mail needing a response is
 labeled `Art/Reply` for you to handle (Art never writes the reply); `keep` is
 left in place with `Art/Triaged`. Labeling and archiving are the only actions
-Art takes — it never drafts, sends, or deletes mail. Decisions you reverse via
-the TUI are fed back into the next run as corrections.
+Art takes — it never drafts, sends, or deletes mail. Mail you have labeled
+`mailinglist` is never auto-archived, however confident the classifier is — it
+still gets triaged and labeled, just left in the inbox. Decisions you reverse
+via the TUI are fed back into the next run as corrections.
 
 Gmail uses the `gmail.modify` **restricted scope**, so:
 
