@@ -280,8 +280,7 @@ func TestRunAccountNeverArchivesMailingList(t *testing.T) {
 	}
 	tr, gm := newTriager(t, false, byID)
 	gm.hasMailingList = true
-	// A message filed under a sublabel carries only that sublabel's ID, and
-	// "mailinglistings" is a different label that must not be protected.
+	// m1 is filed under a sublabel; m2's "mailinglistings" is a lookalike.
 	gm.msgs["m1"].LabelIDs = []string{"L_ML_GOLANG"}
 	gm.msgs["m2"].LabelIDs = []string{"L_NOT_ML"}
 
@@ -307,8 +306,7 @@ func TestRunAccountNeverArchivesMailingList(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, r := range rows {
-		// The classifier's verdict is preserved; only the action is downgraded,
-		// so the audit shows "art wanted archive, policy kept it".
+		// Only the action is downgraded, so the audit keeps the model's verdict.
 		if r.Category != models.EmailArchive {
 			t.Errorf("row %s category = %q, want archive", r.GmailMessageID, r.Category)
 		}

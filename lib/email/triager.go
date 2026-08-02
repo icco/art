@@ -53,12 +53,10 @@ type decision struct {
 	RemoveInbox bool
 }
 
-// decideAction maps a classification to concrete labels/actions. A low-
-// confidence archive is downgraded to keep (left untouched) so art never
-// auto-archives mail it is unsure about, and so is an archive of a message Nat
-// has labeled mailinglist — that label is his standing "leave this alone". A
-// reply is only flagged with the Art/Reply label for Nat to act on — art never
-// drafts the response. Art/Triaged is always applied.
+// decideAction maps a classification to concrete labels/actions. An archive is
+// downgraded to keep (left untouched) when confidence is low or Nat has labeled
+// the message mailinglist. A reply is only flagged with the Art/Reply label for
+// Nat to act on — art never drafts the response. Art/Triaged is always applied.
 func decideAction(cat models.EmailCategory, confidence, threshold float64, mailingList bool) decision {
 	d := decision{AddLabels: []string{gmail.LabelTriaged}}
 	switch cat {
@@ -79,10 +77,9 @@ func decideAction(cat models.EmailCategory, confidence, threshold float64, maili
 	return d
 }
 
-// mailingListLabelIDs picks the mailinglist label and any sublabel of it out of
-// a lowercased name->id map. Gmail treats "mailinglist/golang-nuts" as its own
-// label and does not tag the message with the parent, so an exact-name match
-// alone would miss every message that is actually filed under a list.
+// mailingListLabelIDs picks the mailinglist label and its sublabels out of a
+// lowercased name->id map. Sublabels count because Gmail tags a message with
+// "mailinglist/golang-nuts" alone, never the parent.
 func mailingListLabelIDs(byLowerName map[string]string) []string {
 	prefix := strings.ToLower(gmail.LabelMailingList)
 	var ids []string
@@ -102,8 +99,8 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 		return 0, fmt.Errorf("ensure labels: %w", err)
 	}
 
-	// Nat's mailinglist label is not one art creates, so look it up rather than
-	// ensure it — an account without the label yields an empty set.
+	// Look the mailinglist label up rather than ensure it — art must not create
+	// one of Nat's own labels. An account without it yields an empty set.
 	allLabels, err := gm.LabelIDsByName(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("list labels: %w", err)
