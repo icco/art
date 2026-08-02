@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.16.0
 	github.com/google/uuid v1.6.0
-	github.com/icco/gutil v1.0.3
+	github.com/icco/gutil v1.0.4
 	github.com/prometheus/client_golang v1.24.1
 	github.com/unrolled/secure v1.17.0
 	go.uber.org/zap v1.28.0
@@ -20,7 +20,7 @@ require (
 	google.golang.org/api v0.291.0
 	google.golang.org/genai v1.66.0
 	gorm.io/datatypes v1.2.7
-	gorm.io/driver/postgres v1.6.1
+	gorm.io/driver/postgres v1.6.2
 	gorm.io/gorm v1.31.2
 	moul.io/zapgorm2 v1.3.0
 )
@@ -37,7 +37,7 @@ require (
 	github.com/catppuccin/go v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/ultraviolet v0.0.0-20260713092251-4bee1914c0cf // indirect
+	github.com/charmbracelet/ultraviolet v0.0.0-20260730003005-19049f296fa9 // indirect
 	github.com/charmbracelet/x/ansi v0.11.7 // indirect
 	github.com/charmbracelet/x/exp/golden v0.0.0-20251109135125-8916d276318f // indirect
 	github.com/charmbracelet/x/exp/ordered v0.1.0 // indirect
@@ -65,8 +65,8 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
-	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
-	github.com/mattn/go-runewidth v0.0.24 // indirect
+	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
+	github.com/mattn/go-runewidth v0.0.27 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
