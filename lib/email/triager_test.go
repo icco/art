@@ -20,18 +20,21 @@ func TestDecideAction(t *testing.T) {
 		name        string
 		cat         models.EmailCategory
 		conf        float64
+		mailingList bool
 		wantAction  models.EmailAction
 		wantArchive bool
 		wantLabel   string
 	}{
-		{"archive high confidence", models.EmailArchive, 0.95, models.ActionArchived, true, gmail.LabelArchived},
-		{"archive low confidence downgrades to keep", models.EmailArchive, 0.5, models.ActionKeep, false, ""},
-		{"reply labels only", models.EmailReply, 0.9, models.ActionReply, false, gmail.LabelReply},
-		{"keep is inert", models.EmailKeep, 0.9, models.ActionKeep, false, ""},
+		{"archive high confidence", models.EmailArchive, 0.95, false, models.ActionArchived, true, gmail.LabelArchived},
+		{"archive low confidence downgrades to keep", models.EmailArchive, 0.5, false, models.ActionKeep, false, ""},
+		{"mailinglist is never archived", models.EmailArchive, 1.0, true, models.ActionKeep, false, ""},
+		{"reply labels only", models.EmailReply, 0.9, false, models.ActionReply, false, gmail.LabelReply},
+		{"mailinglist reply still gets flagged", models.EmailReply, 0.9, true, models.ActionReply, false, gmail.LabelReply},
+		{"keep is inert", models.EmailKeep, 0.9, false, models.ActionKeep, false, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			d := decideAction(c.cat, c.conf, threshold)
+			d := decideAction(c.cat, c.conf, threshold, c.mailingList)
 			if d.Action != c.wantAction {
 				t.Errorf("action: got %q want %q", d.Action, c.wantAction)
 			}
@@ -48,13 +51,31 @@ func TestDecideAction(t *testing.T) {
 	}
 }
 
+func TestMailingListLabelIDs(t *testing.T) {
+	got := mailingListLabelIDs(map[string]string{
+		"mailinglist":             "L1",
+		"mailinglist/golang-nuts": "L2",
+		"mailinglistings":         "L3",
+		"art/triaged":             "L4",
+	})
+	slices.Sort(got)
+	want := []string{"L1", "L2"}
+	if !slices.Equal(got, want) {
+		t.Errorf("got %v want %v — the label and its sublabels, nothing else", got, want)
+	}
+	if ids := mailingListLabelIDs(map[string]string{"art/triaged": "L4"}); len(ids) != 0 {
+		t.Errorf("an account without the label must yield none, got %v", ids)
+	}
+}
+
 // --- fakes ---
 
 type fakeGmail struct {
-	ids         []string
-	msgs        map[string]*gmail.Message
-	modifyCalls []modifyCall
-	lastQuery   string
+	ids            []string
+	msgs           map[string]*gmail.Message
+	modifyCalls    []modifyCall
+	lastQuery      string
+	hasMailingList bool
 }
 
 type modifyCall struct {
@@ -69,6 +90,18 @@ func (f *fakeGmail) EnsureLabels(context.Context) (map[string]string, error) {
 		gmail.LabelArchived: "L_ARCHIVED",
 		gmail.LabelReply:    "L_REPLY",
 	}, nil
+}
+
+func (f *fakeGmail) LabelIDsByName(context.Context) (map[string]string, error) {
+	all := map[string]string{
+		"art/triaged": "L_TRIAGED", "art/archived": "L_ARCHIVED", "art/reply": "L_REPLY",
+	}
+	if f.hasMailingList {
+		all[gmail.LabelMailingList] = "L_MAILINGLIST"
+		all[gmail.LabelMailingList+"/golang-nuts"] = "L_ML_GOLANG"
+		all[gmail.LabelMailingList+"ings"] = "L_NOT_ML"
+	}
+	return all, nil
 }
 
 func (f *fakeGmail) FetchMessageIDs(_ context.Context, query string, _ int) ([]string, error) {
@@ -236,6 +269,50 @@ func TestRunAccountApplies(t *testing.T) {
 		}
 		if r.Action == models.ActionArchived && !r.Archived {
 			t.Errorf("archived row %s missing Archived flag", r.GmailMessageID)
+		}
+	}
+}
+
+func TestRunAccountNeverArchivesMailingList(t *testing.T) {
+	byID := map[string]Classification{
+		"m1": {Category: models.EmailArchive, Confidence: 0.99, Summary: "newsletter"},
+		"m2": {Category: models.EmailArchive, Confidence: 0.99, Summary: "junk"},
+	}
+	tr, gm := newTriager(t, false, byID)
+	gm.hasMailingList = true
+	// m1 is filed under a sublabel; m2's "mailinglistings" is a lookalike.
+	gm.msgs["m1"].LabelIDs = []string{"L_ML_GOLANG"}
+	gm.msgs["m2"].LabelIDs = []string{"L_NOT_ML"}
+
+	counts := map[string]int{}
+	if _, err := tr.RunAccount(context.Background(), uuid.NewString(), models.AccountPersonal, gm, counts); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range gm.modifyCalls {
+		if c.msgID == "m1" && (slices.Contains(c.remove, gmail.InboxLabel) || slices.Contains(c.add, "L_ARCHIVED")) {
+			t.Errorf("mailinglist message archived: add=%v remove=%v", c.add, c.remove)
+		}
+		if !slices.Contains(c.add, "L_TRIAGED") {
+			t.Errorf("modify %s missing Art/Triaged label, add=%v", c.msgID, c.add)
+		}
+	}
+	if counts["mailinglist_kept"] != 1 {
+		t.Errorf("mailinglist_kept = %d, want 1", counts["mailinglist_kept"])
+	}
+
+	var rows []models.EmailMessage
+	if err := tr.DB.Find(&rows).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		// Only the action is downgraded, so the audit keeps the model's verdict.
+		if r.Category != models.EmailArchive {
+			t.Errorf("row %s category = %q, want archive", r.GmailMessageID, r.Category)
+		}
+		wantArchived := r.GmailMessageID == "m2"
+		if r.Archived != wantArchived {
+			t.Errorf("row %s archived = %v, want %v", r.GmailMessageID, r.Archived, wantArchived)
 		}
 	}
 }

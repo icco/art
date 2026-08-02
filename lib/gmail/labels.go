@@ -18,6 +18,10 @@ const (
 
 	// InboxLabel is Gmail's system INBOX label; removing it archives a message.
 	InboxLabel = "INBOX"
+
+	// LabelMailingList is Nat's own label, not one art manages. Art never
+	// auto-archives mail carrying it.
+	LabelMailingList = "mailinglist"
 )
 
 // ArtLabels is the full set of labels art manages, in creation order.
@@ -59,6 +63,12 @@ func (c *Client) EnsureLabels(ctx context.Context) (map[string]string, error) {
 		out[name] = created.Id
 	}
 	return out, nil
+}
+
+// LabelIDsByName returns every label keyed by lowercased name, so callers can
+// read labels art does not own without creating them.
+func (c *Client) LabelIDsByName(ctx context.Context) (map[string]string, error) {
+	return c.labelsByLowerName(ctx)
 }
 
 func (c *Client) labelsByLowerName(ctx context.Context) (map[string]string, error) {

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/icco/art/lib/cost"
 	"github.com/icco/art/lib/gmail"
@@ -20,6 +21,7 @@ import (
 // the triager cannot write mail even by mistake.
 type Gmailer interface {
 	EnsureLabels(ctx context.Context) (map[string]string, error)
+	LabelIDsByName(ctx context.Context) (map[string]string, error)
 	FetchMessageIDs(ctx context.Context, query string, limit int) ([]string, error)
 	GetMessage(ctx context.Context, id string) (*gmail.Message, error)
 	ModifyLabels(ctx context.Context, msgID string, add, remove []string) error
@@ -51,16 +53,15 @@ type decision struct {
 	RemoveInbox bool
 }
 
-// decideAction maps a classification to concrete labels/actions. A low-
-// confidence archive is downgraded to keep (left untouched) so art never
-// auto-archives mail it is unsure about. A reply is only flagged with the
-// Art/Reply label for Nat to act on — art never drafts the response.
-// Art/Triaged is always applied.
-func decideAction(cat models.EmailCategory, confidence, threshold float64) decision {
+// decideAction maps a classification to concrete labels/actions. An archive is
+// downgraded to keep (left untouched) when confidence is low or Nat has labeled
+// the message mailinglist. A reply is only flagged with the Art/Reply label for
+// Nat to act on — art never drafts the response. Art/Triaged is always applied.
+func decideAction(cat models.EmailCategory, confidence, threshold float64, mailingList bool) decision {
 	d := decision{AddLabels: []string{gmail.LabelTriaged}}
 	switch cat {
 	case models.EmailArchive:
-		if confidence >= threshold {
+		if confidence >= threshold && !mailingList {
 			d.Action = models.ActionArchived
 			d.RemoveInbox = true
 			d.AddLabels = append(d.AddLabels, gmail.LabelArchived)
@@ -76,6 +77,20 @@ func decideAction(cat models.EmailCategory, confidence, threshold float64) decis
 	return d
 }
 
+// mailingListLabelIDs picks the mailinglist label and its sublabels out of a
+// lowercased name->id map. Sublabels count because Gmail tags a message with
+// "mailinglist/golang-nuts" alone, never the parent.
+func mailingListLabelIDs(byLowerName map[string]string) []string {
+	prefix := strings.ToLower(gmail.LabelMailingList)
+	var ids []string
+	for name, id := range byLowerName {
+		if name == prefix || strings.HasPrefix(name, prefix+"/") {
+			ids = append(ids, id)
+		}
+	}
+	return ids
+}
+
 // RunAccount triages one account's inbox. It returns the number of messages
 // processed and accumulates per-category counts into summary.
 func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.AccountKind, gm Gmailer, summary map[string]int) (int, error) {
@@ -83,6 +98,14 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 	if err != nil {
 		return 0, fmt.Errorf("ensure labels: %w", err)
 	}
+
+	// Look the mailinglist label up rather than ensure it — art must not create
+	// one of Nat's own labels. An account without it yields an empty set.
+	allLabels, err := gm.LabelIDsByName(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list labels: %w", err)
+	}
+	mailingListIDs := mailingListLabelIDs(allLabels)
 
 	query := fmt.Sprintf("in:inbox -label:%q newer_than:%dd", gmail.LabelTriaged, t.BackfillDays)
 	ids, err := gm.FetchMessageIDs(ctx, query, t.MaxPerRun)
@@ -126,7 +149,13 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			summary["errors"]++
 			continue
 		}
-		d := decideAction(cls.Category, cls.Confidence, t.ConfidenceThreshold)
+		mailingList := slices.ContainsFunc(msg.LabelIDs, func(id string) bool {
+			return slices.Contains(mailingListIDs, id)
+		})
+		if mailingList && cls.Category == models.EmailArchive {
+			summary["mailinglist_kept"]++
+		}
+		d := decideAction(cls.Category, cls.Confidence, t.ConfidenceThreshold, mailingList)
 
 		row := models.EmailMessage{
 			RunID:          runID,
