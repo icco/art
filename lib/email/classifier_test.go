@@ -1,12 +1,17 @@
 package email
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/icco/art/lib/config"
 	"github.com/icco/art/lib/gmail"
 	"github.com/icco/art/lib/models"
+	"github.com/icco/gutil/vertex"
 	"google.golang.org/genai"
 )
 
@@ -90,5 +95,111 @@ func TestClassificationSchema(t *testing.T) {
 	}
 	if !slices.Contains(s.Required, "category") {
 		t.Error("category should be required")
+	}
+}
+
+// stubGemini returns a Classifier wired to a fake Gemini endpoint that answers
+// every call with body.
+func stubGemini(t *testing.T, body string) *Classifier {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+
+	v, err := vertex.New(t.Context(), vertex.Config{
+		APIKey:  "test",
+		BaseURL: srv.URL,
+		Model:   config.TriageModel,
+	})
+	if err != nil {
+		t.Fatalf("vertex.New: %v", err)
+	}
+	return &Classifier{v: v, model: config.TriageModel}
+}
+
+// geminiBody renders a generateContent response with the given text and counts.
+func geminiBody(text string, prompt, candidates, thoughts int) string {
+	b, err := json.Marshal(map[string]any{
+		"candidates": []any{map[string]any{
+			"content": map[string]any{"role": "model", "parts": []any{map[string]any{"text": text}}},
+		}},
+		"usageMetadata": map[string]any{
+			"promptTokenCount":     prompt,
+			"candidatesTokenCount": candidates,
+			"thoughtsTokenCount":   thoughts,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
+}
+
+func testMessage() *gmail.Message {
+	return &gmail.Message{From: "a@b.c", To: "d@e.f", Subject: "hi", Body: "hello"}
+}
+
+func TestClassifyRecordsTokens(t *testing.T) {
+	t.Parallel()
+	c := stubGemini(t, geminiBody(
+		`{"category":"archive","summary":"s","reason":"r","confidence":0.9}`, 100, 20, 0))
+
+	got, err := c.Classify(t.Context(), testMessage())
+	if err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	if got.Category != models.EmailArchive {
+		t.Errorf("Category = %q", got.Category)
+	}
+	if c.TokensIn() != 100 || c.TokensOut() != 20 {
+		t.Errorf("tokens = %d/%d, want 100/20", c.TokensIn(), c.TokensOut())
+	}
+}
+
+// Thinking tokens bill as output but genai reports them outside
+// CandidatesTokenCount. Counting only candidates is what let a month of spend
+// go unnoticed, so the accounting has to fold them in.
+func TestClassifyCountsThinkingTokensAsOutput(t *testing.T) {
+	t.Parallel()
+	c := stubGemini(t, geminiBody(
+		`{"category":"keep","summary":"s","reason":"r","confidence":0.5}`, 100, 77, 658))
+
+	if _, err := c.Classify(t.Context(), testMessage()); err != nil {
+		t.Fatalf("Classify: %v", err)
+	}
+	if c.TokensOut() != 735 {
+		t.Errorf("TokensOut() = %d, want 735 (77 candidate + 658 thinking)", c.TokensOut())
+	}
+}
+
+// A call that produced no usable text still spent tokens. Returning before
+// recording them is how spend hides.
+func TestClassifyRecordsTokensOnEmptyResponse(t *testing.T) {
+	t.Parallel()
+	c := stubGemini(t, geminiBody("", 250, 0, 40))
+
+	if _, err := c.Classify(t.Context(), testMessage()); err == nil {
+		t.Fatal("Classify on an empty response = nil, want an error")
+	}
+	if c.TokensIn() != 250 || c.TokensOut() != 40 {
+		t.Errorf("tokens = %d/%d, want 250/40 recorded despite the error", c.TokensIn(), c.TokensOut())
+	}
+}
+
+// Tokens accumulate across calls; the guard bills against the running total.
+func TestClassifyAccumulatesTokens(t *testing.T) {
+	t.Parallel()
+	c := stubGemini(t, geminiBody(
+		`{"category":"keep","summary":"s","reason":"r","confidence":0.5}`, 10, 5, 0))
+
+	for range 3 {
+		if _, err := c.Classify(t.Context(), testMessage()); err != nil {
+			t.Fatalf("Classify: %v", err)
+		}
+	}
+	if c.TokensIn() != 30 || c.TokensOut() != 15 {
+		t.Errorf("tokens = %d/%d, want 30/15", c.TokensIn(), c.TokensOut())
 	}
 }
