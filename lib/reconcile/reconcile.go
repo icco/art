@@ -171,14 +171,21 @@ func (r *Runner) hasHumanConflict(ctx context.Context, s models.Session, soft mo
 		Summary            string
 		ExtendedProperties string
 	}
-	if err := r.DB.WithContext(ctx).Model(&models.Event{}).
+	owned, err := calendar.OwnedCalendarIDs(ctx, r.DB)
+	if err != nil {
+		return false, err
+	}
+	q := r.DB.WithContext(ctx).Model(&models.Event{}).
 		Select("summary, coalesce(extended_properties::text, '') AS extended_properties").
 		Where(`account_kind = ? AND is_art_managed = false AND status <> 'cancelled'
 		       AND transparency <> 'transparent'
 		       AND (all_day = false OR event_type = 'outOfOffice')
 		       AND end_time > ? AND start_time < ?`,
-			s.AccountKind, s.ScheduledStart, s.ScheduledEnd).
-		Scan(&rows).Error; err != nil {
+			s.AccountKind, s.ScheduledStart, s.ScheduledEnd)
+	if len(owned) > 0 {
+		q = q.Where("calendar_id IN ?", owned)
+	}
+	if err := q.Scan(&rows).Error; err != nil {
 		return false, err
 	}
 	for _, row := range rows {

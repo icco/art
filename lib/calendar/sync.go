@@ -30,30 +30,34 @@ type Syncer struct {
 	TZ     *time.Location
 }
 
-// Run performs an incremental sync, falling back to a bounded full sync.
-// A failing calendar doesn't block the rest; errors are joined.
+// Run performs an incremental sync of the account's primary calendar, falling
+// back to a bounded full sync.
+//
+// Only the primary. Subscribed calendars were mirrored too, which meant a
+// coworker PTO import and a partner's calendar counted as the owner's own busy
+// time — 81 all-day "X Off" events alone blocked nothing the owner was doing.
 func (s *Syncer) Run(ctx context.Context) error {
-	var errs []error
-	pageToken := ""
-	for {
-		call := s.Client.Service.CalendarList.List().Context(ctx)
-		if pageToken != "" {
-			call = call.PageToken(pageToken)
-		}
-		list, err := call.Do()
-		if err != nil {
-			return fmt.Errorf("calendarList: %w", err)
-		}
-		for _, item := range list.Items {
-			if err := s.syncCalendar(ctx, item.Id); err != nil {
-				errs = append(errs, fmt.Errorf("sync calendar %q: %w", item.Id, err))
-			}
-		}
-		if list.NextPageToken == "" {
-			return errors.Join(errs...)
-		}
-		pageToken = list.NextPageToken
+	calID := s.Client.Account.PrimaryCalendarID
+	if calID == "" {
+		return fmt.Errorf("account %s has no primary calendar", s.Client.Account.Kind)
 	}
+	if err := s.syncCalendar(ctx, calID); err != nil {
+		return fmt.Errorf("sync calendar %q: %w", calID, err)
+	}
+	return nil
+}
+
+// PruneForeignCalendars drops mirrored rows for calendars no longer synced, so
+// events from a previously subscribed calendar can't linger and read as busy.
+func PruneForeignCalendars(ctx context.Context, db *gorm.DB) error {
+	owned, err := OwnedCalendarIDs(ctx, db)
+	if err != nil || len(owned) == 0 {
+		return err
+	}
+	if err := db.WithContext(ctx).Where("calendar_id NOT IN ?", owned).Delete(&models.Event{}).Error; err != nil {
+		return err
+	}
+	return db.WithContext(ctx).Where("calendar_id NOT IN ?", owned).Delete(&models.SyncState{}).Error
 }
 
 func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {
@@ -259,4 +263,17 @@ func firstNonEmpty(s ...string) string {
 		}
 	}
 	return ""
+}
+
+// OwnedCalendarIDs returns the primary calendar of every linked account: the
+// calendars whose events are the owner's own time. Subscribed calendars are
+// mirrored too — a coworker PTO import, a partner's calendar, a team calendar —
+// but someone else being busy is not the owner being busy.
+func OwnedCalendarIDs(ctx context.Context, db *gorm.DB) ([]string, error) {
+	var ids []string
+	err := db.WithContext(ctx).Model(&models.Account{}).
+		Where("primary_calendar_id <> ''").
+		Distinct().
+		Pluck("primary_calendar_id", &ids).Error
+	return ids, err
 }

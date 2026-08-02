@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/icco/art/lib/calendar"
 	"github.com/icco/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -113,13 +114,20 @@ type busyRange struct {
 }
 
 func loadBusy(ctx context.Context, db *gorm.DB, kind models.AccountKind, from, to time.Time, soft models.SoftTitles) ([]busyRange, error) {
-	var events []models.Event
-	if err := db.WithContext(ctx).
+	owned, err := calendar.OwnedCalendarIDs(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	q := db.WithContext(ctx).
 		Where(`account_kind = ? AND status <> 'cancelled' AND transparency <> 'transparent'
 		       AND (all_day = false OR event_type = 'outOfOffice') AND end_time > ? AND start_time < ?`,
-			kind, from, to).
-		Order("start_time").
-		Find(&events).Error; err != nil {
+			kind, from, to)
+	// No linked account yet: treat every calendar as the owner's rather than none.
+	if len(owned) > 0 {
+		q = q.Where("calendar_id IN ?", owned)
+	}
+	var events []models.Event
+	if err := q.Order("start_time").Find(&events).Error; err != nil {
 		return nil, err
 	}
 	out := make([]busyRange, 0, len(events))

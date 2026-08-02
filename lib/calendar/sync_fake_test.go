@@ -48,57 +48,83 @@ func timedEvent(id string, start time.Time) *calapi.Event {
 	}
 }
 
-// One broken calendar must not block syncing the rest.
-func TestRunContinuesPastFailingCalendar(t *testing.T) {
+// A failing primary calendar surfaces an error naming it.
+func TestRunReportsFailingPrimary(t *testing.T) {
 	db := testdb.Open(t)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users/me/calendarList", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(t, w, &calapi.CalendarList{Items: []*calapi.CalendarListEntry{{Id: "bad"}, {Id: "good"}}})
-	})
 	mux.HandleFunc("/calendars/bad/events", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, `{"error": {"code": 403}}`, http.StatusForbidden)
 	})
-	mux.HandleFunc("/calendars/good/events", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(t, w, eventsJSON([]*calapi.Event{timedEvent("ev1", time.Now())}))
-	})
-	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork}, Service: newFakeService(t, mux)}, DB: db}
+	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork, PrimaryCalendarID: "bad"}, Service: newFakeService(t, mux)}, DB: db}
 
 	err := s.Run(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "bad") {
 		t.Fatalf("want error naming the failing calendar, got %v", err)
 	}
-	var n int64
-	db.Model(&models.Event{}).Where("google_event_id = ?", "ev1").Count(&n)
-	if n != 1 {
-		t.Fatal("event from the healthy calendar was not synced")
-	}
 }
 
-// Calendar lists beyond one page must all be synced.
-func TestRunPaginatesCalendarList(t *testing.T) {
+// Only the primary is mirrored. Subscribed calendars (a coworker PTO import, a
+// partner's calendar) are not the owner's busy time, so they must not be read.
+func TestRunSyncsOnlyPrimaryCalendar(t *testing.T) {
 	db := testdb.Open(t)
-	synced := map[string]bool{}
+	touched := map[string]bool{}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users/me/calendarList", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("pageToken") == "p2" {
-			writeJSON(t, w, &calapi.CalendarList{Items: []*calapi.CalendarListEntry{{Id: "c2"}}})
-			return
-		}
-		writeJSON(t, w, &calapi.CalendarList{Items: []*calapi.CalendarListEntry{{Id: "c1"}}, NextPageToken: "p2"})
+	mux.HandleFunc("/users/me/calendarList", func(w http.ResponseWriter, _ *http.Request) {
+		touched["calendarList"] = true
+		writeJSON(t, w, &calapi.CalendarList{Items: []*calapi.CalendarListEntry{{Id: "mine"}, {Id: "someone-else"}}})
 	})
-	for _, id := range []string{"c1", "c2"} {
+	for _, id := range []string{"mine", "someone-else"} {
 		mux.HandleFunc("/calendars/"+id+"/events", func(w http.ResponseWriter, _ *http.Request) {
-			synced[id] = true
-			writeJSON(t, w, eventsJSON(nil))
+			touched[id] = true
+			writeJSON(t, w, eventsJSON([]*calapi.Event{timedEvent("ev-"+id, time.Now())}))
 		})
 	}
-	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork}, Service: newFakeService(t, mux)}, DB: db}
+	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork, PrimaryCalendarID: "mine"}, Service: newFakeService(t, mux)}, DB: db}
 
 	if err := s.Run(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if !synced["c1"] || !synced["c2"] {
-		t.Fatalf("expected both calendar-list pages synced, got %v", synced)
+	if !touched["mine"] {
+		t.Error("primary calendar was not synced")
+	}
+	if touched["someone-else"] {
+		t.Error("a subscribed calendar was synced; only the primary should be")
+	}
+	if touched["calendarList"] {
+		t.Error("calendarList should not be enumerated at all")
+	}
+	var ids []string
+	db.Model(&models.Event{}).Pluck("google_event_id", &ids)
+	if len(ids) != 1 || ids[0] != "ev-mine" {
+		t.Fatalf("only primary events should be mirrored, got %v", ids)
+	}
+}
+
+// PruneForeignCalendars clears rows left behind by a calendar no longer synced.
+func TestPruneForeignCalendars(t *testing.T) {
+	db := testdb.Open(t)
+	if err := db.Create(&models.Account{
+		Kind: models.AccountPersonal, Email: "me@example.com",
+		RefreshTokenEncrypted: []byte("x"), PrimaryCalendarID: "mine",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, cal := range []string{"mine", "coworker-pto"} {
+		if err := db.Create(&models.Event{
+			AccountKind: models.AccountPersonal, CalendarID: cal, GoogleEventID: "ev-" + cal,
+			StartTime: time.Now(), EndTime: time.Now().Add(time.Hour), Status: "confirmed",
+		}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := PruneForeignCalendars(context.Background(), db); err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	db.Model(&models.Event{}).Pluck("google_event_id", &ids)
+	if len(ids) != 1 || ids[0] != "ev-mine" {
+		t.Fatalf("foreign calendar rows should be pruned, got %v", ids)
 	}
 }
 
@@ -117,13 +143,10 @@ func TestFullResyncPrunesStaleRows(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/users/me/calendarList", func(w http.ResponseWriter, _ *http.Request) {
-		writeJSON(t, w, &calapi.CalendarList{Items: []*calapi.CalendarListEntry{{Id: "c1"}}})
-	})
 	mux.HandleFunc("/calendars/c1/events", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(t, w, eventsJSON([]*calapi.Event{timedEvent("real", time.Now())}))
 	})
-	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork}, Service: newFakeService(t, mux)}, DB: db}
+	s := &Syncer{Client: &Client{Account: models.Account{Kind: models.AccountWork, PrimaryCalendarID: "c1"}, Service: newFakeService(t, mux)}, DB: db}
 
 	if err := s.Run(context.Background()); err != nil {
 		t.Fatal(err)
