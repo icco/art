@@ -54,7 +54,7 @@ func NewClassifier(ctx context.Context, cfg *config.Config, corrections string, 
 		Model:    config.TriageModel,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("vertex client: %w", err)
+		return nil, fmt.Errorf("create vertex client: %w", err)
 	}
 	return &Classifier{v: v, model: config.TriageModel, corrections: corrections, guard: guard}, nil
 }
