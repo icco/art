@@ -281,7 +281,7 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 	}
 
 	acct := accountForKind(kind)
-	busy, err := loadBusy(ctx, c.p.DB, acct, start, end, c.vals.SoftTitles())
+	busy, err := loadBusy(ctx, c.p.DB, start, end, c.vals.SoftTitles())
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/icco/art/lib/models"
@@ -47,17 +48,29 @@ func (s *Syncer) Run(ctx context.Context) error {
 	return nil
 }
 
-// PruneForeignCalendars drops mirrored rows for calendars no longer synced, so
-// events from a previously subscribed calendar can't linger and read as busy.
+// PruneForeignCalendars drops mirrored rows no account syncs any more, so a
+// previously subscribed calendar can't linger and read as busy. It keys on
+// (account_kind, calendar_id): the same calendar was mirrored under both
+// accounts, and only the copy belonging to its own account is refreshed now.
 func PruneForeignCalendars(ctx context.Context, db *gorm.DB) error {
-	owned, err := OwnedCalendarIDs(ctx, db)
-	if err != nil || len(owned) == 0 {
+	var accounts []models.Account
+	if err := db.WithContext(ctx).Where("primary_calendar_id <> ''").Find(&accounts).Error; err != nil {
 		return err
 	}
-	if err := db.WithContext(ctx).Where("calendar_id NOT IN ?", owned).Delete(&models.Event{}).Error; err != nil {
+	if len(accounts) == 0 {
+		return nil
+	}
+	conds := make([]string, 0, len(accounts))
+	args := make([]any, 0, len(accounts)*2)
+	for _, a := range accounts {
+		conds = append(conds, "(account_kind = ? AND calendar_id = ?)")
+		args = append(args, a.Kind, a.PrimaryCalendarID)
+	}
+	where := "NOT (" + strings.Join(conds, " OR ") + ")"
+	if err := db.WithContext(ctx).Where(where, args...).Delete(&models.Event{}).Error; err != nil {
 		return err
 	}
-	return db.WithContext(ctx).Where("calendar_id NOT IN ?", owned).Delete(&models.SyncState{}).Error
+	return db.WithContext(ctx).Where(where, args...).Delete(&models.SyncState{}).Error
 }
 
 func (s *Syncer) syncCalendar(ctx context.Context, calendarID string) error {

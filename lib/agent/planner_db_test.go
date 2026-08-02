@@ -364,3 +364,55 @@ func TestFindFreeSlotsIgnoresTransparentEvents(t *testing.T) {
 		t.Fatalf("an opaque event must block, got %d slots", len(slots))
 	}
 }
+
+// TestFindFreeSlotsBlocksAcrossOwnedCalendars: the owner can only be in one
+// place, so a work meeting must block a personal slot. Scoping busy to one
+// account_kind would double-book them.
+func TestFindFreeSlotsBlocksAcrossOwnedCalendars(t *testing.T) {
+	db := testdb.Open(t)
+	tz, _ := time.LoadLocation("America/Los_Angeles")
+	for _, a := range []models.Account{
+		{Kind: models.AccountPersonal, Email: "me@example.com", RefreshTokenEncrypted: []byte("x"), PrimaryCalendarID: "cal-personal"},
+		{Kind: models.AccountWork, Email: "me@work.example", RefreshTokenEncrypted: []byte("x"), PrimaryCalendarID: "cal-work"},
+	} {
+		if err := db.Create(&a).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := db.Create(&models.WorkingHour{
+		SlotKind: models.SlotPersonal, DayOfWeek: 1, StartMinute: 9 * 60, EndMinute: 18 * 60,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	// A work meeting filling the personal working day.
+	monday9 := time.Date(2026, 5, 25, 9, 0, 0, 0, tz)
+	if err := db.Create(&models.Event{
+		AccountKind: models.AccountWork, CalendarID: "cal-work", GoogleEventID: "work-mtg",
+		Summary: "Standup", StartTime: monday9, EndTime: monday9.Add(9 * time.Hour), Status: "confirmed",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	slots, err := agent.FindFreeSlots(context.Background(), db, tz,
+		models.AccountPersonal, models.SlotPersonal, 60, monday9, monday9.Add(9*time.Hour), 5, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) != 0 {
+		t.Fatalf("a work meeting must block personal slots, got %d", len(slots))
+	}
+
+	// An event on a calendar nobody owns must not block.
+	if err := db.Model(&models.Event{}).Where("google_event_id = ?", "work-mtg").
+		Update("calendar_id", "coworker-pto").Error; err != nil {
+		t.Fatal(err)
+	}
+	slots, err = agent.FindFreeSlots(context.Background(), db, tz,
+		models.AccountPersonal, models.SlotPersonal, 60, monday9, monday9.Add(9*time.Hour), 5, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(slots) == 0 {
+		t.Fatal("an unowned calendar must not block scheduling")
+	}
+}
