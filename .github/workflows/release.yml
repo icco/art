@@ -3,6 +3,14 @@ on:
   schedule:
     - cron: 0 0 * * *
   workflow_dispatch:
+  push:
+    # Pushing a tag by hand releases exactly that version, skipping the
+    # semantic-version bump. This does not double-release on the cron path
+    # only because checkout below passes no `token:`, so the tag is pushed
+    # with GITHUB_TOKEN, and GITHUB_TOKEN pushes do not trigger workflows.
+    # Giving checkout a PAT would break that and cause a second release.
+    tags:
+      - v*
 permissions:
   contents: write
   packages: write
@@ -18,14 +26,17 @@ jobs:
           go-version-file: go.mod
       - name: Determine next version
         id: versioning
+        if: github.event_name != 'push'
         uses: PaulHatch/semantic-version@v6.0.3
         with:
           tag_prefix: v
-          major_pattern: 'BREAKING CHANGE:'
-          minor_pattern: 'feat:'
+          # Patterns must be wrapped in / / to be treated as regexes. A bare string is
+          # a literal substring match, so 'feat:' misses scoped commits like 'feat(x):'.
+          major_pattern: '/^[a-z]+(\(.+\))?!:/'
+          minor_pattern: '/feat(\(.+\))?:/'
           version_format: ${major}.${minor}.${patch}
       - name: Create and push tag
-        if: steps.versioning.outputs.changed == 'true'
+        if: github.event_name != 'push' && steps.versioning.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -34,7 +45,8 @@ jobs:
         env:
           VERSION_TAG: ${{ steps.versioning.outputs.version_tag }}
       - name: Run GoReleaser
-        if: steps.versioning.outputs.changed == 'true'
+        # On a tag push GoReleaser reads the version from the tag itself.
+        if: github.event_name == 'push' || steps.versioning.outputs.changed == 'true'
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
