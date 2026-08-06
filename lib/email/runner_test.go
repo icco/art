@@ -70,6 +70,34 @@ func TestRunAllSkipsWhenLockHeld(t *testing.T) {
 	}
 }
 
+// Classifying nothing while having mail to classify is the shape a broken
+// classifier takes; it used to report success.
+func TestTriageWedged(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name                           string
+		processed, errs, budgetStopped int
+		want                           bool
+	}{
+		{"quiet inbox", 0, 0, 0, false},
+		{"everything classified", 5, 0, 0, false},
+		{"a few bad messages", 4, 2, 0, false},
+		{"one message, and it failed", 0, 1, 0, true},
+		{"every message failed", 0, 37, 0, true},
+		{"budget spent before classifying anything", 0, 3, 1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := triageWedged(tt.processed, tt.errs, tt.budgetStopped)
+			if got := err != nil; got != tt.want {
+				t.Errorf("triageWedged(%d, %d, %d) = %v, want wedged=%v",
+					tt.processed, tt.errs, tt.budgetStopped, err, tt.want)
+			}
+		})
+	}
+}
+
 func TestFinishRecordsSummary(t *testing.T) {
 	db := testdb.Open(t)
 	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{DryRun: true}}, DB: db}

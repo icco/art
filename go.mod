@@ -11,7 +11,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/go-chi/httprate v0.16.0
 	github.com/google/uuid v1.6.0
-	github.com/icco/gutil v1.0.4
+	github.com/icco/gutil v1.0.6
 	github.com/prometheus/client_golang v1.24.1
 	github.com/unrolled/secure v1.17.0
 	go.uber.org/zap v1.28.0
