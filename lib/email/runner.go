@@ -79,12 +79,32 @@ func (r *Runner) RunAll(ctx context.Context) error {
 
 	counts := map[string]int{}
 	var runErrs []string
-	tokensIn, tokensOut := r.triageAccounts(ctx, run.ID, vals, counts, &runErrs)
+	processed, tokensIn, tokensOut := r.triageAccounts(ctx, run.ID, vals, counts, &runErrs)
 
-	return r.finish(ctx, run.ID, vals.TriageDryRun, counts, runErrs, tokensIn, tokensOut)
+	wedged := triageWedged(processed, counts["errors"], counts["budget_stopped"])
+	if wedged != nil {
+		runErrs = append(runErrs, wedged.Error())
+	}
+
+	// Record the run before failing the job, so the failure has a summary.
+	if err := r.finish(ctx, run.ID, vals.TriageDryRun, counts, runErrs, tokensIn, tokensOut); err != nil {
+		return err
+	}
+	return wedged
 }
 
-func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings.Values, counts map[string]int, runErrs *[]string) (tokensIn, tokensOut int) {
+// triageWedged distinguishes a quiet inbox from triage being down. Per-message
+// failures are non-fatal so one bad message cannot wedge the queue, which also
+// means a wholly broken classifier reports success on every pass. A spent budget
+// is excluded: stopping early there is intended.
+func triageWedged(processed, errs, budgetStopped int) error {
+	if processed > 0 || errs == 0 || budgetStopped > 0 {
+		return nil
+	}
+	return fmt.Errorf("triage classified none of the %d messages it attempted", errs)
+}
+
+func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings.Values, counts map[string]int, runErrs *[]string) (processed, tokensIn, tokensOut int) {
 	log := gutillog.FromContext(ctx)
 
 	// Corrections come from decisions Nat has manually reversed. There is no
@@ -100,19 +120,19 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 	guard, err := cost.NewGuard(ctx, r.DB, r.Cfg.Timezone, vals.DailyBudgetUSD)
 	if err != nil {
 		*runErrs = append(*runErrs, "budget: "+err.Error())
-		return 0, 0
+		return 0, 0, 0
 	}
 	if err := guard.Allow(); err != nil {
 		log.Warnw("skipping triage: daily budget spent",
 			"spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
 		*runErrs = append(*runErrs, err.Error())
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	classifier, err := NewClassifier(ctx, r.Cfg, corrections, guard)
 	if err != nil {
 		*runErrs = append(*runErrs, "classifier: "+err.Error())
-		return 0, 0
+		return 0, 0, 0
 	}
 
 	triager := &Triager{
@@ -137,10 +157,11 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 		if err != nil {
 			*runErrs = append(*runErrs, fmt.Sprintf("%s: %v", kind, err))
 		}
+		processed += n
 		log.Infow("triaged account", "account", kind, "processed", n, "dry_run", vals.TriageDryRun)
 	}
 	log.Infow("triage spend", "spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
-	return classifier.TokensIn(), classifier.TokensOut()
+	return processed, classifier.TokensIn(), classifier.TokensOut()
 }
 
 // maxCorrections bounds how many recent reversals feed the classifier prompt.
