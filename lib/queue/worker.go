@@ -183,7 +183,7 @@ func (w *Worker) run(ctx context.Context, job models.Job) {
 func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning string, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v\n%s", r, debug.Stack())
+			err = fmt.Errorf("%w: %v\n%s", errPanic, r, debug.Stack())
 		}
 	}()
 	switch kind {
@@ -202,7 +202,7 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 	case models.JobTriage:
 		return "", w.Triage.RunAll(ctx)
 	}
-	return "", fmt.Errorf("unknown job kind %q", kind)
+	return "", fmt.Errorf("%w %q", errUnknownJobKind, kind)
 }
 
 // formatAccountErrors flattens sync's per-account errors, sorted for

@@ -162,28 +162,28 @@ func (b *Base) BeforeCreate(_ *gorm.DB) error {
 type Account struct {
 	Base
 	Kind                  AccountKind `gorm:"type:varchar(16);uniqueIndex;not null;check:kind IN ('personal','work')" json:"kind"`
-	Email                 string      `gorm:"type:varchar(255);not null" json:"email"`
-	RefreshTokenEncrypted []byte      `gorm:"type:bytea;not null" json:"-"`
-	PrimaryCalendarID     string      `gorm:"type:varchar(255);not null" json:"primary_calendar_id"`
+	Email                 string      `gorm:"type:varchar(255);not null"                                              json:"email"`
+	RefreshTokenEncrypted []byte      `gorm:"type:bytea;not null"                                                     json:"-"`
+	PrimaryCalendarID     string      `gorm:"type:varchar(255);not null"                                              json:"primary_calendar_id"`
 }
 
 // WorkingHour is one allowed-time window for a given slot kind and weekday.
 type WorkingHour struct {
 	Base
 	SlotKind    SlotKind `gorm:"type:varchar(16);not null;check:slot_kind IN ('work','personal');uniqueIndex:idx_wh_unique,priority:1" json:"slot_kind"`
-	DayOfWeek   int      `gorm:"not null;check:day_of_week BETWEEN 0 AND 6;uniqueIndex:idx_wh_unique,priority:2" json:"day_of_week"`
-	StartMinute int      `gorm:"not null;check:start_minute BETWEEN 0 AND 1439;uniqueIndex:idx_wh_unique,priority:3" json:"start_minute"`
-	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440;check:chk_working_hours_order,end_minute > start_minute" json:"end_minute"`
+	DayOfWeek   int      `gorm:"not null;check:day_of_week BETWEEN 0 AND 6;uniqueIndex:idx_wh_unique,priority:2"                       json:"day_of_week"`
+	StartMinute int      `gorm:"not null;check:start_minute BETWEEN 0 AND 1439;uniqueIndex:idx_wh_unique,priority:3"                   json:"start_minute"`
+	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440;check:chk_working_hours_order,end_minute > start_minute"  json:"end_minute"`
 }
 
 // Project is a goal with a target number of hours and an optional deadline.
 type Project struct {
 	Base
-	Name           string        `gorm:"type:varchar(255);not null" json:"name"`
-	Description    string        `gorm:"type:text;not null;default:''" json:"description"`
-	Kind           SlotKind      `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
-	TargetHours    float64       `gorm:"type:numeric(6,2);not null" json:"target_hours"`
-	ScheduledHours float64       `gorm:"type:numeric(6,2);not null;default:0" json:"scheduled_hours"`
+	Name           string        `gorm:"type:varchar(255);not null"                                                                  json:"name"`
+	Description    string        `gorm:"type:text;not null;default:''"                                                               json:"description"`
+	Kind           SlotKind      `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')"                           json:"kind"`
+	TargetHours    float64       `gorm:"type:numeric(6,2);not null"                                                                  json:"target_hours"`
+	ScheduledHours float64       `gorm:"type:numeric(6,2);not null;default:0"                                                        json:"scheduled_hours"`
 	Deadline       *time.Time    `json:"deadline,omitempty"`
 	Status         ProjectStatus `gorm:"type:varchar(16);not null;default:'active';index;check:status IN ('active','paused','done')" json:"status"`
 }
@@ -207,57 +207,57 @@ func (c Cadence) Valid() bool {
 // Habit is a recurring practice with a cadence and per-block duration.
 type Habit struct {
 	Base
-	Name                 string         `gorm:"type:varchar(255);not null" json:"name"`
-	Description          string         `gorm:"type:text;not null;default:''" json:"description"`
+	Name                 string         `gorm:"type:varchar(255);not null"                                        json:"name"`
+	Description          string         `gorm:"type:text;not null;default:''"                                     json:"description"`
 	Kind                 SlotKind       `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
-	BlockDurationMinutes int            `gorm:"not null;check:block_duration_minutes > 0" json:"block_duration_minutes"`
-	Cadence              datatypes.JSON `gorm:"type:jsonb;not null" json:"cadence"`
-	Active               bool           `gorm:"not null;default:true;index" json:"active"`
+	BlockDurationMinutes int            `gorm:"not null;check:block_duration_minutes > 0"                         json:"block_duration_minutes"`
+	Cadence              datatypes.JSON `gorm:"type:jsonb;not null"                                               json:"cadence"`
+	Active               bool           `gorm:"not null;default:true;index"                                       json:"active"`
 }
 
 // Session is one planned or completed instance of a project or habit on the calendar.
 type Session struct {
 	Base
-	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1" json:"source"`
-	SourceID       string        `gorm:"type:uuid;not null;index:idx_session_source,priority:2" json:"source_id"`
+	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1"                   json:"source"`
+	SourceID       string        `gorm:"type:uuid;not null;index:idx_session_source,priority:2"                                                              json:"source_id"`
 	AccountKind    AccountKind   `gorm:"type:varchar(16);not null;check:account_kind IN ('personal','work');uniqueIndex:idx_session_event_lookup,priority:1" json:"account_kind"`
-	CalendarID     string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_session_event_lookup,priority:2" json:"calendar_id"`
-	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_event_lookup,priority:3" json:"google_event_id,omitempty"`
-	ScheduledStart time.Time     `gorm:"not null;index" json:"scheduled_start"`
-	ScheduledEnd   time.Time     `gorm:"not null" json:"scheduled_end"`
+	CalendarID     string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_session_event_lookup,priority:2"                                          json:"calendar_id"`
+	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_event_lookup,priority:3"                                                   json:"google_event_id,omitempty"`
+	ScheduledStart time.Time     `gorm:"not null;index"                                                                                                      json:"scheduled_start"`
+	ScheduledEnd   time.Time     `gorm:"not null"                                                                                                            json:"scheduled_end"`
 	PlannedStart   *time.Time    `json:"planned_start,omitempty"`
 	PlannedEnd     *time.Time    `json:"planned_end,omitempty"`
 	ActualStart    *time.Time    `json:"actual_start,omitempty"`
 	ActualEnd      *time.Time    `json:"actual_end,omitempty"`
-	Status         SessionStatus `gorm:"type:varchar(16);not null;default:'planned';check:status IN ('planned','happened','skipped','moved')" json:"status"`
+	Status         SessionStatus `gorm:"type:varchar(16);not null;default:'planned';check:status IN ('planned','happened','skipped','moved')"                json:"status"`
 }
 
 // Event mirrors a Google Calendar event pulled into the local database.
 type Event struct {
 	Base
 	AccountKind   AccountKind `gorm:"type:varchar(16);not null;uniqueIndex:idx_event_lookup,priority:1;index:idx_event_window,priority:1" json:"account_kind"`
-	CalendarID    string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:2" json:"calendar_id"`
-	GoogleEventID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:3" json:"google_event_id"`
-	Summary       string      `gorm:"type:text;not null;default:''" json:"summary"`
-	Description   string      `gorm:"type:text;not null;default:''" json:"description"`
-	StartTime     time.Time   `gorm:"not null;index:idx_event_window,priority:2" json:"start_time"`
-	EndTime       time.Time   `gorm:"not null" json:"end_time"`
-	AllDay        bool        `gorm:"not null;default:false" json:"all_day"`
-	AttendeeCount int         `gorm:"not null;default:0" json:"attendee_count"`
-	EventType     string      `gorm:"type:varchar(32);not null;default:'default'" json:"event_type"`
+	CalendarID    string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:2"                                  json:"calendar_id"`
+	GoogleEventID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:3"                                  json:"google_event_id"`
+	Summary       string      `gorm:"type:text;not null;default:''"                                                                       json:"summary"`
+	Description   string      `gorm:"type:text;not null;default:''"                                                                       json:"description"`
+	StartTime     time.Time   `gorm:"not null;index:idx_event_window,priority:2"                                                          json:"start_time"`
+	EndTime       time.Time   `gorm:"not null"                                                                                            json:"end_time"`
+	AllDay        bool        `gorm:"not null;default:false"                                                                              json:"all_day"`
+	AttendeeCount int         `gorm:"not null;default:0"                                                                                  json:"attendee_count"`
+	EventType     string      `gorm:"type:varchar(32);not null;default:'default'"                                                         json:"event_type"`
 	// Transparency is Google's free/busy flag: "transparent" means the event
 	// does not consume time. Empty or "opaque" means busy.
-	Transparency       string         `gorm:"type:varchar(16);not null;default:''" json:"transparency"`
-	IsArtManaged       bool           `gorm:"not null;default:false;index" json:"is_art_managed"`
+	Transparency       string         `gorm:"type:varchar(16);not null;default:''"          json:"transparency"`
+	IsArtManaged       bool           `gorm:"not null;default:false;index"                  json:"is_art_managed"`
 	Status             string         `gorm:"type:varchar(32);not null;default:'confirmed'" json:"status"`
-	ExtendedProperties datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"extended_properties"`
+	ExtendedProperties datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"              json:"extended_properties"`
 }
 
 // SyncState tracks the per-calendar sync token used for incremental syncs.
 type SyncState struct {
-	AccountKind   AccountKind `gorm:"type:varchar(16);primaryKey" json:"account_kind"`
+	AccountKind   AccountKind `gorm:"type:varchar(16);primaryKey"  json:"account_kind"`
 	CalendarID    string      `gorm:"type:varchar(255);primaryKey" json:"calendar_id"`
-	LastSyncToken *string     `gorm:"type:text" json:"last_sync_token,omitempty"`
+	LastSyncToken *string     `gorm:"type:text"                    json:"last_sync_token,omitempty"`
 	LastSyncedAt  *time.Time  `json:"last_synced_at,omitempty"`
 }
 
@@ -266,14 +266,14 @@ type SyncState struct {
 type AgentRun struct {
 	Base
 	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'planner';index;check:kind IN ('planner','triage','reconcile')" json:"kind"`
-	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started" json:"started_at"`
+	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started"                                              json:"started_at"`
 	EndedAt   *time.Time     `json:"ended_at,omitempty"`
-	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')" json:"status"`
-	Model     string         `gorm:"type:varchar(64);not null;default:''" json:"model"`
-	TokensIn  int            `gorm:"not null;default:0" json:"tokens_in"`
-	TokensOut int            `gorm:"not null;default:0" json:"tokens_out"`
-	Summary   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'" json:"summary"`
-	Error     string         `gorm:"type:text;not null;default:''" json:"error"`
+	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')"     json:"status"`
+	Model     string         `gorm:"type:varchar(64);not null;default:''"                                                             json:"model"`
+	TokensIn  int            `gorm:"not null;default:0"                                                                               json:"tokens_in"`
+	TokensOut int            `gorm:"not null;default:0"                                                                               json:"tokens_out"`
+	Summary   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"                                                                 json:"summary"`
+	Error     string         `gorm:"type:text;not null;default:''"                                                                    json:"error"`
 }
 
 // EmailMessage is one triaged Gmail message: its metadata, the classification
@@ -281,26 +281,26 @@ type AgentRun struct {
 // Bodies are never stored; re-fetch from Gmail on demand.
 type EmailMessage struct {
 	Base
-	RunID          string      `gorm:"type:uuid;not null;index" json:"run_id"`
+	RunID          string      `gorm:"type:uuid;not null;index"                                                                                    json:"run_id"`
 	AccountKind    AccountKind `gorm:"type:varchar(16);not null;uniqueIndex:idx_email_lookup,priority:1;check:account_kind IN ('personal','work')" json:"account_kind"`
-	GmailMessageID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_email_lookup,priority:2" json:"gmail_message_id"`
-	ThreadID       string      `gorm:"type:varchar(255);not null;default:''" json:"thread_id"`
-	FromAddr       string      `gorm:"type:text;not null;default:''" json:"from"`
-	ToAddr         string      `gorm:"type:text;not null;default:''" json:"to"`
-	Subject        string      `gorm:"type:text;not null;default:''" json:"subject"`
-	Snippet        string      `gorm:"type:text;not null;default:''" json:"snippet"`
-	ReceivedAt     time.Time   `gorm:"index" json:"received_at"`
+	GmailMessageID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_email_lookup,priority:2"                                          json:"gmail_message_id"`
+	ThreadID       string      `gorm:"type:varchar(255);not null;default:''"                                                                       json:"thread_id"`
+	FromAddr       string      `gorm:"type:text;not null;default:''"                                                                               json:"from"`
+	ToAddr         string      `gorm:"type:text;not null;default:''"                                                                               json:"to"`
+	Subject        string      `gorm:"type:text;not null;default:''"                                                                               json:"subject"`
+	Snippet        string      `gorm:"type:text;not null;default:''"                                                                               json:"snippet"`
+	ReceivedAt     time.Time   `gorm:"index"                                                                                                       json:"received_at"`
 
 	Category   EmailCategory `gorm:"type:varchar(16);not null;check:category IN ('archive','reply','keep')" json:"category"`
-	Summary    string        `gorm:"type:text;not null;default:''" json:"summary"`
-	Reason     string        `gorm:"type:text;not null;default:''" json:"reason"`
-	Confidence float64       `gorm:"type:numeric(4,3);not null;default:0" json:"confidence"`
+	Summary    string        `gorm:"type:text;not null;default:''"                                          json:"summary"`
+	Reason     string        `gorm:"type:text;not null;default:''"                                          json:"reason"`
+	Confidence float64       `gorm:"type:numeric(4,3);not null;default:0"                                   json:"confidence"`
 
 	Action   EmailAction `gorm:"type:varchar(16);not null;default:'none'" json:"action"`
-	Applied  bool        `gorm:"not null;default:false" json:"applied"`
-	Archived bool        `gorm:"not null;default:false" json:"archived"`
+	Applied  bool        `gorm:"not null;default:false"                   json:"applied"`
+	Archived bool        `gorm:"not null;default:false"                   json:"archived"`
 
-	Reversed     bool       `gorm:"not null;default:false;index" json:"reversed"`
+	Reversed     bool       `gorm:"not null;default:false;index"         json:"reversed"`
 	ReversalKind string     `gorm:"type:varchar(32);not null;default:''" json:"reversal_kind"`
 	ReconciledAt *time.Time `json:"reconciled_at,omitempty"`
 }
@@ -310,13 +310,13 @@ type EmailMessage struct {
 type Job struct {
 	Base
 	Kind        JobKind    `gorm:"type:varchar(16);not null;check:kind IN ('sync','reconcile','planner','triage');index:idx_jobs_one_pending,unique,where:status = 'pending'" json:"kind"`
-	Status      JobStatus  `gorm:"type:varchar(16);not null;default:'pending';index;check:status IN ('pending','running','succeeded','failed')" json:"status"`
-	RunAt       time.Time  `gorm:"not null;index" json:"run_at"`
+	Status      JobStatus  `gorm:"type:varchar(16);not null;default:'pending';index;check:status IN ('pending','running','succeeded','failed')"                               json:"status"`
+	RunAt       time.Time  `gorm:"not null;index"                                                                                                                             json:"run_at"`
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	FinishedAt  *time.Time `json:"finished_at,omitempty"`
-	Attempts    int        `gorm:"not null;default:0" json:"attempts"`
-	MaxAttempts int        `gorm:"not null;default:4" json:"max_attempts"`
-	LastError   string     `gorm:"type:text;not null;default:''" json:"last_error"`
+	Attempts    int        `gorm:"not null;default:0"                                                                                                                         json:"attempts"`
+	MaxAttempts int        `gorm:"not null;default:4"                                                                                                                         json:"max_attempts"`
+	LastError   string     `gorm:"type:text;not null;default:''"                                                                                                              json:"last_error"`
 }
 
 // Setting is one runtime-editable configuration value. Keys are an allowlist
@@ -324,7 +324,7 @@ type Job struct {
 type Setting struct {
 	Base
 	Key   string `gorm:"type:varchar(64);uniqueIndex;not null" json:"key"`
-	Value string `gorm:"type:text;not null;default:''" json:"value"`
+	Value string `gorm:"type:text;not null;default:''"         json:"value"`
 }
 
 // All returns the models in AutoMigrate order.

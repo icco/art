@@ -11,6 +11,12 @@ import (
 	"github.com/icco/art/lib/api/handlers"
 )
 
+var (
+	errTestStart        = errors.New("nope")
+	errTestComplete     = errors.New("bad")
+	errTestDuplicateKey = errors.New(`oauth: save: pq: duplicate key value violates "accounts_pkey"`)
+)
+
 type fakeOAuth struct {
 	startErr error
 	url      string
@@ -43,7 +49,7 @@ func TestOAuthStartMissingAccount(t *testing.T) {
 }
 
 func TestOAuthStartErr(t *testing.T) {
-	h := &handlers.Handlers{OAuth: &fakeOAuth{startErr: errors.New("nope")}}
+	h := &handlers.Handlers{OAuth: &fakeOAuth{startErr: errTestStart}}
 	w := httptest.NewRecorder()
 	h.OAuthStart(w, httptest.NewRequestWithContext(t.Context(), "POST", "/oauth/start?account=personal", nil))
 	if w.Code != http.StatusBadRequest {
@@ -70,7 +76,7 @@ func TestOAuthCallbackError(t *testing.T) {
 }
 
 func TestOAuthCallbackCompleteErr(t *testing.T) {
-	h := &handlers.Handlers{OAuth: &fakeOAuth{compErr: errors.New("bad")}}
+	h := &handlers.Handlers{OAuth: &fakeOAuth{compErr: errTestComplete}}
 	w := httptest.NewRecorder()
 	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))
 	if w.Code != http.StatusBadRequest {
@@ -80,7 +86,7 @@ func TestOAuthCallbackCompleteErr(t *testing.T) {
 
 func TestOAuthCallbackDoesNotLeakInternalErrors(t *testing.T) {
 	h := &handlers.Handlers{OAuth: &fakeOAuth{
-		compErr: errors.New(`oauth: save: pq: duplicate key value violates "accounts_pkey"`),
+		compErr: errTestDuplicateKey,
 	}}
 	w := httptest.NewRecorder()
 	h.OAuthCallback(w, httptest.NewRequestWithContext(t.Context(), "GET", "/oauth/callback?state=s&code=c", nil))

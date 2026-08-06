@@ -17,6 +17,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// Stand-in failure for tests that only care that an error happened.
+var errTestBoom = errors.New("boom")
+
 func newRouter(h *handlers.Handlers) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/projects", h.ProjectsList)
@@ -106,7 +109,7 @@ func TestSessionsDeleteCalendarErrorKeepsRow(t *testing.T) {
 	if err := db.Create(&sess).Error; err != nil {
 		t.Fatal(err)
 	}
-	r := newRouter(&handlers.Handlers{DB: db, Calendar: &fakeCalendar{err: errors.New("boom")}})
+	r := newRouter(&handlers.Handlers{DB: db, Calendar: &fakeCalendar{err: errTestBoom}})
 
 	if w := do(t, r, "DELETE", "/sessions/"+sess.ID, nil); w.Code != http.StatusInternalServerError {
 		t.Fatalf("calendar failure: got %d, want 500", w.Code)

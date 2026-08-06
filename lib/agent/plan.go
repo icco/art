@@ -250,21 +250,21 @@ func projectScheduledHours(ctx context.Context, db *gorm.DB) (map[string]float64
 // rejection now means a real race with a human calendar edit.
 func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourceID string, start, end time.Time) error {
 	if !source.Valid() {
-		return fmt.Errorf("source must be 'project' or 'habit'")
+		return errBadSourceKind
 	}
 
 	lo := time.Duration(c.vals.FocusBlockMinMinutes) * time.Minute
 	hi := time.Duration(c.vals.FocusBlockMaxMinutes) * time.Minute
 	if d := end.Sub(start); d < lo || d > hi {
-		return fmt.Errorf("block must be %d-%d minutes, got %s",
-			c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes, d)
+		return fmt.Errorf("%w: must be %d-%d minutes, got %s",
+			errBlockDuration, c.vals.FocusBlockMinMinutes, c.vals.FocusBlockMaxMinutes, d)
 	}
 	planFrom, windowEnd := c.planWindow()
 	if start.Before(planFrom) {
-		return fmt.Errorf("start %s is before planning start %s", start, planFrom)
+		return fmt.Errorf("start %s %w %s", start, errBeforePlanStart, planFrom)
 	}
 	if end.After(windowEnd) {
-		return fmt.Errorf("end %s is past the plan window end %s", end, windowEnd)
+		return fmt.Errorf("end %s %w %s", end, errPastPlanWindow, windowEnd)
 	}
 
 	name, kind, err := c.resolveSource(ctx, source, sourceID)
@@ -277,7 +277,7 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 		return err
 	}
 	if !withinWorkingHours(start, end, hours, c.p.Cfg.Timezone) {
-		return fmt.Errorf("block %s-%s is outside working hours", start.Format(time.RFC3339), end.Format(time.RFC3339))
+		return fmt.Errorf("block %s-%s %w", start.Format(time.RFC3339), end.Format(time.RFC3339), errOutsideHours)
 	}
 
 	acct := accountForKind(kind)
@@ -287,8 +287,8 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 	}
 	// Placeholders are schedulable-over; real events and sessions are not.
 	if overlapsHard(start, end, busy) {
-		return fmt.Errorf("block %s-%s overlaps an existing event or planned session",
-			start.Format(time.RFC3339), end.Format(time.RFC3339))
+		return fmt.Errorf("block %s-%s %w",
+			start.Format(time.RFC3339), end.Format(time.RFC3339), errOverlapsBusy)
 	}
 
 	// At most one block per habit per calendar day, so cadence spreads out.
@@ -302,7 +302,7 @@ func (c *cycle) commitFocus(ctx context.Context, source models.SourceKind, sourc
 			return err
 		}
 		if n > 0 {
-			return fmt.Errorf("habit already has a block on %s; at most one per day", dayStart.Format(time.DateOnly))
+			return fmt.Errorf("%w (%s)", errHabitDailyLimit, dayStart.Format(time.DateOnly))
 		}
 	}
 
@@ -378,7 +378,7 @@ func (c *cycle) resolveSource(ctx context.Context, source models.SourceKind, id 
 		}
 		return h.Name, h.Kind, nil
 	}
-	return "", "", errors.New("unknown source kind")
+	return "", "", errUnknownSourceKind
 }
 
 func (c *cycle) clientFor(ctx context.Context, acct models.AccountKind) (*calendar.Client, error) {

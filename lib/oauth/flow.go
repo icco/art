@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -79,7 +78,7 @@ func NewFlow(clientID, clientSecret, redirectURL string, store *Store) *Flow {
 func (f *Flow) StartURL(account string) (string, error) {
 	kind := models.AccountKind(account)
 	if !kind.Valid() {
-		return "", fmt.Errorf("oauth: unknown account kind %q", account)
+		return "", fmt.Errorf("%w %q", errUnknownAccount, account)
 	}
 	f.gcExpired(time.Now())
 	state, err := randState()
@@ -108,11 +107,11 @@ func (f *Flow) gcExpired(now time.Time) {
 func (f *Flow) Complete(ctx context.Context, state, code string) (string, string, error) {
 	raw, ok := f.pending.LoadAndDelete(state)
 	if !ok {
-		return "", "", errors.New("oauth: unknown or expired state")
+		return "", "", errUnknownState
 	}
 	p := raw.(pendingState)
 	if time.Now().After(p.expiresAt) {
-		return "", "", errors.New("oauth: state expired")
+		return "", "", errStateExpired
 	}
 
 	tok, err := f.OAuth.Exchange(ctx, code)
@@ -120,7 +119,7 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 		return "", "", fmt.Errorf("oauth: exchange: %w", err)
 	}
 	if tok.RefreshToken == "" {
-		return "", "", errors.New("oauth: Google did not return a refresh token; revoke the app's access and retry")
+		return "", "", fmt.Errorf("%w: Google did not return one; revoke the app's access and retry", errNoRefreshToken)
 	}
 
 	ts := f.OAuth.TokenSource(ctx, tok)

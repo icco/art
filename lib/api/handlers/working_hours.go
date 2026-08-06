@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -21,16 +20,16 @@ type workingHourReq struct {
 
 func (req workingHourReq) validate() error {
 	if !models.SlotKind(req.SlotKind).Valid() {
-		return errors.New("slot_kind must be 'work' or 'personal'")
+		return errSlotKindInvalid
 	}
 	if req.DayOfWeek < 0 || req.DayOfWeek > 6 {
-		return errors.New("day_of_week must be 0-6")
+		return errDayOfWeek
 	}
 	if req.StartMinute < 0 || req.StartMinute >= 1440 {
-		return errors.New("start_minute must be 0-1439")
+		return errStartMinute
 	}
 	if req.EndMinute <= req.StartMinute || req.EndMinute > 1440 {
-		return errors.New("end_minute must be > start_minute and <= 1440")
+		return errEndMinute
 	}
 	return nil
 }
@@ -189,7 +188,8 @@ func validateNoOverlap(reqs []workingHourReq) error {
 		sort.Slice(rs, func(i, j int) bool { return rs[i].StartMinute < rs[j].StartMinute })
 		for i := 1; i < len(rs); i++ {
 			if rs[i].StartMinute < rs[i-1].EndMinute {
-				return fmt.Errorf("overlapping windows for %s day %d: [%d-%d] and [%d-%d]",
+				return fmt.Errorf("%w for %s day %d: [%d-%d] and [%d-%d]",
+					errOverlapping,
 					b.slot, b.day,
 					rs[i-1].StartMinute, rs[i-1].EndMinute,
 					rs[i].StartMinute, rs[i].EndMinute)

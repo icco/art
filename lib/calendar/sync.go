@@ -40,7 +40,7 @@ type Syncer struct {
 func (s *Syncer) Run(ctx context.Context) error {
 	calID := s.Client.Account.PrimaryCalendarID
 	if calID == "" {
-		return fmt.Errorf("account %s has no primary calendar", s.Client.Account.Kind)
+		return fmt.Errorf("%w (account %s)", errNoPrimaryCal, s.Client.Account.Kind)
 	}
 	if err := s.syncCalendar(ctx, calID); err != nil {
 		return fmt.Errorf("sync calendar %q: %w", calID, err)
