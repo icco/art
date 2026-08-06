@@ -23,25 +23,25 @@ type habitReq struct {
 
 func (req habitReq) validate(create bool) error {
 	if create && (req.Name == nil || *req.Name == "") {
-		return errors.New("name required")
+		return errNameRequired
 	}
 	if req.Name != nil && *req.Name == "" {
-		return errors.New("name cannot be empty")
+		return errNameEmpty
 	}
 	if req.Kind != "" && !models.SlotKind(req.Kind).Valid() {
-		return errors.New("kind must be 'work' or 'personal'")
+		return errKindInvalid
 	}
 	if create && req.BlockDurationMinutes == nil {
-		return errors.New("block_duration_minutes must be > 0")
+		return errBlockMinutes
 	}
 	if req.BlockDurationMinutes != nil && *req.BlockDurationMinutes <= 0 {
-		return errors.New("block_duration_minutes must be > 0")
+		return errBlockMinutes
 	}
 	if create && req.Cadence == nil {
-		return errors.New("cadence with type and positive count required")
+		return errCadenceRequired
 	}
 	if req.Cadence != nil && !req.Cadence.Valid() {
-		return errors.New("cadence type must be per_week or per_day with a positive count")
+		return errCadenceInvalid
 	}
 	return nil
 }

@@ -24,25 +24,25 @@ type projectReq struct {
 
 func (p projectReq) validate(create bool) error {
 	if create && (p.Name == nil || *p.Name == "") {
-		return errors.New("name required")
+		return errNameRequired
 	}
 	if p.Name != nil && *p.Name == "" {
-		return errors.New("name cannot be empty")
+		return errNameEmpty
 	}
 	if p.Kind != "" && !models.SlotKind(p.Kind).Valid() {
-		return errors.New("kind must be 'work' or 'personal'")
+		return errKindInvalid
 	}
 	if create && p.TargetHours == nil {
-		return errors.New("target_hours must be > 0")
+		return errTargetHours
 	}
 	if p.TargetHours != nil && *p.TargetHours <= 0 {
-		return errors.New("target_hours must be > 0")
+		return errTargetHours
 	}
 	if p.Status != "" {
 		switch models.ProjectStatus(p.Status) {
 		case models.ProjectActive, models.ProjectPaused, models.ProjectDone:
 		default:
-			return errors.New("status must be one of active|paused|done")
+			return errStatusInvalid
 		}
 	}
 	return nil
@@ -58,7 +58,7 @@ func (p projectReq) deadlineValue() (*time.Time, bool, error) {
 	}
 	var t time.Time
 	if err := json.Unmarshal(p.Deadline, &t); err != nil {
-		return nil, false, errors.New("deadline must be an RFC3339 timestamp or null")
+		return nil, false, errDeadlineInvalid
 	}
 	return &t, true, nil
 }

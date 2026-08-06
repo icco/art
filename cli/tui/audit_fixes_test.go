@@ -9,6 +9,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 )
 
+// Stand-in failure for tests that only care that an error happened.
+var errTestBoom = errors.New("boom")
+
 // deadClient points at a closed port so requests fail fast without gcloud.
 func deadClient() *Client {
 	c := NewClient(Config{APIURL: "http://127.0.0.1:1"})
@@ -172,7 +175,7 @@ func TestCalendarIgnoresStaleWindow(t *testing.T) {
 
 func TestDashboardStopsLoadingOnError(t *testing.T) {
 	p := newDashboardPage(deadClient())
-	pg, _ := p.Update(errMsg{errors.New("boom")})
+	pg, _ := p.Update(errMsg{errTestBoom})
 	if view := pg.(dashboardPage).renderToday(); strings.Contains(view, "loading") {
 		t.Fatalf("dashboard stuck on loading after error: %q", view)
 	}

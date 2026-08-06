@@ -27,10 +27,10 @@ type FocusBlock struct {
 // CreateFocus inserts an art-managed event for the given FocusBlock.
 func (c *Client) CreateFocus(ctx context.Context, fb FocusBlock) (*calendar.Event, error) {
 	if !fb.Source.Valid() {
-		return nil, fmt.Errorf("calendar: invalid source kind %q", fb.Source)
+		return nil, fmt.Errorf("%w %q", errBadSourceKind, fb.Source)
 	}
 	if !fb.End.After(fb.Start) {
-		return nil, fmt.Errorf("calendar: end must be after start")
+		return nil, errEndBeforeStart
 	}
 
 	ev := &calendar.Event{
@@ -85,7 +85,7 @@ func (c *Client) DeleteManaged(ctx context.Context, calendarID, eventID string) 
 	if ev.ExtendedProperties == nil ||
 		ev.ExtendedProperties.Private == nil ||
 		ev.ExtendedProperties.Private[ArtManagedKey] != ArtManagedTrue {
-		return fmt.Errorf("calendar: refusing to delete non-Art event %q", eventID)
+		return fmt.Errorf("%w %q", errNotArtManaged, eventID)
 	}
 	return c.Service.Events.Delete(calendarID, eventID).Context(ctx).Do()
 }

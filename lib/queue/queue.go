@@ -31,7 +31,7 @@ func (q *Queue) now() time.Time {
 	return time.Now()
 }
 
-// backoff returns the retry delay after the nth attempt: 1m, 5m, 25m, …
+// backoff returns the retry delay after the nth attempt: 1m, 5m, 25m, ….
 func backoff(attempt int) time.Duration {
 	d := time.Minute
 	for i := 1; i < attempt; i++ {

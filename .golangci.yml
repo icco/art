@@ -2,16 +2,23 @@ version: "2"
 linters:
   enable:
     - bodyclose
+    - canonicalheader
     - contextcheck
     - copyloopvar
+    - err113
     - errorlint
     - gocritic
+    - godot
     - gosec
     - intrange
+    - mirror
     - misspell
+    - modernize
     - nilerr
     - noctx
     - revive
+    - sloglint
+    - tagalign
     - unconvert
     - unparam
     - wastedassign

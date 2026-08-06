@@ -5,7 +5,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"io"
 )
@@ -18,7 +17,7 @@ type Sealer struct {
 // NewSealer returns a Sealer initialised with the given 32-byte AES-256 key.
 func NewSealer(key []byte) (*Sealer, error) {
 	if len(key) != 32 {
-		return nil, errors.New("oauth: key must be 32 bytes")
+		return nil, errKeySize
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -44,7 +43,7 @@ func (s *Sealer) Seal(plaintext []byte) ([]byte, error) {
 func (s *Sealer) Open(ciphertext []byte) ([]byte, error) {
 	ns := s.gcm.NonceSize()
 	if len(ciphertext) < ns {
-		return nil, errors.New("oauth: ciphertext too short")
+		return nil, errShortCipher
 	}
 	nonce, body := ciphertext[:ns], ciphertext[ns:]
 	return s.gcm.Open(nil, nonce, body, nil)

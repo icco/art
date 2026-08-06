@@ -174,18 +174,18 @@ func formatMinutes(m int) string {
 func parseMinutes(s string) (int, error) {
 	hPart, mPart, ok := strings.Cut(strings.TrimSpace(s), ":")
 	if !ok {
-		return 0, fmt.Errorf("%q must be HH:MM", s)
+		return 0, fmt.Errorf("%q: %w", s, errNotHHMM)
 	}
 	hh, err := strconv.Atoi(strings.TrimSpace(hPart))
 	if err != nil {
-		return 0, fmt.Errorf("%q must be HH:MM", s)
+		return 0, fmt.Errorf("%q: %w", s, errNotHHMM)
 	}
 	mm, err := strconv.Atoi(strings.TrimSpace(mPart))
 	if err != nil {
-		return 0, fmt.Errorf("%q must be HH:MM", s)
+		return 0, fmt.Errorf("%q: %w", s, errNotHHMM)
 	}
 	if hh < 0 || hh > 24 || mm < 0 || mm > 59 || hh*60+mm > 1440 {
-		return 0, fmt.Errorf("%q is not a valid time", s)
+		return 0, fmt.Errorf("%q: %w", s, errNotATime)
 	}
 	return hh*60 + mm, nil
 }
@@ -193,14 +193,14 @@ func parseMinutes(s string) (int, error) {
 // parseWindows parses "09:00-12:00, 13:00-17:30"; empty clears the day.
 func parseWindows(s string) ([]DayWindow, error) {
 	out := []DayWindow{}
-	for _, part := range strings.Split(s, ",") {
+	for part := range strings.SplitSeq(s, ",") {
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
 		from, to, ok := strings.Cut(part, "-")
 		if !ok {
-			return nil, fmt.Errorf("%q must be HH:MM-HH:MM", part)
+			return nil, fmt.Errorf("%q: %w", part, errNotHHMMRange)
 		}
 		start, err := parseMinutes(from)
 		if err != nil {
@@ -211,7 +211,7 @@ func parseWindows(s string) ([]DayWindow, error) {
 			return nil, err
 		}
 		if end <= start {
-			return nil, fmt.Errorf("%q must end after it starts", part)
+			return nil, fmt.Errorf("%q: %w", part, errEndsBeforeStart)
 		}
 		out = append(out, DayWindow{StartMinute: start, EndMinute: end})
 	}

@@ -143,7 +143,7 @@ func (p projectsPage) submitForm() tea.Cmd {
 func (fd *projectForm) project() (Project, error) {
 	hours, err := strconv.ParseFloat(strings.TrimSpace(fd.hours), 64)
 	if err != nil {
-		return Project{}, fmt.Errorf("target hours %q is not a number", fd.hours)
+		return Project{}, fmt.Errorf("target hours %q: %w", fd.hours, errNotNumber)
 	}
 	pr := Project{
 		Name:        strings.TrimSpace(fd.name),
@@ -153,7 +153,7 @@ func (fd *projectForm) project() (Project, error) {
 	if dl := strings.TrimSpace(fd.deadline); dl != "" {
 		t, err := time.ParseInLocation("2006-01-02", dl, time.Local)
 		if err != nil {
-			return Project{}, fmt.Errorf("deadline %q is not YYYY-MM-DD", dl)
+			return Project{}, fmt.Errorf("deadline %q: %w", dl, errNotADate)
 		}
 		pr.Deadline = &t
 	}

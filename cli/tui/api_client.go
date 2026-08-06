@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -51,7 +50,7 @@ func (c *Client) idToken(ctx context.Context) (string, error) {
 	}
 	tok := strings.TrimSpace(out.String())
 	if tok == "" {
-		return "", errors.New("gcloud returned an empty token")
+		return "", errEmptyToken
 	}
 	exp, err := jwtExp(tok)
 	if err != nil {
@@ -67,7 +66,7 @@ func (c *Client) idToken(ctx context.Context) (string, error) {
 func jwtExp(tok string) (time.Time, error) {
 	parts := strings.Split(tok, ".")
 	if len(parts) != 3 {
-		return time.Time{}, errors.New("not a JWT")
+		return time.Time{}, errNotJWT
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
@@ -80,7 +79,7 @@ func jwtExp(tok string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	if claims.Exp == 0 {
-		return time.Time{}, errors.New("exp claim missing")
+		return time.Time{}, errNoExpClaim
 	}
 	return time.Unix(claims.Exp, 0), nil
 }
@@ -114,7 +113,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		raw, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(string(raw)))
+		return fmt.Errorf("%w: %s %s: %s: %s", errAPIStatus, method, path, resp.Status, strings.TrimSpace(string(raw)))
 	}
 	if out != nil {
 		return json.NewDecoder(resp.Body).Decode(out)

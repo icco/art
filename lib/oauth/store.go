@@ -3,7 +3,6 @@ package oauth
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/icco/art/lib/models"
@@ -21,7 +20,7 @@ type Store struct {
 // Save upserts an Account row, sealing the refresh token before write.
 func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primaryCal string, tok *oauth2.Token) error {
 	if tok.RefreshToken == "" {
-		return errors.New("oauth: refresh token missing — revoke and retry with prompt=consent")
+		return fmt.Errorf("%w — revoke and retry with prompt=consent", errNoRefreshToken)
 	}
 	// Access token is short-lived; TokenSource refreshes on first use.
 	// #nosec G117 -- payload is sealed by AES-256-GCM before persistence.
@@ -52,7 +51,7 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 // UpdateRefreshToken reseals and stores a rotated refresh token for kind.
 func (s *Store) UpdateRefreshToken(ctx context.Context, kind models.AccountKind, refresh string) error {
 	if refresh == "" {
-		return errors.New("oauth: refresh token missing")
+		return errNoRefreshToken
 	}
 	// #nosec G117 -- payload is sealed by AES-256-GCM before persistence.
 	payload, err := json.Marshal(&oauth2.Token{RefreshToken: refresh})

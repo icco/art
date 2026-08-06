@@ -101,7 +101,7 @@ func triageWedged(processed, errs, budgetStopped int) error {
 	if processed > 0 || errs == 0 || budgetStopped > 0 {
 		return nil
 	}
-	return fmt.Errorf("triage classified none of the %d messages it attempted", errs)
+	return fmt.Errorf("%w (%d attempted)", errClassifiedNone, errs)
 }
 
 func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings.Values, counts map[string]int, runErrs *[]string) (processed, tokensIn, tokensOut int) {

@@ -160,10 +160,10 @@ func (c *Config) validate() error {
 		missing = append(missing, "OIDC_AUDIENCE")
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("missing required env vars: %s", strings.Join(missing, ", "))
+		return fmt.Errorf("%w: %s", errMissingEnv, strings.Join(missing, ", "))
 	}
 	if t := c.Triage.ConfidenceThreshold; t < 0 || t > 1 {
-		return fmt.Errorf("TRIAGE_CONFIDENCE_THRESHOLD must be in [0, 1], got %v", t)
+		return fmt.Errorf("%w: TRIAGE_CONFIDENCE_THRESHOLD must be in [0, 1], got %v", errInvalidEnv, t)
 	}
 	return nil
 }
@@ -192,7 +192,7 @@ func (p *envParser) boolVar(key string, def bool) bool {
 	}
 	b, err := strconv.ParseBool(v)
 	if err != nil {
-		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid bool", key, v))
+		p.errs = append(p.errs, fmt.Errorf("%w: %s: %q is not a valid bool", errInvalidEnv, key, v))
 		return def
 	}
 	return b
@@ -205,7 +205,7 @@ func (p *envParser) intVar(key string, def int) int {
 	}
 	n, err := strconv.Atoi(v)
 	if err != nil {
-		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid integer", key, v))
+		p.errs = append(p.errs, fmt.Errorf("%w: %s: %q is not a valid integer", errInvalidEnv, key, v))
 		return def
 	}
 	return n
@@ -218,7 +218,7 @@ func (p *envParser) floatVar(key string, def float64) float64 {
 	}
 	f, err := strconv.ParseFloat(v, 64)
 	if err != nil {
-		p.errs = append(p.errs, fmt.Errorf("%s: %q is not a valid number", key, v))
+		p.errs = append(p.errs, fmt.Errorf("%w: %s: %q is not a valid number", errInvalidEnv, key, v))
 		return def
 	}
 	return f
@@ -236,7 +236,7 @@ func decodeKey(raw string) ([]byte, error) {
 		return nil, fmt.Errorf("TOKEN_ENCRYPTION_KEY: %w", err)
 	}
 	if len(key) != 32 {
-		return nil, errors.New("TOKEN_ENCRYPTION_KEY must decode to 32 bytes (AES-256)")
+		return nil, fmt.Errorf("%w: TOKEN_ENCRYPTION_KEY must decode to 32 bytes (AES-256)", errInvalidEnv)
 	}
 	return key, nil
 }

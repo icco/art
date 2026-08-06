@@ -10,6 +10,11 @@ import (
 	"github.com/icco/art/lib/testdb"
 )
 
+var (
+	errTestMirrorStale = errors.New("mirror stale")
+	errTestVertexDown  = errors.New("vertex down")
+)
+
 type fakeServices struct {
 	order        []string
 	syncErrs     map[string]string
@@ -86,7 +91,7 @@ func TestDrainRunsDueJobsInOrder(t *testing.T) {
 }
 
 func TestDrainReconcileErrorFailsSync(t *testing.T) {
-	f := &fakeServices{reconcileErr: errors.New("mirror stale")}
+	f := &fakeServices{reconcileErr: errTestMirrorStale}
 	w := testWorker(t, f)
 	ctx := context.Background()
 	if err := w.Queue.Seed(ctx); err != nil {
@@ -107,7 +112,7 @@ func TestDrainReconcileErrorFailsSync(t *testing.T) {
 }
 
 func TestDrainRecordsFailureForRetry(t *testing.T) {
-	f := &fakeServices{plannerErr: errors.New("vertex down")}
+	f := &fakeServices{plannerErr: errTestVertexDown}
 	w := testWorker(t, f)
 	ctx := context.Background()
 	if err := w.Queue.Seed(ctx); err != nil {

@@ -143,11 +143,11 @@ func (p habitsPage) submitForm() tea.Cmd {
 func (fd *habitForm) habit() (Habit, error) {
 	mins, err := strconv.Atoi(strings.TrimSpace(fd.minutes))
 	if err != nil {
-		return Habit{}, fmt.Errorf("block minutes %q is not a number", fd.minutes)
+		return Habit{}, fmt.Errorf("block minutes %q: %w", fd.minutes, errNotNumber)
 	}
 	count, err := strconv.Atoi(strings.TrimSpace(fd.perWeek))
 	if err != nil {
-		return Habit{}, fmt.Errorf("per-week count %q is not a number", fd.perWeek)
+		return Habit{}, fmt.Errorf("per-week count %q: %w", fd.perWeek, errNotNumber)
 	}
 	return Habit{
 		Name:                 strings.TrimSpace(fd.name),

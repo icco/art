@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -80,14 +79,14 @@ func truncate(s string, n int) string {
 // Form field validators; huh blocks submission until these pass.
 func validateInt(s string) error {
 	if _, err := strconv.Atoi(strings.TrimSpace(s)); err != nil {
-		return errors.New("must be a whole number")
+		return errNotWholeNumber
 	}
 	return nil
 }
 
 func validateFloat(s string) error {
 	if _, err := strconv.ParseFloat(strings.TrimSpace(s), 64); err != nil {
-		return errors.New("must be a number")
+		return errNotNumber
 	}
 	return nil
 }
@@ -97,7 +96,7 @@ func validateOptionalDate(s string) error {
 		return nil
 	}
 	if _, err := time.ParseInLocation("2006-01-02", strings.TrimSpace(s), time.Local); err != nil {
-		return errors.New("must be YYYY-MM-DD")
+		return errNotADate
 	}
 	return nil
 }

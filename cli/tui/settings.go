@@ -110,13 +110,13 @@ func (p settingsPage) submitForm() tea.Cmd {
 func (fd *settingsForm) settings() (Settings, error) {
 	threshold, err := strconv.ParseFloat(strings.TrimSpace(fd.threshold), 64)
 	if err != nil {
-		return Settings{}, fmt.Errorf("confidence threshold %q is not a number", fd.threshold)
+		return Settings{}, fmt.Errorf("confidence threshold %q: %w", fd.threshold, errNotNumber)
 	}
 	// The form must round-trip this: submitting without it would send 0 and
 	// silently turn the daily spend cap off.
 	budget, err := strconv.ParseFloat(strings.TrimSpace(fd.dailyBudget), 64)
 	if err != nil {
-		return Settings{}, fmt.Errorf("daily budget %q is not a number", fd.dailyBudget)
+		return Settings{}, fmt.Errorf("daily budget %q: %w", fd.dailyBudget, errNotNumber)
 	}
 	nums := map[string]string{
 		"backfill days":     fd.backfillDays,
@@ -129,7 +129,7 @@ func (fd *settingsForm) settings() (Settings, error) {
 	for label, raw := range nums {
 		n, convErr := strconv.Atoi(strings.TrimSpace(raw))
 		if convErr != nil {
-			return Settings{}, fmt.Errorf("%s %q is not a whole number", label, raw)
+			return Settings{}, fmt.Errorf("%s %q: %w", label, raw, errNotWholeNumber)
 		}
 		parsed[label] = n
 	}
@@ -151,7 +151,7 @@ func (fd *settingsForm) settings() (Settings, error) {
 // an empty field means "no soft events" rather than one empty title.
 func splitTitles(s string) []string {
 	out := []string{}
-	for _, t := range strings.Split(s, ",") {
+	for t := range strings.SplitSeq(s, ",") {
 		if t = strings.TrimSpace(t); t != "" {
 			out = append(out, t)
 		}

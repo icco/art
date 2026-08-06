@@ -6,7 +6,6 @@ package settings
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -102,34 +101,34 @@ func (v Values) PlanHorizon() time.Duration {
 // Validate rejects values the planner or triager could not act on.
 func (v Values) Validate() error {
 	if t := v.TriageConfidenceThreshold; t < 0 || t > 1 {
-		return fmt.Errorf("triage_confidence_threshold must be in [0, 1], got %v", t)
+		return fmt.Errorf("%w: triage_confidence_threshold must be in [0, 1], got %v", errInvalidSetting, t)
 	}
 	if d := v.TriageBackfillDays; d < 1 || d > maxDays {
-		return fmt.Errorf("triage_backfill_days must be 1-%d, got %d", maxDays, d)
+		return fmt.Errorf("%w: triage_backfill_days must be 1-%d, got %d", errInvalidSetting, maxDays, d)
 	}
 	if d := v.TriageReconcileDays; d < 0 || d > maxDays {
-		return fmt.Errorf("triage_reconcile_days must be 0-%d, got %d", maxDays, d)
+		return fmt.Errorf("%w: triage_reconcile_days must be 0-%d, got %d", errInvalidSetting, maxDays, d)
 	}
 	if d := v.PlanHorizonDays; d < 1 || d > maxPlanHorizonDays {
-		return fmt.Errorf("plan_horizon_days must be 1-%d (the calendar mirror reaches no further), got %d",
-			maxPlanHorizonDays, d)
+		return fmt.Errorf("%w: plan_horizon_days must be 1-%d (the calendar mirror reaches no further), got %d",
+			errInvalidSetting, maxPlanHorizonDays, d)
 	}
 	lo, hi := v.FocusBlockMinMinutes, v.FocusBlockMaxMinutes
 	if lo < minBlockMinutes || lo > maxBlockMinutes {
-		return fmt.Errorf("focus_block_min_minutes must be %d-%d, got %d", minBlockMinutes, maxBlockMinutes, lo)
+		return fmt.Errorf("%w: focus_block_min_minutes must be %d-%d, got %d", errInvalidSetting, minBlockMinutes, maxBlockMinutes, lo)
 	}
 	if hi < minBlockMinutes || hi > maxBlockMinutes {
-		return fmt.Errorf("focus_block_max_minutes must be %d-%d, got %d", minBlockMinutes, maxBlockMinutes, hi)
+		return fmt.Errorf("%w: focus_block_max_minutes must be %d-%d, got %d", errInvalidSetting, minBlockMinutes, maxBlockMinutes, hi)
 	}
 	if lo > hi {
-		return fmt.Errorf("focus_block_min_minutes (%d) must not exceed focus_block_max_minutes (%d)", lo, hi)
+		return fmt.Errorf("%w: focus_block_min_minutes (%d) must not exceed focus_block_max_minutes (%d)", errInvalidSetting, lo, hi)
 	}
 	if b := v.DailyBudgetUSD; b < 0 || b > maxDailyBudgetUSD {
-		return fmt.Errorf("daily_budget_usd must be 0-%v (0 disables the cap), got %v", maxDailyBudgetUSD, b)
+		return fmt.Errorf("%w: daily_budget_usd must be 0-%v (0 disables the cap), got %v", errInvalidSetting, maxDailyBudgetUSD, b)
 	}
 	for _, t := range v.SoftEventTitles {
 		if strings.TrimSpace(t) == "" {
-			return errors.New("soft_event_titles must not contain blank entries")
+			return fmt.Errorf("%w: soft_event_titles must not contain blank entries", errInvalidSetting)
 		}
 	}
 	return nil

@@ -10,6 +10,8 @@ import (
 	"github.com/icco/art/lib/testdb"
 )
 
+var errTestLLMTimeout = errors.New("llm timed out")
+
 func TestFinishSurvivesCancelledContext(t *testing.T) {
 	db := testdb.Open(t)
 	p := &Planner{DB: db}
@@ -20,7 +22,7 @@ func TestFinishSurvivesCancelledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	runErr := errors.New("llm timed out")
+	runErr := errTestLLMTimeout
 	if err := p.finish(ctx, run.ID, map[string]any{}, runErr); !errors.Is(err, runErr) {
 		t.Fatalf("finish returned %v, want to include the run error", err)
 	}

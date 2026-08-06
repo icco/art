@@ -270,7 +270,7 @@ func syncCalendars(c *Client) tea.Cmd {
 				}
 				return statusMsg("sync done")
 			case "failed":
-				return errMsg{fmt.Errorf("sync failed: %s", j.LastError)}
+				return errMsg{fmt.Errorf("sync %w: %s", errJobFailed, j.LastError)}
 			}
 		}
 		if pollErr != nil {
@@ -316,7 +316,7 @@ func startAndAwait(c *Client, kind string, start func(context.Context) (string, 
 		}
 		if settled(latest, baseline) {
 			if latest.Status == "failed" {
-				return errMsg{fmt.Errorf("%s failed: %s", label, latest.Error)}
+				return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, latest.Error)}
 			}
 			return statusMsg(label + " done")
 		}

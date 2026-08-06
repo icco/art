@@ -11,6 +11,11 @@ import (
 	"gorm.io/gorm"
 )
 
+var (
+	errTestBoom = errors.New("boom")
+	errTestDead = errors.New("dead")
+)
+
 // fixedQueue pins the clock so grid and backoff math is assertable.
 func fixedQueue(t *testing.T) (*Queue, time.Time) {
 	t.Helper()
@@ -123,7 +128,7 @@ func TestClaimOrderAndDueness(t *testing.T) {
 func TestFinishRetriesWithBackoff(t *testing.T) {
 	q, now := fixedQueue(t)
 	job := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
-	status, err := q.Finish(context.Background(), job, errors.New("boom"), "")
+	status, err := q.Finish(context.Background(), job, errTestBoom, "")
 	if err != nil || status != models.JobPending {
 		t.Fatalf("finish: status=%v err=%v", status, err)
 	}
@@ -134,7 +139,7 @@ func TestFinishRetriesWithBackoff(t *testing.T) {
 	}
 	// Second failure backs off 5m.
 	got.Attempts = 2
-	if _, err := q.Finish(context.Background(), got, errors.New("boom"), ""); err != nil {
+	if _, err := q.Finish(context.Background(), got, errTestBoom, ""); err != nil {
 		t.Fatal(err)
 	}
 	q.DB.First(&got, "id = ?", job.ID)
@@ -162,7 +167,7 @@ func TestFinishTerminalChainsNextSlot(t *testing.T) {
 
 	// Exhausted attempts + error → failed, still chains.
 	fail := mustJob(t, q, models.JobSync, models.JobRunning, now, maxAttempts)
-	status, err = q.Finish(context.Background(), fail, errors.New("dead"), "")
+	status, err = q.Finish(context.Background(), fail, errTestDead, "")
 	if err != nil || status != models.JobFailed {
 		t.Fatalf("finish exhausted: status=%v err=%v", status, err)
 	}
