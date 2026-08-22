@@ -135,8 +135,7 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 		if err != nil {
 			// A spent budget applies to every remaining message, so stop rather
 			// than fail per message. A later run retries the untagged mail.
-			var exhausted *cost.ErrBudgetExhausted
-			if errors.As(err, &exhausted) {
+			if _, ok := errors.AsType[*cost.ErrBudgetExhausted](err); ok {
 				log.Warnw("triage: stopping, daily budget spent",
 					"account", kind, "remaining", len(ids)-processed, "err", err)
 				summary["budget_stopped"]++
