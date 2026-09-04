@@ -174,6 +174,28 @@ func (q *Queue) Seed(ctx context.Context) error {
 	return nil
 }
 
+// ReapStale resets running jobs whose started_at predates the cutoff. Unlike
+// Reap this is safe to call while the worker is live: a row older than the
+// cutoff cannot belong to a job anyone is still going to finish, because
+// execution is bounded by the job timeout.
+//
+// This exists because a failed Finish leaves its row running forever, and the
+// next job of that kind is only scheduled inside Finish's transaction -- so one
+// failed write silently stops that kind until the process restarts. Triage was
+// dead for two days that way.
+func (q *Queue) ReapStale(ctx context.Context, olderThan time.Duration) (int64, error) {
+	now := q.now()
+	res := q.DB.WithContext(ctx).Model(&models.Job{}).
+		Where("status = ? AND started_at IS NOT NULL AND started_at < ?",
+			models.JobRunning, now.Add(-olderThan)).
+		Updates(map[string]any{
+			"status":     models.JobPending,
+			"run_at":     now,
+			"started_at": nil,
+		})
+	return res.RowsAffected, res.Error
+}
+
 // Reap resets running jobs to pending: at boot any running row belongs to a
 // dead process. Attempts were counted at claim, so crash loops still exhaust
 // MaxAttempts.
