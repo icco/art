@@ -20,6 +20,14 @@ const (
 	pollInterval = 15 * time.Second
 	// A hung Google/Vertex call must not block the queue forever.
 	jobTimeout = 30 * time.Minute
+	// How many times to try the finish write. Losing it strands the row in
+	// running and, because the reschedule shares its transaction, stops that
+	// kind entirely -- so it is worth more than one attempt.
+	finishAttempts = 3
+	finishBackoff  = 2 * time.Second
+	// A running row older than this belongs to nobody: execution is capped at
+	// jobTimeout, so double that is past any legitimate run.
+	staleJobAfter = 2 * jobTimeout
 )
 
 // The job implementations, satisfied by calendar.Runner, agent.Planner, and
@@ -98,6 +106,7 @@ func (w *Worker) Start(ctx context.Context) error {
 			case <-w.poke:
 			case <-tick.C:
 			}
+			w.reapStale(ctx)
 			w.drain(ctx)
 		}
 	})
@@ -125,6 +134,19 @@ func (w *Worker) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, 
 		w.Poke()
 	}
 	return job, running, err
+}
+
+// reapStale returns rows abandoned by a finish that never landed. Boot-time
+// Reap cannot help here: the process is still up, so nothing restarts it.
+func (w *Worker) reapStale(ctx context.Context) {
+	n, err := w.Queue.ReapStale(ctx, staleJobAfter)
+	if err != nil {
+		gutillog.FromContext(ctx).Errorw("stale job reap failed", "err", err)
+		return
+	}
+	if n > 0 {
+		gutillog.FromContext(ctx).Warnw("requeued stale running job(s)", "count", n, "stale_after", staleJobAfter)
+	}
 }
 
 // drain claims and runs due jobs until the queue is empty or ctx ends.
@@ -159,11 +181,15 @@ func (w *Worker) run(ctx context.Context, job models.Job) {
 	cancel()
 	jobDuration.WithLabelValues(string(job.Kind)).Observe(time.Since(start).Seconds())
 
-	finishCtx, cancelFinish := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	// Generous relative to a single write: finishAttempts tries plus backoff.
+	finishCtx, cancelFinish := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelFinish()
-	status, finishErr := w.Queue.Finish(finishCtx, job, err, warning)
+	status, finishErr := w.finish(finishCtx, job, err, warning)
 	if finishErr != nil {
-		log.Errorw("job finish failed", "job", job.ID, "kind", job.Kind, "err", finishErr)
+		// The row stays running and no successor is scheduled. ReapStale is
+		// what gets this kind moving again, hence the pointer to it here.
+		log.Errorw("job finish failed; row left running until it is reaped as stale",
+			"job", job.ID, "kind", job.Kind, "stale_after", staleJobAfter, "err", finishErr)
 		return
 	}
 	jobsProcessed.WithLabelValues(string(job.Kind), string(status)).Inc()
@@ -177,6 +203,34 @@ func (w *Worker) run(ctx context.Context, job models.Job) {
 	default:
 		log.Infow("job succeeded", "job", job.ID, "kind", job.Kind)
 	}
+}
+
+// finish writes the outcome, retrying transient failures. A lost finish is not
+// a lost job on its own -- it also loses the successor, which is scheduled in
+// the same transaction -- so it gets more than one shot before we give up.
+func (w *Worker) finish(
+	ctx context.Context,
+	job models.Job,
+	runErr error,
+	warning string,
+) (models.JobStatus, error) {
+	var status models.JobStatus
+	var err error
+	for attempt := 1; attempt <= finishAttempts; attempt++ {
+		status, err = w.Queue.Finish(ctx, job, runErr, warning)
+		if err == nil {
+			return status, nil
+		}
+		if attempt == finishAttempts || ctx.Err() != nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return status, err
+		case <-time.After(finishBackoff):
+		}
+	}
+	return status, err
 }
 
 // execute dispatches to the job implementation, converting panics to errors.

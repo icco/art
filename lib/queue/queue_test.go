@@ -289,3 +289,79 @@ func TestReapResetsRunning(t *testing.T) {
 		t.Fatalf("terminal rows must be untouched, got %+v", doneRow)
 	}
 }
+
+// TestReapStaleLeavesFreshRunningJobsAlone is the safety property: this runs
+// while the worker is live, so it must never yank a job out from under a
+// worker that is still executing it.
+func TestReapStaleLeavesFreshRunningJobsAlone(t *testing.T) {
+	q, now := fixedQueue(t)
+	j := mustJob(t, q, models.JobTriage, models.JobRunning, now.Add(-time.Minute), 1)
+	started := now.Add(-time.Minute)
+	if err := q.DB.Model(&j).Update("started_at", started).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := q.ReapStale(context.Background(), 2*time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("reaped %d fresh job(s); a running worker would lose its row", n)
+	}
+	var got models.Job
+	if err := q.DB.First(&got, "id = ?", j.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != models.JobRunning {
+		t.Fatalf("want still running, got %s", got.Status)
+	}
+}
+
+// TestReapStaleRequeuesAbandonedJobs covers the actual outage: a finish write
+// that never landed left triage running forever, and because the successor is
+// scheduled inside that same transaction, the kind stopped entirely.
+func TestReapStaleRequeuesAbandonedJobs(t *testing.T) {
+	q, now := fixedQueue(t)
+	j := mustJob(t, q, models.JobTriage, models.JobRunning, now.Add(-24*time.Hour), 1)
+	if err := q.DB.Model(&j).Update("started_at", now.Add(-24*time.Hour)).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := q.ReapStale(context.Background(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("want 1 reaped, got %d", n)
+	}
+	var got models.Job
+	if err := q.DB.First(&got, "id = ?", j.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != models.JobPending {
+		t.Fatalf("want pending, got %s", got.Status)
+	}
+	if got.StartedAt != nil {
+		t.Fatalf("want started_at cleared, got %v", got.StartedAt)
+	}
+	// Attempts are counted at claim, so a repeatedly abandoned job still
+	// exhausts MaxAttempts instead of looping forever.
+	if got.Attempts != 1 {
+		t.Fatalf("want attempts preserved at 1, got %d", got.Attempts)
+	}
+}
+
+// TestReapStaleIgnoresRunningRowsWithNoStartedAt guards the NULL case: without
+// the started_at IS NOT NULL predicate these would reap on every tick.
+func TestReapStaleIgnoresRunningRowsWithNoStartedAt(t *testing.T) {
+	q, now := fixedQueue(t)
+	mustJob(t, q, models.JobSync, models.JobRunning, now.Add(-24*time.Hour), 1)
+
+	n, err := q.ReapStale(context.Background(), time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("reaped %d row(s) with a null started_at", n)
+	}
+}
