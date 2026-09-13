@@ -1,7 +1,6 @@
 # AGENTS.md
 
 Guidance for coding agents working in this repo. Operator docs live in [README.md](README.md).
-See [CLAUDE.md](CLAUDE.md) for Claude Code entrypoint (`@AGENTS.md`).
 
 ## Layout
 
