@@ -5,7 +5,8 @@ Guidance for coding agents working in this repo. Operator docs live in [README.m
 ## Layout
 
 - `./` — Server entrypoint (`main.go`, binary `art-server`): chi/v5 router, GORM/Postgres, Google OIDC, Prometheus, graceful shutdown, background job queue.
-- `./cmd/art` — Bubble Tea TUI CLI. Talks to server over HTTP; auth via `gcloud auth print-identity-token`.
+- `./cmd/art` — Bubble Tea TUI CLI entrypoint.
+- `cli/tui/` — TUI application logic and components. Talks to server over HTTP; auth via `gcloud auth print-identity-token`.
 - `lib/` — Domain packages: `api`, `models`, `oauth`, `calendar`, `gmail`, `email`, `agent`, `reconcile`, `queue`, `config`, `db`, `settings`, `cost`.
 
 ## Architecture & Invariants
@@ -31,8 +32,10 @@ Guidance for coding agents working in this repo. Operator docs live in [README.m
 ```sh
 task build         # builds ./bin/art
 task run           # run server
-go test ./...      # run tests (TEST_DATABASE_URL required for DB tests)
-golangci-lint run  # run linters
+task test          # run tests (-p 1 required, shares one DB schema; TEST_DATABASE_URL required for DB tests)
+task lint          # run vet and gofmt
+golangci-lint run  # run full linters
+task tidy          # tidy go modules
 ```
 
 ## Security & Auth
