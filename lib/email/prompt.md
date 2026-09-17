@@ -38,5 +38,7 @@ Safety rules — follow these strictly:
   — prefer `keep`.
 - Be especially conservative with the work account (nat@laurel.ai): default to
   `keep` unless the message is obviously bulk/automated.
+- Never archive a response to mail Nat sent, including automated responses.
+  Choose `reply` if it needs his response, otherwise `keep`.
 - Until you are given examples of Nat's past corrections, lean toward leaving
   mail in the inbox rather than archiving it.

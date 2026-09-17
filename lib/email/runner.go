@@ -109,7 +109,8 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 
 	// Corrections come from decisions Nat has manually reversed. There is no
 	// autonomous reconcile pass: detecting reversals would mean inspecting mail
-	// Art has already moved out of the inbox, and Art only reads the inbox.
+	// Art has already moved out of the inbox. Art only reads inbox bodies;
+	// thread labels are checked separately to protect conversations Nat sent in.
 	corrections, err := buildCorrections(ctx, r.DB, vals.TriageReconcileDays, maxCorrections)
 	if err != nil {
 		log.Warnw("building corrections failed", "err", err)

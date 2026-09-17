@@ -8,8 +8,8 @@ never touching events you made.
 Scheduling is deterministic — no LLM involved. It also triages both Gmail
 inboxes with Gemini Flash, under a daily spend cap: archives bulk mail and labels
 what needs a reply, reading, or thought. Its only actions are applying labels
-and archiving — it never drafts, sends, or deletes mail, and only ever reads the
-inbox. Every action is reversible and recorded.
+and archiving — it never drafts, sends, or deletes mail. Message bodies are read
+only from the inbox. Every action is reversible and recorded.
 
 Single-user, self-hosted. *(Working on the code? See [AGENTS.md](AGENTS.md).)*
 
@@ -93,8 +93,13 @@ labeled `Art/Reply` for you to handle (Art never writes the reply); `keep` is
 left in place with `Art/Triaged`. Labeling and archiving are the only actions
 Art takes — it never drafts, sends, or deletes mail. Mail you have labeled
 `mailinglist` is never auto-archived, however confident the classifier is — it
-still gets triaged and labeled, just left in the inbox. Decisions you reverse
-via the TUI are fed back into the next run as corrections.
+still gets triaged and labeled, just left in the inbox. **Responses to mail you
+sent are never auto-archived.** Before archiving, Art checks the conversation's
+message labels and keeps it if any message is marked `SENT`, regardless of the
+classifier's confidence. This protects the whole conversation, including mail
+sent from aliases, without reading sent-message bodies. If the check fails,
+Art leaves the message untouched for a later retry. Decisions you reverse via
+the TUI are fed back into the next run as corrections.
 
 Gmail uses the `gmail.modify` **restricted scope**, so:
 

@@ -222,3 +222,59 @@ func TestClientMethods(t *testing.T) {
 		t.Errorf("ModifyLabels no-op: %v", err)
 	}
 }
+
+func TestThreadHasSentMessage(t *testing.T) {
+	cases := []struct {
+		name     string
+		messages []*gmail.Message
+		want     bool
+	}{
+		{"new mail", []*gmail.Message{{Id: "incoming", LabelIds: []string{InboxLabel}}}, false},
+		{"received conversation", []*gmail.Message{
+			{Id: "archived", LabelIds: []string{"UNREAD"}},
+			{Id: "incoming", LabelIds: []string{InboxLabel}},
+		}, false},
+		{"reply to sent mail", []*gmail.Message{
+			{Id: "incoming", LabelIds: []string{InboxLabel}},
+			{Id: "sent-from-alias", LabelIds: []string{"SENT"}},
+		}, true},
+		{"sent copy in inbox", []*gmail.Message{{Id: "self", LabelIds: []string{InboxLabel, "SENT"}}}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/gmail/v1/users/me/threads/t1" {
+					t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+				}
+				if r.URL.Query().Get("format") != "minimal" || r.URL.Query().Get("fields") != "messages(id,labelIds)" {
+					t.Errorf("must fetch only message IDs and labels: %s", r.URL.RawQuery)
+				}
+				writeJSON(t, w, &gmail.Thread{Id: "t1", Messages: tc.messages})
+			}))
+			defer srv.Close()
+			got, err := testClient(t, srv).ThreadHasSentMessage(context.Background(), "t1")
+			if err != nil || got != tc.want {
+				t.Fatalf("got %v, %v; want %v", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestThreadHasSentMessageFailure(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	c := testClient(t, srv)
+	if _, err := c.ThreadHasSentMessage(context.Background(), ""); err == nil {
+		t.Fatal("missing thread must fail closed")
+	}
+	if requests != 0 {
+		t.Fatal("missing thread should not call Gmail")
+	}
+	if _, err := c.ThreadHasSentMessage(context.Background(), "t1"); err == nil {
+		t.Fatal("API failure must propagate so triage cannot archive")
+	}
+}
