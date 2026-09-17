@@ -3,6 +3,8 @@ package gmail
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -16,6 +18,29 @@ import (
 // is a tiebreaker, so a short prefix buys nearly all the accuracy of a long one
 // at a fraction of the prompt.
 const maxBodyChars = 1500
+
+var errMissingThread = errors.New("message has no Gmail thread ID")
+
+// ThreadHasSentMessage checks account-owned SENT labels, so aliases work without
+// guessing the owner's From address. Only IDs and labels are fetched, never
+// bodies outside the inbox. Protect the whole conversation conservatively,
+// including replies whose sender omitted In-Reply-To or References headers.
+func (c *Client) ThreadHasSentMessage(ctx context.Context, threadID string) (bool, error) {
+	if threadID == "" {
+		return false, errMissingThread
+	}
+	thread, err := c.svc.Users.Threads.Get(User, threadID).Format("minimal").
+		Fields("messages(id,labelIds)").Context(ctx).Do()
+	if err != nil {
+		return false, err
+	}
+	for _, msg := range thread.Messages {
+		if slices.Contains(msg.LabelIds, "SENT") {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
 // Message is the extracted, classifier-ready view of a Gmail message. Bodies
 // are held only in memory for the duration of a run; we never persist them.

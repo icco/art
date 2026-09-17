@@ -76,6 +76,8 @@ type fakeGmail struct {
 	modifyCalls    []modifyCall
 	lastQuery      string
 	hasMailingList bool
+	sentThreads    map[string]bool
+	threadErr      error
 }
 
 type modifyCall struct {
@@ -111,6 +113,10 @@ func (f *fakeGmail) FetchMessageIDs(_ context.Context, query string, _ int) ([]s
 
 func (f *fakeGmail) GetMessage(_ context.Context, id string) (*gmail.Message, error) {
 	return f.msgs[id], nil
+}
+
+func (f *fakeGmail) ThreadHasSentMessage(_ context.Context, threadID string) (bool, error) {
+	return f.sentThreads[threadID], f.threadErr
 }
 
 func (f *fakeGmail) ModifyLabels(_ context.Context, msgID string, add, remove []string) error {
@@ -314,6 +320,68 @@ func TestRunAccountNeverArchivesMailingList(t *testing.T) {
 		if r.Archived != wantArchived {
 			t.Errorf("row %s archived = %v, want %v", r.GmailMessageID, r.Archived, wantArchived)
 		}
+	}
+}
+
+func TestRunAccountNeverArchivesSentConversation(t *testing.T) {
+	for _, dryRun := range []bool{false, true} {
+		t.Run(map[bool]string{false: "live", true: "dry run"}[dryRun], func(t *testing.T) {
+			tr, gm := newTriager(t, dryRun, map[string]Classification{
+				"m1": {Category: models.EmailArchive, Confidence: 1, Summary: "automated response"},
+				"m2": {Category: models.EmailArchive, Confidence: 1, Summary: "newsletter"},
+			})
+			gm.sentThreads = map[string]bool{"t_m1": true}
+			counts := map[string]int{}
+			n, err := tr.RunAccount(context.Background(), uuid.NewString(), models.AccountPersonal, gm, counts)
+			if err != nil || n != 2 {
+				t.Fatalf("processed=%d err=%v", n, err)
+			}
+			if counts["sent_thread_kept"] != 1 {
+				t.Errorf("counts = %v", counts)
+			}
+			if dryRun && len(gm.modifyCalls) != 0 {
+				t.Fatal("dry run modified Gmail")
+			}
+			for _, c := range gm.modifyCalls {
+				if c.msgID == "m1" && (slices.Contains(c.remove, gmail.InboxLabel) || slices.Contains(c.add, "L_ARCHIVED")) {
+					t.Errorf("reply to sent mail archived: %+v", c)
+				}
+			}
+			var rows []models.EmailMessage
+			if err := tr.DB.Find(&rows).Error; err != nil {
+				t.Fatal(err)
+			}
+			if len(rows) != 2 {
+				t.Fatalf("rows = %d, want 2", len(rows))
+			}
+			for _, row := range rows {
+				wantAction := models.ActionArchived
+				if row.GmailMessageID == "m1" {
+					wantAction = models.ActionKeep
+				}
+				if row.Category != models.EmailArchive || row.Action != wantAction || row.Archived != (!dryRun && row.GmailMessageID == "m2") || row.Applied != !dryRun {
+					t.Errorf("incorrect audit row: %+v", row)
+				}
+			}
+		})
+	}
+}
+
+func TestRunAccountSentConversationLookupFailure(t *testing.T) {
+	// No DB is needed: a failed protection check must neither tag nor persist
+	// the archive candidate. The next sweep can retry it.
+	gm := &fakeGmail{
+		ids: []string{"m1"}, msgs: map[string]*gmail.Message{"m1": {ID: "m1", ThreadID: "t1"}},
+		threadErr: context.DeadlineExceeded,
+	}
+	tr := &Triager{
+		Classifier:   &fakeClassifier{byID: map[string]Classification{"m1": {Category: models.EmailArchive, Confidence: 1}}},
+		BackfillDays: 14, MaxPerRun: 50, ConfidenceThreshold: 0.8,
+	}
+	counts := map[string]int{}
+	n, err := tr.RunAccount(context.Background(), uuid.NewString(), models.AccountPersonal, gm, counts)
+	if err != nil || n != 0 || counts["errors"] != 1 || len(gm.modifyCalls) != 0 {
+		t.Fatalf("processed=%d err=%v counts=%v mutations=%v", n, err, counts, gm.modifyCalls)
 	}
 }
 

@@ -24,6 +24,7 @@ type Gmailer interface {
 	LabelIDsByName(ctx context.Context) (map[string]string, error)
 	FetchMessageIDs(ctx context.Context, query string, limit int) ([]string, error)
 	GetMessage(ctx context.Context, id string) (*gmail.Message, error)
+	ThreadHasSentMessage(ctx context.Context, threadID string) (bool, error)
 	ModifyLabels(ctx context.Context, msgID string, add, remove []string) error
 }
 
@@ -54,14 +55,15 @@ type decision struct {
 }
 
 // decideAction maps a classification to concrete labels/actions. An archive is
-// downgraded to keep (left untouched) when confidence is low or Nat has labeled
-// the message mailinglist. A reply is only flagged with the Art/Reply label for
-// Nat to act on — art never drafts the response. Art/Triaged is always applied.
-func decideAction(cat models.EmailCategory, confidence, threshold float64, mailingList bool) decision {
+// downgraded to keep (left untouched) when confidence is low or the message is
+// protected (mailinglist or a conversation Nat sent mail in). A reply is only
+// flagged with the Art/Reply label for Nat to act on — art never drafts the
+// response. Art/Triaged is always applied.
+func decideAction(cat models.EmailCategory, confidence, threshold float64, archiveProtected bool) decision {
 	d := decision{AddLabels: []string{gmail.LabelTriaged}}
 	switch cat {
 	case models.EmailArchive:
-		if confidence >= threshold && !mailingList {
+		if confidence >= threshold && !archiveProtected {
 			d.Action = models.ActionArchived
 			d.RemoveInbox = true
 			d.AddLabels = append(d.AddLabels, gmail.LabelArchived)
@@ -155,6 +157,21 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			summary["mailinglist_kept"]++
 		}
 		d := decideAction(cls.Category, cls.Confidence, t.ConfidenceThreshold, mailingList)
+		if d.RemoveInbox {
+			// This is a hard policy guard, independent of the model's verdict.
+			// Check even in dry runs so the recorded action matches a live pass.
+			sent, err := gm.ThreadHasSentMessage(ctx, msg.ThreadID)
+			if err != nil {
+				// Leave untagged for retry; uncertainty must never permit archive.
+				log.Warnw("triage: check sent conversation failed", "account", kind, "id", id, "err", err)
+				summary["errors"]++
+				continue
+			}
+			if sent {
+				d = decideAction(cls.Category, cls.Confidence, t.ConfidenceThreshold, true)
+				summary["sent_thread_kept"]++
+			}
+		}
 
 		row := models.EmailMessage{
 			RunID:          runID,
