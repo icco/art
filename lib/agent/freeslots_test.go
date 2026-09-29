@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 )
 
 func mustTZ(t *testing.T) *time.Location {

@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/icco/art/lib/api/handlers"
-	"github.com/icco/art/lib/config"
+	"go.icco.me/art/lib/api/handlers"
+	"go.icco.me/art/lib/config"
 	"go.uber.org/zap"
 )
 

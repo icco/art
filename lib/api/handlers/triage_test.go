@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/icco/art/lib/api/handlers"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/api/handlers"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 )
 
 func TestEmailsList(t *testing.T) {

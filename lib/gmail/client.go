@@ -5,8 +5,8 @@ package gmail
 import (
 	"context"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 )

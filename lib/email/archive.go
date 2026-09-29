@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/icco/art/lib/gmail"
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/gmail"
+	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
 

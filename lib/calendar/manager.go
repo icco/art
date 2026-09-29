@@ -5,8 +5,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
 	"google.golang.org/api/googleapi"
 )
 

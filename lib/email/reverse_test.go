@@ -5,9 +5,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/icco/art/lib/gmail"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/gmail"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 )
 
 type fakeReverseGmail struct {

@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 	"gorm.io/gorm"
 )
 

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
 	"gorm.io/gorm"
 )
 

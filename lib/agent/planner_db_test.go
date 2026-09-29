@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/agent"
-	"github.com/icco/art/lib/config"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
-	"github.com/icco/art/lib/settings"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/agent"
+	"go.icco.me/art/lib/config"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
+	"go.icco.me/art/lib/settings"
+	"go.icco.me/art/lib/testdb"
 )
 
 // newPlanner builds a Planner against the test DB. Tests that call Run() must

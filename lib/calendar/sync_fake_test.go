@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 	calapi "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 )

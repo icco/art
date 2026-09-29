@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/icco/art/lib/api/handlers"
+	"go.icco.me/art/lib/api/handlers"
 )
 
 func TestHealth(t *testing.T) {

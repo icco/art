@@ -1,4 +1,4 @@
-module github.com/icco/art
+module go.icco.me/art
 
 go 1.26.3
 

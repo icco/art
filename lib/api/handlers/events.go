@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 )
 
 // EventsList responds with calendar events in the requested time window.

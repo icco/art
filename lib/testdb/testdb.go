@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )

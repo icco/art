@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/icco/art/lib/settings"
+	"go.icco.me/art/lib/settings"
 )
 
 // settingsReq is the writable surface of the settings resource. It doubles as

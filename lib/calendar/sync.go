@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
 	"gorm.io/datatypes"
