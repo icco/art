@@ -22,7 +22,7 @@ Guidance for coding agents working in this repo. Operator docs live in [README.m
 
 ## Conventions
 
-- Follow icco Go conventions: chi router, `github.com/icco/gutil` (logging, JSON, ETags), zap, GORM.
+- Follow icco Go conventions: chi router, `go.icco.me/gutil` (logging, JSON, ETags), zap, GORM.
 - PR titles and commits must follow Conventional Commits with lowercase subjects.
 - `golangci-lint run` must pass. **Forbids `max`/`min` as parameter names** (shadowing builtins).
 - Coverage gate: total ≥ 50% (`.github/workflows/test.yml`). Set `TEST_DATABASE_URL` locally for DB-backed tests.

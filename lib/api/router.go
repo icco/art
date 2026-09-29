@@ -9,11 +9,11 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
-	gutillog "github.com/icco/gutil/logging"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/unrolled/secure"
 	"go.icco.me/art/lib/api/handlers"
 	"go.icco.me/art/lib/config"
+	gutillog "go.icco.me/gutil/logging"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )

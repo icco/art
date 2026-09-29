@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strings"
 
-	gutillog "github.com/icco/gutil/logging"
 	"go.icco.me/art/lib/cost"
 	"go.icco.me/art/lib/gmail"
 	"go.icco.me/art/lib/models"
+	gutillog "go.icco.me/gutil/logging"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

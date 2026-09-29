@@ -10,11 +10,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/icco/gutil/vertex"
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/cost"
 	"go.icco.me/art/lib/gmail"
 	"go.icco.me/art/lib/models"
+	"go.icco.me/gutil/vertex"
 	"google.golang.org/genai"
 )
 

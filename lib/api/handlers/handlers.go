@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"strconv"
 
-	gutillog "github.com/icco/gutil/logging"
-	gutilrender "github.com/icco/gutil/render"
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/models"
 	"go.icco.me/art/lib/settings"
+	gutillog "go.icco.me/gutil/logging"
+	gutilrender "go.icco.me/gutil/render"
 	"gorm.io/gorm"
 )
 

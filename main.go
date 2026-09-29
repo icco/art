@@ -10,7 +10,6 @@ import (
 	"syscall"
 	"time"
 
-	gutillog "github.com/icco/gutil/logging"
 	"go.icco.me/art/lib/agent"
 	"go.icco.me/art/lib/api"
 	"go.icco.me/art/lib/api/handlers"
@@ -22,6 +21,7 @@ import (
 	"go.icco.me/art/lib/queue"
 	"go.icco.me/art/lib/reconcile"
 	"go.icco.me/art/lib/settings"
+	gutillog "go.icco.me/gutil/logging"
 	"go.uber.org/zap"
 )
 

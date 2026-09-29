@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	gutillog "github.com/icco/gutil/logging"
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/models"
 	"go.icco.me/art/lib/settings"
 	"go.icco.me/art/lib/testdb"
+	gutillog "go.icco.me/gutil/logging"
 )
 
 func TestRunAllDisabled(t *testing.T) {
