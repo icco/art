@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/icco/art/lib/cost"
-	"github.com/icco/art/lib/gmail"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/cost"
+	"go.icco.me/art/lib/gmail"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 )
 
 func TestDecideAction(t *testing.T) {

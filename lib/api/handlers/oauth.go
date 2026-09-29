@@ -4,7 +4,7 @@ import (
 	"html"
 	"net/http"
 
-	gutillog "github.com/icco/gutil/logging"
+	gutillog "go.icco.me/gutil/logging"
 )
 
 // OAuthStart returns a Google consent URL for the requested account.

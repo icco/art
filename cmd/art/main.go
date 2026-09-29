@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/icco/art/cli/tui"
+	"go.icco.me/art/cli/tui"
 )
 
 // Version is set by goreleaser via -ldflags at build time.

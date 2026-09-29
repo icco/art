@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/icco/art/lib/api/handlers"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/api/handlers"
+	"go.icco.me/art/lib/testdb"
 )
 
 // Drives the real client against the real handlers so client/server request

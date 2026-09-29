@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"

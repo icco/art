@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 )
 
 // AgentRunsList responds with recent agent runs, newest first. Supports an

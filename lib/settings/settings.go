@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/config"
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/calendar"
+	"go.icco.me/art/lib/config"
+	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )

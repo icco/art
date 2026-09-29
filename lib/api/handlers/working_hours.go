@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
 

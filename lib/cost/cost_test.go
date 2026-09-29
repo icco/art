@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 )
 
 func closeTo(got, want float64) bool { return math.Abs(got-want) < 1e-9 }

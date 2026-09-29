@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
+	"go.icco.me/art/lib/testdb"
 	"golang.org/x/oauth2"
 	"gorm.io/gorm"
 )

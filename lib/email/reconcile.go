@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
 

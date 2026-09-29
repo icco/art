@@ -10,9 +10,9 @@ import (
 	"math"
 	"time"
 
-	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/settings"
+	"go.icco.me/art/lib/calendar"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/settings"
 	"gorm.io/gorm"
 )
 

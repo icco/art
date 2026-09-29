@@ -4,8 +4,8 @@ package calendar
 import (
 	"context"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/oauth"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
 	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/option"
 )

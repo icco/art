@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/icco/art/lib/config"
+	"go.icco.me/art/lib/config"
 	"google.golang.org/api/idtoken"
 )
 

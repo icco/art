@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/icco/art/lib/calendar"
-	"github.com/icco/art/lib/models"
-	gutillog "github.com/icco/gutil/logging"
+	"go.icco.me/art/lib/calendar"
+	"go.icco.me/art/lib/models"
+	gutillog "go.icco.me/gutil/logging"
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
 )

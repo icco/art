@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/icco/art/lib/api/handlers"
+	"go.icco.me/art/lib/api/handlers"
 )
 
 var (

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/icco/art/lib/models"
+	"go.icco.me/art/lib/models"
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

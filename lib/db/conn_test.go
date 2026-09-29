@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/testdb"
 	"go.uber.org/zap"
 )
 

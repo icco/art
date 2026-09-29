@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/icco/art/lib/api/handlers"
-	"github.com/icco/art/lib/models"
-	"github.com/icco/art/lib/settings"
-	"github.com/icco/art/lib/testdb"
+	"go.icco.me/art/lib/api/handlers"
+	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/settings"
+	"go.icco.me/art/lib/testdb"
 	"gorm.io/gorm"
 )
 
