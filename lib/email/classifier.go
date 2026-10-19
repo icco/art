@@ -8,6 +8,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"go.icco.me/art/lib/config"
@@ -46,13 +47,18 @@ type Classifier struct {
 }
 
 // NewClassifier builds a Gemini client on the Vertex backend, mirroring the
-// planner's configuration.
+// planner's configuration. A non-empty GEMINI_API_KEY selects the Gemini API
+// instead.
 func NewClassifier(ctx context.Context, cfg *config.Config, corrections string, guard *cost.Guard) (*Classifier, error) {
-	v, err := vertex.New(ctx, vertex.Config{
+	vcfg := vertex.Config{
 		Project:  cfg.Vertex.ProjectID,
 		Location: cfg.Vertex.Location,
 		Model:    config.TriageModel,
-	})
+	}
+	if key := os.Getenv("GEMINI_API_KEY"); key != "" {
+		vcfg = vertex.Config{APIKey: key, Model: config.TriageModel}
+	}
+	v, err := vertex.New(ctx, vcfg)
 	if err != nil {
 		return nil, fmt.Errorf("create vertex client: %w", err)
 	}
