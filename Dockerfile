@@ -17,7 +17,7 @@ FROM alpine:3.24
 LABEL org.opencontainers.image.source=https://github.com/icco/art
 LABEL org.opencontainers.image.description="A service for managing calendars."
 
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk upgrade --no-cache ca-certificates ca-certificates-bundle && apk add --no-cache ca-certificates tzdata
 RUN adduser -S -u 1001 app
 
 WORKDIR /app
