@@ -47,9 +47,9 @@ homebrew_casks:
       - art
     hooks:
       post:
-        install: |
-          if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/art"]
+        install_steps: |
+          on_macos do
+            run '/usr/bin/xattr', args: ['-dr', 'com.apple.quarantine', '{{ .StagedPath }}/art']
           end
 release:
   github:
