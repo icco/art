@@ -40,7 +40,7 @@ func main() {
 
 // usage prints CLI help: what art is, how it's configured, and its keybindings.
 func usage(w io.Writer) {
-	_, _ = fmt.Fprint(w, `art — terminal UI for the art personal scheduling agent.
+	_, _ = fmt.Fprint(w, `art — terminal UI for the art email triage agent.
 
 Usage:
   art            launch the TUI
@@ -55,9 +55,9 @@ Authentication:
   `+"`gcloud auth print-identity-token`"+` — install and log in with gcloud first.
 
 Keys:
-  1/2/3/4/5  dashboard / calendar / projects / habits / digest
-  ←/→ h/l    previous / next week (calendar)    a/e/d  add / edit / delete
-  r          replan      s  sync      t  triage   ?  toggle help
-  esc        back to dashboard                    q  quit
+  1/2/3  dashboard / digest / settings
+  t      triage                 e  edit settings
+  x      mark decision bad      a  archive ↔ inbox (digest)
+  esc    back to dashboard      ?  toggle help      q  quit
 `)
 }

@@ -5,13 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	"strings"
-	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	teatest "github.com/charmbracelet/x/exp/teatest/v2"
 )
 
@@ -46,172 +42,13 @@ func TestNavigationRendersEachPage(t *testing.T) {
 	tm := testModel(t, server)
 
 	// Dashboard is the home screen.
-	waitForContains(t, tm, "TODAY")
+	waitForContains(t, tm, "LAST RUNS")
 
-	tm.Type("3") // projects
-	waitForContains(t, tm, "Projects")
-
-	tm.Type("4") // habits
-	waitForContains(t, tm, "Habits")
-
-	tm.Type("5") // digest
+	tm.Type("2") // digest
 	waitForContains(t, tm, "Press t to run triage")
 
-	tm.Type("2") // calendar
-	waitForContains(t, tm, "Week of")
-
-	tm.Type("q")
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
-}
-
-// TestCalendarWeekNav exercises week navigation at the model level
-// (deterministic; teatest alt-screen matching on a full date string is flaky).
-func TestCalendarWeekNav(t *testing.T) {
-	now := time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local)
-	orig := timeNow
-	timeNow = func() time.Time { return now }
-	defer func() { timeNow = orig }()
-
-	weekOf := func(base time.Time) string { return "Week of " + base.Format("Mon Jan 2 2006") }
-	base := startOfWeek(now)
-
-	var p Page = newCalendarPage(nil)
-	p, _ = p.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if !strings.Contains(p.View(), weekOf(base)) {
-		t.Fatalf("calendar should open on current week:\n%s", p.View())
-	}
-
-	p, _ = p.Update(tea.KeyPressMsg{Code: 'l'}) // next week
-	if !strings.Contains(p.View(), weekOf(base.AddDate(0, 0, 7))) {
-		t.Fatalf("expected next week:\n%s", p.View())
-	}
-
-	p, _ = p.Update(tea.KeyPressMsg{Code: 'h'}) // back to current
-	p, _ = p.Update(tea.KeyPressMsg{Code: 'h'}) // prev week
-	if !strings.Contains(p.View(), weekOf(base.AddDate(0, 0, -7))) {
-		t.Fatalf("expected previous week:\n%s", p.View())
-	}
-}
-
-func TestAddProjectFormOpens(t *testing.T) {
-	server := emptyAPI()
-	defer server.Close()
-	tm := testModel(t, server)
-
-	tm.Type("3") // projects
-	waitForContains(t, tm, "Projects")
-	tm.Type("a") // open the add form
-	waitForContains(t, tm, "Target hours")
-
-	_ = tm.Quit() // the form captures keys, so force-quit
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
-}
-
-// Note: the full huh add-submit-reload loop is covered deterministically by
-// TestAddProjectFormOpens (form opens/renders) plus the submitForm unit tests
-// in forms_test.go (build + POST/PATCH payload + pointer readback). Driving the
-// multi-field form via teatest keystrokes proved timing-flaky, so it is omitted.
-
-// TestDeleteReloadsList proves the bug that motivated the rebuild is fixed:
-// a mutation (delete) is followed by a reload, so the server sees a second
-// GET /projects after the DELETE.
-func TestDeleteReloadsList(t *testing.T) {
-	var mu sync.Mutex
-	projects := []Project{{ID: "p1", Name: "Alpha", Kind: "work"}, {ID: "p2", Name: "Beta", Kind: "work"}}
-	var projectGets, deletes int32
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/projects":
-			atomic.AddInt32(&projectGets, 1)
-			mu.Lock()
-			defer mu.Unlock()
-			encodeJSON(t, w, projects)
-		case r.Method == http.MethodDelete:
-			atomic.AddInt32(&deletes, 1)
-			mu.Lock()
-			projects = projects[1:] // drop Alpha
-			mu.Unlock()
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			_, _ = w.Write([]byte("[]"))
-		}
-	}))
-	defer server.Close()
-
-	tm := testModel(t, server)
-	tm.Type("3") // projects
-	waitForContains(t, tm, "Alpha")
-
-	tm.Type("d") // delete the selected (first) project
-
-	// The reload after delete means a second GET /projects must arrive.
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if atomic.LoadInt32(&projectGets) >= 2 && atomic.LoadInt32(&deletes) == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := atomic.LoadInt32(&deletes); got != 1 {
-		t.Fatalf("expected 1 DELETE, got %d", got)
-	}
-	if got := atomic.LoadInt32(&projectGets); got < 2 {
-		t.Fatalf("expected reload (>=2 GET /projects), got %d — mutation did not refresh", got)
-	}
-
-	tm.Type("q")
-	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))
-}
-
-// TestSessionRetract navigates to the sessions page, retracts the selected
-// block with "d", and proves the DELETE is followed by a reload.
-func TestSessionRetract(t *testing.T) {
-	var mu sync.Mutex
-	sessions := []Session{{
-		ID: "s1", Source: "habit", SourceID: "h1", AccountKind: "personal",
-		ScheduledStart: time.Now(), ScheduledEnd: time.Now().Add(time.Hour), Status: "planned",
-	}}
-	var sessionGets, deletes int32
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/sessions":
-			atomic.AddInt32(&sessionGets, 1)
-			mu.Lock()
-			defer mu.Unlock()
-			encodeJSON(t, w, sessions)
-		case r.Method == http.MethodDelete && r.URL.Path == "/sessions/s1":
-			atomic.AddInt32(&deletes, 1)
-			mu.Lock()
-			sessions = nil
-			mu.Unlock()
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			_, _ = w.Write([]byte("[]"))
-		}
-	}))
-	defer server.Close()
-
-	tm := testModel(t, server)
-	tm.Type("6") // sessions
-	waitForContains(t, tm, "planned")
-
-	tm.Type("d") // retract the selected session
-
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if atomic.LoadInt32(&sessionGets) >= 2 && atomic.LoadInt32(&deletes) == 1 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if got := atomic.LoadInt32(&deletes); got != 1 {
-		t.Fatalf("expected 1 DELETE /sessions/s1, got %d", got)
-	}
-	if got := atomic.LoadInt32(&sessionGets); got < 2 {
-		t.Fatalf("expected reload (>=2 GET /sessions), got %d — retract did not refresh", got)
-	}
+	tm.Type("3") // settings
+	waitForContains(t, tm, "Settings")
 
 	tm.Type("q")
 	tm.WaitFinished(t, teatest.WithFinalTimeout(3*time.Second))

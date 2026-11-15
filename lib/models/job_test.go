@@ -25,10 +25,9 @@ func TestJobKindValid(t *testing.T) {
 	}
 }
 
-func TestJobKindsInOrder(t *testing.T) {
+func TestJobKinds(t *testing.T) {
 	got := models.JobKinds()
-	// Reconcile is retired as a job kind (it runs as the sync job's tail).
-	want := []models.JobKind{models.JobSync, models.JobPlanner, models.JobTriage}
+	want := []models.JobKind{models.JobTriage}
 	if len(got) != len(want) {
 		t.Fatalf("JobKinds len = %d, want %d (%v)", len(got), len(want), got)
 	}
@@ -37,13 +36,10 @@ func TestJobKindsInOrder(t *testing.T) {
 			t.Fatalf("JobKinds[%d] = %q, want %q", i, got[i], want[i])
 		}
 	}
-	if models.JobKind("reconcile").Valid() {
-		t.Fatal("reconcile is no longer a valid job kind")
-	}
-	// Reconcile lives on as an agent-run kind: the merged sync job still
-	// records reconcile passes.
-	if !models.AgentRunReconcile.Valid() {
-		t.Fatal("AgentRunReconcile should be Valid")
+	for _, k := range []string{"sync", "planner", "reconcile"} {
+		if models.JobKind(k).Valid() {
+			t.Fatalf("%s is a retired job kind", k)
+		}
 	}
 }
 
@@ -51,7 +47,7 @@ func TestJobOnePendingPerKind(t *testing.T) {
 	db := testdb.Open(t)
 	mk := func(status models.JobStatus) error {
 		return db.Create(&models.Job{
-			Kind: models.JobSync, Status: status, RunAt: time.Now(), MaxAttempts: 4,
+			Kind: models.JobTriage, Status: status, RunAt: time.Now(), MaxAttempts: 4,
 		}).Error
 	}
 	if err := mk(models.JobSucceeded); err != nil {
@@ -62,10 +58,5 @@ func TestJobOnePendingPerKind(t *testing.T) {
 	}
 	if err := mk(models.JobPending); err == nil {
 		t.Fatal("second pending job of same kind should violate the partial unique index")
-	}
-	if err := db.Create(&models.Job{
-		Kind: models.JobTriage, Status: models.JobPending, RunAt: time.Now(), MaxAttempts: 4,
-	}).Error; err != nil {
-		t.Fatalf("pending job of another kind: %v", err)
 	}
 }

@@ -44,8 +44,8 @@ func TestRouter_MetricsPublic(t *testing.T) {
 }
 
 func TestRouter_ProtectedRequiresAuth(t *testing.T) {
-	if got := get(t, newTestRouter(0), "/events", nil).Code; got != http.StatusUnauthorized {
-		t.Fatalf("/events: got %d want 401", got)
+	if got := get(t, newTestRouter(0), "/emails", nil).Code; got != http.StatusUnauthorized {
+		t.Fatalf("/emails: got %d want 401", got)
 	}
 }
 

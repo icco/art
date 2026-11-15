@@ -28,7 +28,7 @@ type Client struct {
 // NewClient returns a Client configured to talk to the API endpoint in cfg.
 //
 // No client Timeout: it would override the per-request context deadlines in
-// commands.go and cap the 5-min triage/replan passes.
+// commands.go and cap the 5-min triage passes.
 func NewClient(cfg Config) *Client {
 	return &Client{cfg: cfg, hc: &http.Client{}}
 }
@@ -121,51 +121,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 	return nil
 }
 
-// Project mirrors the API project resource. ID and ScheduledHours are
-// server-computed and omitted from requests: the API rejects unknown fields.
-type Project struct {
-	ID             string     `json:"id,omitempty"`
-	Name           string     `json:"name"`
-	Description    string     `json:"description"`
-	Kind           string     `json:"kind"`
-	TargetHours    float64    `json:"target_hours"`
-	ScheduledHours float64    `json:"scheduled_hours,omitempty"`
-	Deadline       *time.Time `json:"deadline,omitempty"`
-	Status         string     `json:"status"`
-}
-
-// Habit mirrors the API habit resource. ID is server-computed and omitted
-// from requests: the API rejects unknown fields.
-type Habit struct {
-	ID                   string  `json:"id,omitempty"`
-	Name                 string  `json:"name"`
-	Description          string  `json:"description"`
-	Kind                 string  `json:"kind"`
-	BlockDurationMinutes int     `json:"block_duration_minutes"`
-	Cadence              Cadence `json:"cadence"`
-	Active               bool    `json:"active"`
-}
-
-// Cadence describes how often a habit should occur.
-type Cadence struct {
-	Type             string   `json:"type"`
-	Count            int      `json:"count"`
-	PreferredWindows []string `json:"preferred_windows,omitempty"`
-}
-
-// Event mirrors the API calendar event resource.
-type Event struct {
-	ID           string    `json:"id"`
-	AccountKind  string    `json:"account_kind"`
-	Summary      string    `json:"summary"`
-	StartTime    time.Time `json:"start_time"`
-	EndTime      time.Time `json:"end_time"`
-	AllDay       bool      `json:"all_day"`
-	EventType    string    `json:"event_type"`
-	IsArtManaged bool      `json:"is_art_managed"`
-}
-
-// AgentRun summarises a planner or triage run reported by the API.
+// AgentRun summarises a triage run reported by the API.
 type AgentRun struct {
 	ID        string          `json:"id"`
 	Kind      string          `json:"kind"`
@@ -174,27 +130,6 @@ type AgentRun struct {
 	EndedAt   *time.Time      `json:"ended_at,omitempty"`
 	Summary   json.RawMessage `json:"summary"`
 	Error     string          `json:"error"`
-}
-
-// Job mirrors the API background-job resource.
-type Job struct {
-	ID         string     `json:"id"`
-	Kind       string     `json:"kind"`
-	Status     string     `json:"status"`
-	RunAt      time.Time  `json:"run_at"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	LastError  string     `json:"last_error"`
-}
-
-// Session mirrors a planner-scheduled focus block (project or habit).
-type Session struct {
-	ID             string    `json:"id"`
-	Source         string    `json:"source"` // "project" or "habit"
-	SourceID       string    `json:"source_id"`
-	AccountKind    string    `json:"account_kind"`
-	ScheduledStart time.Time `json:"scheduled_start"`
-	ScheduledEnd   time.Time `json:"scheduled_end"`
-	Status         string    `json:"status"` // planned|happened|skipped|moved
 }
 
 // Email mirrors the API triaged-message resource.
@@ -212,51 +147,14 @@ type Email struct {
 	ReceivedAt  time.Time `json:"received_at"`
 }
 
-// WorkingHour mirrors one allowed-time window. Minutes are minutes past
-// midnight in the server's timezone; EndMinute may be 1440 for midnight.
-type WorkingHour struct {
-	ID          string `json:"id,omitempty"`
-	SlotKind    string `json:"slot_kind"`
-	DayOfWeek   int    `json:"day_of_week"`
-	StartMinute int    `json:"start_minute"`
-	EndMinute   int    `json:"end_minute"`
-}
-
-// DayWindow is one window in a per-day working-hours patch; the kind and day
-// travel in the path.
-type DayWindow struct {
-	StartMinute int `json:"start_minute"`
-	EndMinute   int `json:"end_minute"`
-}
-
 // Settings mirrors the API settings resource: the runtime-editable knobs only.
 type Settings struct {
-	SoftEventTitles           []string `json:"soft_event_titles"`
-	TriageEnabled             bool     `json:"triage_enabled"`
-	TriageDryRun              bool     `json:"triage_dry_run"`
-	TriageConfidenceThreshold float64  `json:"triage_confidence_threshold"`
-	TriageBackfillDays        int      `json:"triage_backfill_days"`
-	TriageReconcileDays       int      `json:"triage_reconcile_days"`
-	PlanHorizonDays           int      `json:"plan_horizon_days"`
-	FocusBlockMinMinutes      int      `json:"focus_block_min_minutes"`
-	FocusBlockMaxMinutes      int      `json:"focus_block_max_minutes"`
-	DailyBudgetUSD            float64  `json:"daily_budget_usd"`
-}
-
-// ListWorkingHours returns every configured working-hours window.
-func (c *Client) ListWorkingHours(ctx context.Context) ([]WorkingHour, error) {
-	var out []WorkingHour
-	return out, c.do(ctx, "GET", "/working-hours", nil, &out)
-}
-
-// SetWorkingHoursDay replaces the windows for one kind and weekday (0=Sunday).
-// An empty list clears the day. The server echoes the whole table, but callers
-// reload instead of consuming it, so the response is discarded.
-func (c *Client) SetWorkingHoursDay(ctx context.Context, kind string, day int, windows []DayWindow) error {
-	if windows == nil {
-		windows = []DayWindow{}
-	}
-	return c.do(ctx, "PATCH", fmt.Sprintf("/working-hours/%s/%d", kind, day), windows, nil)
+	TriageEnabled             bool    `json:"triage_enabled"`
+	TriageDryRun              bool    `json:"triage_dry_run"`
+	TriageConfidenceThreshold float64 `json:"triage_confidence_threshold"`
+	TriageBackfillDays        int     `json:"triage_backfill_days"`
+	TriageReconcileDays       int     `json:"triage_reconcile_days"`
+	DailyBudgetUSD            float64 `json:"daily_budget_usd"`
 }
 
 // GetSettings returns the current runtime settings.
@@ -271,75 +169,8 @@ func (c *Client) UpdateSettings(ctx context.Context, s Settings) (Settings, erro
 	return out, c.do(ctx, "PUT", "/settings", s, &out)
 }
 
-// ListProjects returns all projects visible to the caller.
-func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
-	var out []Project
-	return out, c.do(ctx, "GET", "/projects?limit=500", nil, &out)
-}
-
-// CreateProject creates a new project from p.
-func (c *Client) CreateProject(ctx context.Context, p Project) (Project, error) {
-	var out Project
-	return out, c.do(ctx, "POST", "/projects", p, &out)
-}
-
-// UpdateProject patches the project with the given id.
-func (c *Client) UpdateProject(ctx context.Context, id string, p Project) (Project, error) {
-	var out Project
-	return out, c.do(ctx, "PATCH", "/projects/"+id, p, &out)
-}
-
-// DeleteProject removes the project with the given id.
-func (c *Client) DeleteProject(ctx context.Context, id string) error {
-	return c.do(ctx, "DELETE", "/projects/"+id, nil, nil)
-}
-
-// ListHabits returns all habits visible to the caller.
-func (c *Client) ListHabits(ctx context.Context) ([]Habit, error) {
-	var out []Habit
-	return out, c.do(ctx, "GET", "/habits?limit=500", nil, &out)
-}
-
-// CreateHabit creates a new habit from h.
-func (c *Client) CreateHabit(ctx context.Context, h Habit) (Habit, error) {
-	var out Habit
-	return out, c.do(ctx, "POST", "/habits", h, &out)
-}
-
-// UpdateHabit patches the habit with the given id.
-func (c *Client) UpdateHabit(ctx context.Context, id string, h Habit) (Habit, error) {
-	var out Habit
-	return out, c.do(ctx, "PATCH", "/habits/"+id, h, &out)
-}
-
-// DeleteHabit removes the habit with the given id.
-func (c *Client) DeleteHabit(ctx context.Context, id string) error {
-	return c.do(ctx, "DELETE", "/habits/"+id, nil, nil)
-}
-
-// ListEvents returns primary-calendar events between from and to (inclusive of
-// from, exclusive of to). The TUI only ever shows primary calendars.
-func (c *Client) ListEvents(ctx context.Context, from, to time.Time) ([]Event, error) {
-	q := fmt.Sprintf("?from=%s&to=%s&calendar=primary", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
-	var out []Event
-	return out, c.do(ctx, "GET", "/events"+q, nil, &out)
-}
-
-// ListSessions returns planner-scheduled focus blocks between from and to.
-func (c *Client) ListSessions(ctx context.Context, from, to time.Time) ([]Session, error) {
-	q := fmt.Sprintf("?from=%s&to=%s", from.UTC().Format(time.RFC3339), to.UTC().Format(time.RFC3339))
-	var out []Session
-	return out, c.do(ctx, "GET", "/sessions"+q, nil, &out)
-}
-
-// DeleteSession retracts the planned session with the given id; the server
-// deletes its Art-managed calendar event too.
-func (c *Client) DeleteSession(ctx context.Context, id string) error {
-	return c.do(ctx, "DELETE", "/sessions/"+id, nil, nil)
-}
-
 // ListRuns returns recent agent runs, newest first. kind is optional
-// ("planner" or "triage"); limit caps the count.
+// (e.g. "triage"); limit caps the count.
 func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentRun, error) {
 	q := fmt.Sprintf("?limit=%d", limit)
 	if kind != "" {
@@ -347,29 +178,6 @@ func (c *Client) ListRuns(ctx context.Context, kind string, limit int) ([]AgentR
 	}
 	var out []AgentRun
 	return out, c.do(ctx, "GET", "/agent-runs"+q, nil, &out)
-}
-
-// Replan triggers a detached planner run and returns "started" or "running".
-func (c *Client) Replan(ctx context.Context) (string, error) {
-	var out struct {
-		Status string `json:"status"`
-	}
-	return out.Status, c.do(ctx, "POST", "/replan", nil, &out)
-}
-
-// Sync enqueues a calendar-sync job and returns it; poll GetJob for the outcome.
-func (c *Client) Sync(ctx context.Context) (Job, error) {
-	var out struct {
-		Status string `json:"status"`
-		Job    Job    `json:"job"`
-	}
-	return out.Job, c.do(ctx, "POST", "/sync", nil, &out)
-}
-
-// GetJob fetches one background job by id.
-func (c *Client) GetJob(ctx context.Context, id string) (Job, error) {
-	var out Job
-	return out, c.do(ctx, "GET", "/jobs/"+id, nil, &out)
 }
 
 // ListEmails returns recently triaged messages, newest first.

@@ -45,14 +45,8 @@ func newRootWithClient(cfg Config, c *Client, isDark bool) rootModel {
 
 	pages := map[pageID]Page{
 		pageDashboard: newDashboardPage(c),
-		pageCalendar:  newCalendarPage(c),
-		pageProjects:  newProjectsPage(c, isDark),
-		pageHabits:    newHabitsPage(c, isDark),
 		pageDigest:    newDigestPage(c, isDark),
-		pageSessions:  newSessionsPage(c, isDark),
-
-		pageWorkingHours: newWorkingHoursPage(c),
-		pageSettings:     newSettingsPage(c),
+		pageSettings:  newSettingsPage(c),
 	}
 	return rootModel{
 		cfg:    cfg,
@@ -122,18 +116,8 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case key.Matches(k, m.keys.Dashboard):
 		return m.navigate(pageDashboard)
-	case key.Matches(k, m.keys.Calendar):
-		return m.navigate(pageCalendar)
-	case key.Matches(k, m.keys.Projects):
-		return m.navigate(pageProjects)
-	case key.Matches(k, m.keys.Habits):
-		return m.navigate(pageHabits)
 	case key.Matches(k, m.keys.Digest):
 		return m.navigate(pageDigest)
-	case key.Matches(k, m.keys.Sessions):
-		return m.navigate(pageSessions)
-	case key.Matches(k, m.keys.Hours):
-		return m.navigate(pageWorkingHours)
 	case key.Matches(k, m.keys.Settings):
 		return m.navigate(pageSettings)
 	case key.Matches(k, m.keys.Back):
@@ -144,18 +128,6 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.navigate(pageDashboard)
 		}
 		return m, nil
-	case key.Matches(k, m.keys.Replan):
-		if m.busy {
-			return m, nil
-		}
-		m.busy, m.status = true, "replanning…"
-		return m, tea.Sequence(replan(m.client), m.refreshCmd())
-	case key.Matches(k, m.keys.Sync):
-		if m.busy {
-			return m, nil
-		}
-		m.busy, m.status = true, "syncing…"
-		return m, tea.Sequence(syncCalendars(m.client), m.refreshCmd())
 	case key.Matches(k, m.keys.Triage):
 		if m.busy {
 			return m, nil
@@ -165,12 +137,6 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	default:
 		return m.routeToCurrent(k)
 	}
-}
-
-// refreshCmd reloads the data that a plan/sync run may have changed.
-func (m rootModel) refreshCmd() tea.Cmd {
-	from, to := startOfWeek(timeNow()), startOfWeek(timeNow()).AddDate(0, 0, 7)
-	return tea.Batch(loadEvents(m.client, from, to), loadSessions(m.client, from, to), loadProjects(m.client), loadRuns(m.client))
 }
 
 // navigate switches pages, keeping the stack a set. No synthetic

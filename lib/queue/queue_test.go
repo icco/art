@@ -39,7 +39,7 @@ func TestClaimJudgesDuenessByTheGoClock(t *testing.T) {
 	if _, err := q.Claim(ctx); err != nil {
 		t.Fatalf("a job seeded as due must be claimable when the app clock leads the database's: %v", err)
 	}
-	// TestClaimOrderAndDueness covers the other direction.
+	// TestClaimDueness covers the other direction.
 }
 
 func mustJob(t *testing.T, q *Queue, kind models.JobKind, status models.JobStatus, runAt time.Time, attempts int) models.Job {
@@ -53,7 +53,7 @@ func mustJob(t *testing.T, q *Queue, kind models.JobKind, status models.JobStatu
 
 func TestEnqueueCreatesPending(t *testing.T) {
 	q, now := fixedQueue(t)
-	job, running, err := q.Enqueue(context.Background(), models.JobSync)
+	job, running, err := q.Enqueue(context.Background(), models.JobTriage)
 	if err != nil || running {
 		t.Fatalf("enqueue: running=%v err=%v", running, err)
 	}
@@ -64,8 +64,8 @@ func TestEnqueueCreatesPending(t *testing.T) {
 
 func TestEnqueuePullsPendingForward(t *testing.T) {
 	q, now := fixedQueue(t)
-	future := mustJob(t, q, models.JobSync, models.JobPending, now.Add(time.Hour), 0)
-	job, running, err := q.Enqueue(context.Background(), models.JobSync)
+	future := mustJob(t, q, models.JobTriage, models.JobPending, now.Add(time.Hour), 0)
+	job, running, err := q.Enqueue(context.Background(), models.JobTriage)
 	if err != nil || running {
 		t.Fatalf("enqueue: running=%v err=%v", running, err)
 	}
@@ -81,8 +81,8 @@ func TestEnqueuePullsPendingForward(t *testing.T) {
 
 func TestEnqueueReportsRunning(t *testing.T) {
 	q, now := fixedQueue(t)
-	run := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
-	job, running, err := q.Enqueue(context.Background(), models.JobSync)
+	run := mustJob(t, q, models.JobTriage, models.JobRunning, now, 1)
+	job, running, err := q.Enqueue(context.Background(), models.JobTriage)
 	if err != nil || !running {
 		t.Fatalf("enqueue: running=%v err=%v", running, err)
 	}
@@ -91,35 +91,21 @@ func TestEnqueueReportsRunning(t *testing.T) {
 	}
 }
 
-func TestClaimOrderAndDueness(t *testing.T) {
+func TestClaimDueness(t *testing.T) {
 	q, now := fixedQueue(t)
-	past := now.Add(-time.Minute)
-	// Insert out of order; claim must return sync, planner, triage.
-	mustJob(t, q, models.JobTriage, models.JobPending, past, 0)
-	mustJob(t, q, models.JobPlanner, models.JobPending, past, 0)
-	mustJob(t, q, models.JobSync, models.JobPending, past, 0)
-	var got []models.JobKind
-	for {
-		job, err := q.Claim(context.Background())
-		if errors.Is(err, ErrNoJob) {
-			break
-		}
-		if err != nil {
-			t.Fatalf("claim: %v", err)
-		}
-		if job.Status != models.JobRunning || job.Attempts != 1 || job.StartedAt == nil {
-			t.Fatalf("claimed job not marked running: %+v", job)
-		}
-		got = append(got, job.Kind)
+	mustJob(t, q, models.JobTriage, models.JobPending, now.Add(-time.Minute), 0)
+	job, err := q.Claim(context.Background())
+	if err != nil {
+		t.Fatalf("claim: %v", err)
 	}
-	want := []models.JobKind{models.JobSync, models.JobPlanner, models.JobTriage}
-	for i := range want {
-		if i >= len(got) || got[i] != want[i] {
-			t.Fatalf("claim order: want %v, got %v", want, got)
-		}
+	if job.Status != models.JobRunning || job.Attempts != 1 || job.StartedAt == nil {
+		t.Fatalf("claimed job not marked running: %+v", job)
+	}
+	if _, err := q.Claim(context.Background()); !errors.Is(err, ErrNoJob) {
+		t.Fatalf("a claimed job must not be claimed again, got %v", err)
 	}
 
-	mustJob(t, q, models.JobSync, models.JobPending, time.Now().Add(time.Hour), 0)
+	mustJob(t, q, models.JobTriage, models.JobPending, time.Now().Add(time.Hour), 0)
 	if _, err := q.Claim(context.Background()); !errors.Is(err, ErrNoJob) {
 		t.Fatalf("future job must not be claimable, got %v", err)
 	}
@@ -127,7 +113,7 @@ func TestClaimOrderAndDueness(t *testing.T) {
 
 func TestFinishRetriesWithBackoff(t *testing.T) {
 	q, now := fixedQueue(t)
-	job := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
+	job := mustJob(t, q, models.JobTriage, models.JobRunning, now, 1)
 	status, err := q.Finish(context.Background(), job, errTestBoom, "")
 	if err != nil || status != models.JobPending {
 		t.Fatalf("finish: status=%v err=%v", status, err)
@@ -150,64 +136,37 @@ func TestFinishRetriesWithBackoff(t *testing.T) {
 
 func TestFinishTerminalChainsNextSlot(t *testing.T) {
 	q, now := fixedQueue(t)
-	job := mustJob(t, q, models.JobPlanner, models.JobRunning, now, 1)
+	job := mustJob(t, q, models.JobTriage, models.JobRunning, now, 1)
 	status, err := q.Finish(context.Background(), job, nil, "")
 	if err != nil || status != models.JobSucceeded {
 		t.Fatalf("finish: status=%v err=%v", status, err)
 	}
 	var next models.Job
-	if err := q.DB.First(&next, "kind = ? AND status = ?", models.JobPlanner, models.JobPending).Error; err != nil {
+	if err := q.DB.First(&next, "kind = ? AND status = ?", models.JobTriage, models.JobPending).Error; err != nil {
 		t.Fatalf("chained job: %v", err)
 	}
-	// Planner runs hourly: from 10:20 the next grid slot is 11:00.
-	wantSlot := time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)
+	// Triage runs every 30m: from 10:20 the next grid slot is 10:30.
+	wantSlot := time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)
 	if !next.RunAt.Equal(wantSlot) {
 		t.Fatalf("want next run on grid %v, got %v", wantSlot, next.RunAt)
 	}
 
 	// Exhausted attempts + error → failed, still chains.
-	fail := mustJob(t, q, models.JobSync, models.JobRunning, now, maxAttempts)
+	fail := mustJob(t, q, models.JobTriage, models.JobRunning, now, maxAttempts)
 	status, err = q.Finish(context.Background(), fail, errTestDead, "")
 	if err != nil || status != models.JobFailed {
 		t.Fatalf("finish exhausted: status=%v err=%v", status, err)
 	}
 	var chained int64
-	q.DB.Model(&models.Job{}).Where("kind = ? AND status = ?", models.JobSync, models.JobPending).Count(&chained)
+	q.DB.Model(&models.Job{}).Where("kind = ? AND status = ?", models.JobTriage, models.JobPending).Count(&chained)
 	if chained != 1 {
-		t.Fatalf("want chained sync job, got %d", chained)
-	}
-}
-
-func TestFinishChainsPerKindGrid(t *testing.T) {
-	cases := []struct {
-		kind models.JobKind
-		want time.Time
-	}{
-		// From 10:20: sync every 10m → 10:30, planner hourly → 11:00,
-		// triage every 30m → 10:30.
-		{models.JobSync, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
-		{models.JobPlanner, time.Date(2026, 7, 4, 11, 0, 0, 0, time.UTC)},
-		{models.JobTriage, time.Date(2026, 7, 4, 10, 30, 0, 0, time.UTC)},
-	}
-	for _, c := range cases {
-		q, _ := fixedQueue(t)
-		job := mustJob(t, q, c.kind, models.JobRunning, q.now(), 1)
-		if _, err := q.Finish(context.Background(), job, nil, ""); err != nil {
-			t.Fatalf("%s finish: %v", c.kind, err)
-		}
-		var next models.Job
-		if err := q.DB.First(&next, "kind = ? AND status = ?", c.kind, models.JobPending).Error; err != nil {
-			t.Fatalf("%s chained job: %v", c.kind, err)
-		}
-		if !next.RunAt.Equal(c.want) {
-			t.Fatalf("%s chained to %v, want %v", c.kind, next.RunAt, c.want)
-		}
+		t.Fatalf("want chained triage job, got %d", chained)
 	}
 }
 
 func TestFinishSuccessKeepsWarning(t *testing.T) {
 	q, now := fixedQueue(t)
-	job := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
+	job := mustJob(t, q, models.JobTriage, models.JobRunning, now, 1)
 	if _, err := q.Finish(context.Background(), job, nil, "work: token expired"); err != nil {
 		t.Fatal(err)
 	}
@@ -220,51 +179,40 @@ func TestFinishSuccessKeepsWarning(t *testing.T) {
 
 func TestFinishChainToleratesExistingPending(t *testing.T) {
 	q, now := fixedQueue(t)
-	job := mustJob(t, q, models.JobSync, models.JobRunning, now, 1)
-	mustJob(t, q, models.JobSync, models.JobPending, now, 0) // e.g. a manual enqueue raced the finish
+	job := mustJob(t, q, models.JobTriage, models.JobRunning, now, 1)
+	mustJob(t, q, models.JobTriage, models.JobPending, now, 0) // e.g. a manual enqueue raced the finish
 	if _, err := q.Finish(context.Background(), job, nil, ""); err != nil {
 		t.Fatalf("finish with existing pending: %v", err)
 	}
 	var pending int64
-	q.DB.Model(&models.Job{}).Where("kind = ? AND status = ?", models.JobSync, models.JobPending).Count(&pending)
+	q.DB.Model(&models.Job{}).Where("kind = ? AND status = ?", models.JobTriage, models.JobPending).Count(&pending)
 	if pending != 1 {
-		t.Fatalf("want 1 pending sync job, got %d", pending)
+		t.Fatalf("want 1 pending triage job, got %d", pending)
 	}
 }
 
 func TestSeedCreatesMissingOnly(t *testing.T) {
 	q, now := fixedQueue(t)
-	existing := mustJob(t, q, models.JobSync, models.JobPending, now.Add(30*time.Minute), 0)
+	existing := mustJob(t, q, models.JobTriage, models.JobPending, now.Add(30*time.Minute), 0)
 	if err := q.Seed(context.Background()); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	var jobs []models.Job
 	q.DB.Where("status = ?", models.JobPending).Order("kind").Find(&jobs)
-	if len(jobs) != 3 {
-		t.Fatalf("want 3 pending jobs, got %d", len(jobs))
-	}
-	for _, j := range jobs {
-		if j.Kind == models.JobSync {
-			if j.ID != existing.ID || !j.RunAt.Equal(existing.RunAt) {
-				t.Fatalf("seed must not touch existing pending row: %+v", j)
-			}
-			continue
-		}
-		if !j.RunAt.Equal(now) {
-			t.Fatalf("seeded %s should be due now, got %v", j.Kind, j.RunAt)
-		}
+	if len(jobs) != 1 || jobs[0].ID != existing.ID || !jobs[0].RunAt.Equal(existing.RunAt) {
+		t.Fatalf("seed must not touch or duplicate the existing pending row: %+v", jobs)
 	}
 }
 
 func TestDropRetiredKinds(t *testing.T) {
 	q, now := fixedQueue(t)
-	stale := mustJob(t, q, models.JobKind("reconcile"), models.JobPending, now, 0)
-	keep := mustJob(t, q, models.JobSync, models.JobPending, now, 0)
+	stale := mustJob(t, q, models.JobKind("planner"), models.JobPending, now, 0)
+	keep := mustJob(t, q, models.JobTriage, models.JobPending, now, 0)
 	if err := q.DropRetiredKinds(context.Background()); err != nil {
 		t.Fatalf("drop retired: %v", err)
 	}
 	if err := q.DB.First(&models.Job{}, "id = ?", stale.ID).Error; !errors.Is(err, gorm.ErrRecordNotFound) {
-		t.Fatalf("retired reconcile row should be deleted, got %v", err)
+		t.Fatalf("retired planner row should be deleted, got %v", err)
 	}
 	if err := q.DB.First(&models.Job{}, "id = ?", keep.ID).Error; err != nil {
 		t.Fatalf("served kind must survive: %v", err)
@@ -273,8 +221,8 @@ func TestDropRetiredKinds(t *testing.T) {
 
 func TestReapResetsRunning(t *testing.T) {
 	q, now := fixedQueue(t)
-	orphan := mustJob(t, q, models.JobPlanner, models.JobRunning, now.Add(-2*time.Hour), 2)
-	done := mustJob(t, q, models.JobSync, models.JobSucceeded, now.Add(-2*time.Hour), 1)
+	orphan := mustJob(t, q, models.JobTriage, models.JobRunning, now.Add(-2*time.Hour), 2)
+	done := mustJob(t, q, models.JobTriage, models.JobSucceeded, now.Add(-2*time.Hour), 1)
 	if err := q.Reap(context.Background()); err != nil {
 		t.Fatalf("reap: %v", err)
 	}
@@ -355,7 +303,7 @@ func TestReapStaleRequeuesAbandonedJobs(t *testing.T) {
 // the started_at IS NOT NULL predicate these would reap on every tick.
 func TestReapStaleIgnoresRunningRowsWithNoStartedAt(t *testing.T) {
 	q, now := fixedQueue(t)
-	mustJob(t, q, models.JobSync, models.JobRunning, now.Add(-24*time.Hour), 1)
+	mustJob(t, q, models.JobTriage, models.JobRunning, now.Add(-24*time.Hour), 1)
 
 	n, err := q.ReapStale(context.Background(), time.Hour)
 	if err != nil {

@@ -31,7 +31,7 @@ func TestStoreSaveLoad(t *testing.T) {
 		RefreshToken: "r",
 		Expiry:       time.Now().Add(time.Hour),
 	}
-	if err := s.Save(context.Background(), models.AccountPersonal, "you@x.com", "primary", tok); err != nil {
+	if err := s.Save(context.Background(), models.AccountPersonal, "you@x.com", tok); err != nil {
 		t.Fatal(err)
 	}
 	got, acct, err := s.Load(context.Background(), models.AccountPersonal)
@@ -45,7 +45,7 @@ func TestStoreSaveLoad(t *testing.T) {
 
 func TestStoreSaveMissingRefresh(t *testing.T) {
 	s := newStore(t)
-	err := s.Save(context.Background(), models.AccountPersonal, "you@x.com", "primary", &oauth2.Token{})
+	err := s.Save(context.Background(), models.AccountPersonal, "you@x.com", &oauth2.Token{})
 	if err == nil {
 		t.Fatal("expected error when refresh token missing")
 	}
@@ -63,8 +63,8 @@ func TestStoreAllOrdered(t *testing.T) {
 	s := newStore(t)
 	ctx := context.Background()
 	tok := &oauth2.Token{RefreshToken: "r"}
-	_ = s.Save(ctx, models.AccountPersonal, "p@x.com", "p", tok)
-	_ = s.Save(ctx, models.AccountWork, "w@x.com", "w", tok)
+	_ = s.Save(ctx, models.AccountPersonal, "p@x.com", tok)
+	_ = s.Save(ctx, models.AccountWork, "w@x.com", tok)
 	got, err := s.All(ctx)
 	if err != nil {
 		t.Fatal(err)

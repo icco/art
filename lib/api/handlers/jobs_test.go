@@ -32,8 +32,6 @@ func (f *fakeJobs) Enqueue(_ context.Context, kind models.JobKind) (models.Job, 
 
 func jobsRouter(h *handlers.Handlers) http.Handler {
 	r := chi.NewRouter()
-	r.Post("/sync", h.SyncRun)
-	r.Post("/replan", h.ReplanRun)
 	r.Post("/triage/run", h.TriageRun)
 	r.Get("/jobs", h.JobsList)
 	r.Get("/jobs/{id}", h.JobsGet)
@@ -45,7 +43,7 @@ func TestTriggerEndpointsEnqueue(t *testing.T) {
 	h := &handlers.Handlers{DB: testdb.Open(t), Jobs: f}
 	r := jobsRouter(h)
 	for path, kind := range map[string]models.JobKind{
-		"/sync": models.JobSync, "/replan": models.JobPlanner, "/triage/run": models.JobTriage,
+		"/triage/run": models.JobTriage,
 	} {
 		w := do(t, r, "POST", path, nil)
 		if w.Code != http.StatusAccepted {
@@ -71,9 +69,9 @@ func TestTriggerEndpointsEnqueue(t *testing.T) {
 func TestTriggerReportsRunning(t *testing.T) {
 	f := &fakeJobs{running: true}
 	h := &handlers.Handlers{DB: testdb.Open(t), Jobs: f}
-	w := do(t, jobsRouter(h), "POST", "/replan", nil)
+	w := do(t, jobsRouter(h), "POST", "/triage/run", nil)
 	if w.Code != http.StatusAccepted {
-		t.Fatalf("replan: %d %s", w.Code, w.Body)
+		t.Fatalf("triage: %d %s", w.Code, w.Body)
 	}
 	var resp enqueueResp
 	mustDecode(t, w, &resp)
@@ -86,7 +84,7 @@ func TestJobsListAndGet(t *testing.T) {
 	db := testdb.Open(t)
 	h := &handlers.Handlers{DB: db, Jobs: &fakeJobs{}}
 	r := jobsRouter(h)
-	job := models.Job{Kind: models.JobSync, Status: models.JobSucceeded, RunAt: time.Now(), MaxAttempts: 4}
+	job := models.Job{Kind: models.JobTriage, Status: models.JobSucceeded, RunAt: time.Now(), MaxAttempts: 4}
 	if err := db.Create(&job).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +112,7 @@ func TestJobsListAndGet(t *testing.T) {
 	}
 	var got models.Job
 	mustDecode(t, w, &got)
-	if got.ID != job.ID || got.Kind != models.JobSync {
+	if got.ID != job.ID || got.Kind != models.JobTriage {
 		t.Fatalf("get: want %s, got %+v", job.ID, got)
 	}
 	missing := "00000000-0000-0000-0000-000000000000"

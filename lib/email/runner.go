@@ -22,8 +22,7 @@ import (
 const triageLockKey = 0x4152545f5452 // "ART_TR"
 
 // Runner executes an email-triage pass across all linked accounts and records
-// it as an AgentRun row (kind=triage). It mirrors calendar.Runner plus the
-// planner's run bookkeeping.
+// it as an AgentRun row (kind=triage).
 type Runner struct {
 	Cfg   *config.Config
 	DB    *gorm.DB

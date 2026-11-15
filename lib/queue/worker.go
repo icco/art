@@ -5,12 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	"go.icco.me/art/lib/calendar"
 	"go.icco.me/art/lib/models"
 	gutillog "go.icco.me/gutil/logging"
 	"gorm.io/gorm"
@@ -30,34 +27,15 @@ const (
 	staleJobAfter = 2 * jobTimeout
 )
 
-// The job implementations, satisfied by calendar.Runner, agent.Planner, and
-// email.Runner.
-type (
-	// SyncService runs upstream calendar syncs.
-	SyncService interface {
-		RunAll(ctx context.Context) (map[string]string, error)
-	}
-	// PlannerService executes a planner pass.
-	PlannerService interface {
-		Run(ctx context.Context) error
-	}
-	// ReconcileService heals sessions against the synced calendar mirror.
-	ReconcileService interface {
-		Run(ctx context.Context) error
-	}
-	// TriageService executes an email-triage pass.
-	TriageService interface {
-		RunAll(ctx context.Context) error
-	}
-)
+// TriageService executes an email-triage pass; satisfied by email.Runner.
+type TriageService interface {
+	RunAll(ctx context.Context) error
+}
 
 // Worker polls the queue and runs jobs one at a time.
 type Worker struct {
-	Queue     *Queue
-	Sync      SyncService
-	Reconcile ReconcileService
-	Planner   PlannerService
-	Triage    TriageService
+	Queue  *Queue
+	Triage TriageService
 
 	poke     chan struct{}
 	stop     chan struct{}
@@ -66,15 +44,12 @@ type Worker struct {
 }
 
 // New returns a Worker over db ready to be Start()ed.
-func New(db *gorm.DB, sync SyncService, reconcile ReconcileService, planner PlannerService, triage TriageService) *Worker {
+func New(db *gorm.DB, triage TriageService) *Worker {
 	return &Worker{
-		Queue:     &Queue{DB: db},
-		Sync:      sync,
-		Reconcile: reconcile,
-		Planner:   planner,
-		Triage:    triage,
-		poke:      make(chan struct{}, 1),
-		stop:      make(chan struct{}),
+		Queue:  &Queue{DB: db},
+		Triage: triage,
+		poke:   make(chan struct{}, 1),
+		stop:   make(chan struct{}),
 	}
 }
 
@@ -86,9 +61,6 @@ func (w *Worker) Start(ctx context.Context) error {
 	}
 	if err := w.Queue.DropRetiredKinds(ctx); err != nil {
 		return fmt.Errorf("queue drop retired kinds: %w", err)
-	}
-	if err := calendar.PruneForeignCalendars(ctx, w.Queue.DB); err != nil {
-		return fmt.Errorf("prune foreign calendars: %w", err)
 	}
 	if err := w.Queue.Seed(ctx); err != nil {
 		return fmt.Errorf("queue seed: %w", err)
@@ -240,39 +212,8 @@ func (w *Worker) execute(ctx context.Context, kind models.JobKind) (warning stri
 			err = fmt.Errorf("%w: %v\n%s", errPanic, r, debug.Stack())
 		}
 	}()
-	switch kind {
-	case models.JobSync:
-		// Reconcile runs as the sync tail, always against a fresh mirror.
-		accountErrs, runErr := w.Sync.RunAll(ctx)
-		if runErr != nil {
-			return "", runErr
-		}
-		if err := w.Reconcile.Run(ctx); err != nil {
-			return "", err
-		}
-		return formatAccountErrors(accountErrs), nil
-	case models.JobPlanner:
-		return "", w.Planner.Run(ctx)
-	case models.JobTriage:
+	if kind == models.JobTriage {
 		return "", w.Triage.RunAll(ctx)
 	}
 	return "", fmt.Errorf("%w %q", errUnknownJobKind, kind)
-}
-
-// formatAccountErrors flattens sync's per-account errors, sorted for
-// stable output.
-func formatAccountErrors(errs map[string]string) string {
-	if len(errs) == 0 {
-		return ""
-	}
-	keys := make([]string, 0, len(errs))
-	for k := range errs {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	parts := make([]string, 0, len(keys))
-	for _, k := range keys {
-		parts = append(parts, k+": "+errs[k])
-	}
-	return strings.Join(parts, "; ")
 }

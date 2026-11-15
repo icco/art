@@ -10,37 +10,21 @@ type pageID int
 
 const (
 	pageDashboard pageID = iota
-	pageCalendar
-	pageProjects
-	pageHabits
 	pageDigest
-	pageSessions
-	pageWorkingHours
 	pageSettings
 )
 
 // pageOrder is the tab order used by the header and number keys.
 var pageOrder = []pageID{
-	pageDashboard, pageCalendar, pageProjects, pageHabits,
-	pageDigest, pageSessions, pageWorkingHours, pageSettings,
+	pageDashboard, pageDigest, pageSettings,
 }
 
 func (p pageID) String() string {
 	switch p {
 	case pageDashboard:
 		return "dashboard"
-	case pageCalendar:
-		return "calendar"
-	case pageProjects:
-		return "projects"
-	case pageHabits:
-		return "habits"
 	case pageDigest:
 		return "digest"
-	case pageSessions:
-		return "sessions"
-	case pageWorkingHours:
-		return "hours"
 	case pageSettings:
 		return "settings"
 	default:

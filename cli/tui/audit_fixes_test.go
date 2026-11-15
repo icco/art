@@ -1,16 +1,11 @@
 package tui
 
 import (
-	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
-
-// Stand-in failure for tests that only care that an error happened.
-var errTestBoom = errors.New("boom")
 
 // deadClient points at a closed port so requests fail fast without gcloud.
 func deadClient() *Client {
@@ -42,14 +37,14 @@ func TestNavigationDoesNotEmitResize(t *testing.T) {
 	mm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = mm.(rootModel)
 
-	_, cmd := m.navigate(pageCalendar)
+	_, cmd := m.navigate(pageDigest)
 	for _, msg := range execCmds(cmd) {
 		if sz, ok := msg.(tea.WindowSizeMsg); ok {
 			t.Fatalf("navigate emitted synthetic resize %+v", sz)
 		}
 	}
 
-	m.stack = []pageID{pageDashboard, pageCalendar}
+	m.stack = []pageID{pageDashboard, pageDigest}
 	_, cmd = m.pop()
 	for _, msg := range execCmds(cmd) {
 		if sz, ok := msg.(tea.WindowSizeMsg); ok {
@@ -61,7 +56,7 @@ func TestNavigationDoesNotEmitResize(t *testing.T) {
 func TestBusyGuardsAgentKeys(t *testing.T) {
 	m := newRootWithClient(Config{}, deadClient(), true)
 	m.busy = true
-	for _, code := range []rune{'r', 's', 't'} {
+	for _, code := range []rune{'t'} {
 		_, cmd := m.handleKey(tea.KeyPressMsg{Code: code})
 		if cmd != nil {
 			t.Errorf("key %q while busy should be a no-op", code)
@@ -70,30 +65,6 @@ func TestBusyGuardsAgentKeys(t *testing.T) {
 }
 
 // huh's only abort binding is ctrl+c, which root intercepts to quit the app.
-func TestProjectFormEscCancels(t *testing.T) {
-	p := newProjectsPage(deadClient(), true)
-	page, _ := p.Update(tea.KeyPressMsg{Code: 'a'})
-	if !page.FullInput() {
-		t.Fatal("form did not open")
-	}
-	page, _ = page.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if page.FullInput() {
-		t.Fatal("esc did not cancel the form")
-	}
-}
-
-func TestHabitFormEscCancels(t *testing.T) {
-	p := newHabitsPage(deadClient(), true)
-	page, _ := p.Update(tea.KeyPressMsg{Code: 'a'})
-	if !page.FullInput() {
-		t.Fatal("form did not open")
-	}
-	page, _ = page.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if page.FullInput() {
-		t.Fatal("esc did not cancel the form")
-	}
-}
-
 func TestDigestConfirmEscCancels(t *testing.T) {
 	p := newDigestPage(deadClient(), true)
 	pg, _ := p.Update(emailsMsg{emails: []Email{{ID: "e1", Subject: "s", Action: "archive"}}})
@@ -104,80 +75,6 @@ func TestDigestConfirmEscCancels(t *testing.T) {
 	pg, _ = pg.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if pg.FullInput() {
 		t.Fatal("esc did not cancel the confirm")
-	}
-}
-
-func TestHabitFormPayload(t *testing.T) {
-	_, fd, _ := newHabitForm(&Habit{Active: false, Kind: "personal", BlockDurationMinutes: 30, Cadence: Cadence{Type: "per_week", Count: 3}}, 0, 0)
-	h, err := fd.habit()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if h.Active {
-		t.Error("editing a paused habit reactivated it")
-	}
-	fd.minutes = "abc"
-	if _, err := fd.habit(); err == nil {
-		t.Error("non-numeric minutes should error, not become 0")
-	}
-	fd.minutes, fd.perWeek = "30", "x"
-	if _, err := fd.habit(); err == nil {
-		t.Error("non-numeric per-week count should error, not become 0")
-	}
-}
-
-func TestProjectFormPayload(t *testing.T) {
-	_, fd, _ := newProjectForm(nil, 0, 0)
-	fd.name, fd.hours, fd.deadline = "P", "nope", ""
-	if _, err := fd.project(); err == nil {
-		t.Error("non-numeric hours should error, not become 0")
-	}
-	fd.hours, fd.deadline = "4", "not-a-date"
-	if _, err := fd.project(); err == nil {
-		t.Error("unparseable deadline should error, not be dropped")
-	}
-	fd.deadline = "2026-08-01"
-	pr, err := fd.project()
-	if err != nil || pr.Deadline == nil || pr.TargetHours != 4 {
-		t.Fatalf("valid form rejected: %+v %v", pr, err)
-	}
-}
-
-func TestCalendarIgnoresStaleWindow(t *testing.T) {
-	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.Local)
-	orig := timeNow
-	timeNow = func() time.Time { return now }
-	defer func() { timeNow = orig }()
-
-	p := newCalendarPage(deadClient())
-	pg, _ := p.Update(tea.KeyPressMsg{Code: 'l'}) // next week
-	cal := pg.(calendarPage)
-
-	thisWeek := startOfWeek(now)
-	stale := eventsMsg{
-		events: []Event{{Summary: "old week"}},
-		from:   thisWeek, to: thisWeek.AddDate(0, 0, 7),
-	}
-	pg, _ = cal.Update(stale)
-	if got := pg.(calendarPage).events; len(got) != 0 {
-		t.Fatalf("stale window applied: %+v", got)
-	}
-
-	fresh := eventsMsg{
-		events: []Event{{Summary: "next week"}},
-		from:   cal.anchor.AddDate(0, 0, -1), to: cal.anchor.AddDate(0, 0, 8),
-	}
-	pg, _ = pg.Update(fresh)
-	if got := pg.(calendarPage).events; len(got) != 1 {
-		t.Fatalf("covering window ignored: %+v", got)
-	}
-}
-
-func TestDashboardStopsLoadingOnError(t *testing.T) {
-	p := newDashboardPage(deadClient())
-	pg, _ := p.Update(errMsg{errTestBoom})
-	if view := pg.(dashboardPage).renderToday(); strings.Contains(view, "loading") {
-		t.Fatalf("dashboard stuck on loading after error: %q", view)
 	}
 }
 

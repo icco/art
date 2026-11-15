@@ -16,18 +16,6 @@ import (
 // AccountKind identifies which linked Google account an entity belongs to.
 type AccountKind string
 
-// SlotKind tags whether something is considered work or personal time.
-type SlotKind string
-
-// ProjectStatus is the lifecycle status of a Project.
-type ProjectStatus string
-
-// SourceKind says whether a Session was generated from a Project or Habit.
-type SourceKind string
-
-// SessionStatus is the lifecycle status of a Session.
-type SessionStatus string
-
 // AgentRunStatus is the lifecycle status of an AgentRun.
 type AgentRunStatus string
 
@@ -52,21 +40,6 @@ const (
 	AccountPersonal AccountKind = "personal"
 	AccountWork     AccountKind = "work"
 
-	SlotWork     SlotKind = "work"
-	SlotPersonal SlotKind = "personal"
-
-	ProjectActive ProjectStatus = "active"
-	ProjectPaused ProjectStatus = "paused"
-	ProjectDone   ProjectStatus = "done"
-
-	SourceProject SourceKind = "project"
-	SourceHabit   SourceKind = "habit"
-
-	SessionPlanned  SessionStatus = "planned"
-	SessionHappened SessionStatus = "happened"
-	SessionSkipped  SessionStatus = "skipped"
-	SessionMoved    SessionStatus = "moved"
-
 	AgentRunRunning   AgentRunStatus = "running"
 	AgentRunSucceeded AgentRunStatus = "succeeded"
 	AgentRunFailed    AgentRunStatus = "failed"
@@ -75,9 +48,7 @@ const (
 	AgentRunTriage    AgentRunKind = "triage"
 	AgentRunReconcile AgentRunKind = "reconcile"
 
-	JobSync    JobKind = "sync"
-	JobPlanner JobKind = "planner"
-	JobTriage  JobKind = "triage"
+	JobTriage JobKind = "triage"
 
 	JobPending   JobStatus = "pending"
 	JobRunning   JobStatus = "running"
@@ -105,12 +76,6 @@ const (
 // Valid reports whether a is one of the recognised AccountKind values.
 func (a AccountKind) Valid() bool { return a == AccountPersonal || a == AccountWork }
 
-// Valid reports whether s is one of the recognised SlotKind values.
-func (s SlotKind) Valid() bool { return s == SlotWork || s == SlotPersonal }
-
-// Valid reports whether s is one of the recognised SourceKind values.
-func (s SourceKind) Valid() bool { return s == SourceProject || s == SourceHabit }
-
 // Valid reports whether k is one of the recognised AgentRunKind values.
 func (k AgentRunKind) Valid() bool {
 	return k == AgentRunPlanner || k == AgentRunTriage || k == AgentRunReconcile
@@ -118,7 +83,7 @@ func (k AgentRunKind) Valid() bool {
 
 // Valid reports whether k is one of the recognised JobKind values.
 func (k JobKind) Valid() bool {
-	return k == JobSync || k == JobPlanner || k == JobTriage
+	return k == JobTriage
 }
 
 // Valid reports whether s is one of the recognised JobStatus values.
@@ -130,8 +95,8 @@ func (s JobStatus) Valid() bool {
 	return false
 }
 
-// JobKinds returns all job kinds in their within-slot execution order.
-func JobKinds() []JobKind { return []JobKind{JobSync, JobPlanner, JobTriage} }
+// JobKinds returns all served job kinds.
+func JobKinds() []JobKind { return []JobKind{JobTriage} }
 
 // Valid reports whether c is one of the recognised EmailCategory values.
 func (c EmailCategory) Valid() bool {
@@ -164,101 +129,6 @@ type Account struct {
 	Kind                  AccountKind `gorm:"type:varchar(16);uniqueIndex;not null;check:kind IN ('personal','work')" json:"kind"`
 	Email                 string      `gorm:"type:varchar(255);not null"                                              json:"email"`
 	RefreshTokenEncrypted []byte      `gorm:"type:bytea;not null"                                                     json:"-"`
-	PrimaryCalendarID     string      `gorm:"type:varchar(255);not null"                                              json:"primary_calendar_id"`
-}
-
-// WorkingHour is one allowed-time window for a given slot kind and weekday.
-type WorkingHour struct {
-	Base
-	SlotKind    SlotKind `gorm:"type:varchar(16);not null;check:slot_kind IN ('work','personal');uniqueIndex:idx_wh_unique,priority:1" json:"slot_kind"`
-	DayOfWeek   int      `gorm:"not null;check:day_of_week BETWEEN 0 AND 6;uniqueIndex:idx_wh_unique,priority:2"                       json:"day_of_week"`
-	StartMinute int      `gorm:"not null;check:start_minute BETWEEN 0 AND 1439;uniqueIndex:idx_wh_unique,priority:3"                   json:"start_minute"`
-	EndMinute   int      `gorm:"not null;check:end_minute BETWEEN 1 AND 1440;check:chk_working_hours_order,end_minute > start_minute"  json:"end_minute"`
-}
-
-// Project is a goal with a target number of hours and an optional deadline.
-type Project struct {
-	Base
-	Name           string        `gorm:"type:varchar(255);not null"                                                                  json:"name"`
-	Description    string        `gorm:"type:text;not null;default:''"                                                               json:"description"`
-	Kind           SlotKind      `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')"                           json:"kind"`
-	TargetHours    float64       `gorm:"type:numeric(6,2);not null"                                                                  json:"target_hours"`
-	ScheduledHours float64       `gorm:"type:numeric(6,2);not null;default:0"                                                        json:"scheduled_hours"`
-	Deadline       *time.Time    `json:"deadline,omitempty"`
-	Status         ProjectStatus `gorm:"type:varchar(16);not null;default:'active';index;check:status IN ('active','paused','done')" json:"status"`
-}
-
-// Cadence is the JSONB payload on Habit.Cadence.
-type Cadence struct {
-	Type             string   `json:"type"`
-	Count            int      `json:"count"`
-	PreferredWindows []string `json:"preferred_windows,omitempty"`
-}
-
-// Valid reports whether the cadence type and count are usable by the planner.
-func (c Cadence) Valid() bool {
-	switch c.Type {
-	case "per_week", "per_day":
-		return c.Count > 0
-	}
-	return false
-}
-
-// Habit is a recurring practice with a cadence and per-block duration.
-type Habit struct {
-	Base
-	Name                 string         `gorm:"type:varchar(255);not null"                                        json:"name"`
-	Description          string         `gorm:"type:text;not null;default:''"                                     json:"description"`
-	Kind                 SlotKind       `gorm:"type:varchar(16);not null;index;check:kind IN ('work','personal')" json:"kind"`
-	BlockDurationMinutes int            `gorm:"not null;check:block_duration_minutes > 0"                         json:"block_duration_minutes"`
-	Cadence              datatypes.JSON `gorm:"type:jsonb;not null"                                               json:"cadence"`
-	Active               bool           `gorm:"not null;default:true;index"                                       json:"active"`
-}
-
-// Session is one planned or completed instance of a project or habit on the calendar.
-type Session struct {
-	Base
-	Source         SourceKind    `gorm:"type:varchar(16);not null;check:source IN ('project','habit');index:idx_session_source,priority:1"                   json:"source"`
-	SourceID       string        `gorm:"type:uuid;not null;index:idx_session_source,priority:2"                                                              json:"source_id"`
-	AccountKind    AccountKind   `gorm:"type:varchar(16);not null;check:account_kind IN ('personal','work');uniqueIndex:idx_session_event_lookup,priority:1" json:"account_kind"`
-	CalendarID     string        `gorm:"type:varchar(255);not null;uniqueIndex:idx_session_event_lookup,priority:2"                                          json:"calendar_id"`
-	GoogleEventID  *string       `gorm:"type:varchar(255);uniqueIndex:idx_session_event_lookup,priority:3"                                                   json:"google_event_id,omitempty"`
-	ScheduledStart time.Time     `gorm:"not null;index"                                                                                                      json:"scheduled_start"`
-	ScheduledEnd   time.Time     `gorm:"not null"                                                                                                            json:"scheduled_end"`
-	PlannedStart   *time.Time    `json:"planned_start,omitempty"`
-	PlannedEnd     *time.Time    `json:"planned_end,omitempty"`
-	ActualStart    *time.Time    `json:"actual_start,omitempty"`
-	ActualEnd      *time.Time    `json:"actual_end,omitempty"`
-	Status         SessionStatus `gorm:"type:varchar(16);not null;default:'planned';check:status IN ('planned','happened','skipped','moved')"                json:"status"`
-}
-
-// Event mirrors a Google Calendar event pulled into the local database.
-type Event struct {
-	Base
-	AccountKind   AccountKind `gorm:"type:varchar(16);not null;uniqueIndex:idx_event_lookup,priority:1;index:idx_event_window,priority:1" json:"account_kind"`
-	CalendarID    string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:2"                                  json:"calendar_id"`
-	GoogleEventID string      `gorm:"type:varchar(255);not null;uniqueIndex:idx_event_lookup,priority:3"                                  json:"google_event_id"`
-	Summary       string      `gorm:"type:text;not null;default:''"                                                                       json:"summary"`
-	Description   string      `gorm:"type:text;not null;default:''"                                                                       json:"description"`
-	StartTime     time.Time   `gorm:"not null;index:idx_event_window,priority:2"                                                          json:"start_time"`
-	EndTime       time.Time   `gorm:"not null"                                                                                            json:"end_time"`
-	AllDay        bool        `gorm:"not null;default:false"                                                                              json:"all_day"`
-	AttendeeCount int         `gorm:"not null;default:0"                                                                                  json:"attendee_count"`
-	EventType     string      `gorm:"type:varchar(32);not null;default:'default'"                                                         json:"event_type"`
-	// Transparency is Google's free/busy flag: "transparent" means the event
-	// does not consume time. Empty or "opaque" means busy.
-	Transparency       string         `gorm:"type:varchar(16);not null;default:''"          json:"transparency"`
-	IsArtManaged       bool           `gorm:"not null;default:false;index"                  json:"is_art_managed"`
-	Status             string         `gorm:"type:varchar(32);not null;default:'confirmed'" json:"status"`
-	ExtendedProperties datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"              json:"extended_properties"`
-}
-
-// SyncState tracks the per-calendar sync token used for incremental syncs.
-type SyncState struct {
-	AccountKind   AccountKind `gorm:"type:varchar(16);primaryKey"  json:"account_kind"`
-	CalendarID    string      `gorm:"type:varchar(255);primaryKey" json:"calendar_id"`
-	LastSyncToken *string     `gorm:"type:text"                    json:"last_sync_token,omitempty"`
-	LastSyncedAt  *time.Time  `json:"last_synced_at,omitempty"`
 }
 
 // AgentRun records one planner or triage invocation, its model usage, and
@@ -332,12 +202,6 @@ func All() []any {
 	return []any{
 		&Account{},
 		&Setting{},
-		&WorkingHour{},
-		&Project{},
-		&Habit{},
-		&Session{},
-		&Event{},
-		&SyncState{},
 		&AgentRun{},
 		&EmailMessage{},
 		&Job{},
