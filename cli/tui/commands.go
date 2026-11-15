@@ -79,7 +79,7 @@ func loadRuns(c *Client) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := bg()
 		defer cancel()
-		rs, err := c.ListRuns(ctx, "", 20)
+		rs, err := c.ListRuns(ctx, "triage", 20)
 		if err != nil {
 			return errMsg{err}
 		}
