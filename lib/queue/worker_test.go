@@ -10,109 +10,48 @@ import (
 	"go.icco.me/art/lib/testdb"
 )
 
-var (
-	errTestMirrorStale = errors.New("mirror stale")
-	errTestVertexDown  = errors.New("vertex down")
-)
+var errTestVertexDown = errors.New("vertex down")
 
-type fakeServices struct {
-	order        []string
-	syncErrs     map[string]string
-	syncErr      error
-	plannerErr   error
-	reconcileErr error
-	panicKind    models.JobKind
+type triageFake struct {
+	runs  int
+	err   error
+	panic bool
 }
 
-func (f *fakeServices) RunAll(context.Context) (map[string]string, error) {
-	f.order = append(f.order, "sync")
-	if f.panicKind == models.JobSync {
-		panic("sync kaboom")
-	}
-	return f.syncErrs, f.syncErr
-}
-
-func (f *fakeServices) Run(context.Context) error {
-	f.order = append(f.order, "planner")
-	if f.panicKind == models.JobPlanner {
-		panic("planner kaboom")
-	}
-	return f.plannerErr
-}
-
-// reconcileFake records the reconcile pass in the shared order slice. Reconcile
-// runs as the tail of the sync job, so its entry lands right after "sync".
-type reconcileFake struct{ f *fakeServices }
-
-func (r reconcileFake) Run(context.Context) error {
-	r.f.order = append(r.f.order, "reconcile")
-	return r.f.reconcileErr
-}
-
-// triageFake separates triage's RunAll signature from sync's.
-type triageFake struct{ f *fakeServices }
-
-func (t triageFake) RunAll(context.Context) error {
-	t.f.order = append(t.f.order, "triage")
-	if t.f.panicKind == models.JobTriage {
+func (f *triageFake) RunAll(context.Context) error {
+	f.runs++
+	if f.panic {
 		panic("triage kaboom")
 	}
-	return nil
+	return f.err
 }
 
-func testWorker(t *testing.T, f *fakeServices) *Worker {
+func testWorker(t *testing.T, f *triageFake) *Worker {
 	t.Helper()
-	return New(testdb.Open(t), f, reconcileFake{f}, f, triageFake{f})
+	return New(testdb.Open(t), f)
 }
 
-func TestDrainRunsDueJobsInOrder(t *testing.T) {
-	f := &fakeServices{}
+func TestDrainRunsDueJobs(t *testing.T) {
+	f := &triageFake{}
 	w := testWorker(t, f)
 	ctx := context.Background()
 	if err := w.Queue.Seed(ctx); err != nil {
 		t.Fatal(err)
 	}
 	w.drain(ctx)
-	want := []string{"sync", "reconcile", "planner", "triage"}
-	if len(f.order) != len(want) {
-		t.Fatalf("want %v, got %v", want, f.order)
-	}
-	for i := range want {
-		if f.order[i] != want[i] {
-			t.Fatalf("want %v, got %v", want, f.order)
-		}
+	if f.runs != 1 {
+		t.Fatalf("want 1 triage run, got %d", f.runs)
 	}
 	var pending, succeeded int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobPending).Count(&pending)
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&succeeded)
-	if pending != 3 || succeeded != 3 {
-		t.Fatalf("want 3 succeeded + 3 chained pending, got %d/%d", succeeded, pending)
-	}
-}
-
-func TestDrainReconcileErrorFailsSync(t *testing.T) {
-	f := &fakeServices{reconcileErr: errTestMirrorStale}
-	w := testWorker(t, f)
-	ctx := context.Background()
-	if err := w.Queue.Seed(ctx); err != nil {
-		t.Fatal(err)
-	}
-	w.drain(ctx)
-	// Reconcile runs as the sync job's tail, so its failure fails that job.
-	if len(f.order) < 2 || f.order[0] != "sync" || f.order[1] != "reconcile" {
-		t.Fatalf("sync must run reconcile as its tail, got %v", f.order)
-	}
-	var job models.Job
-	if err := w.Queue.DB.First(&job, "kind = ?", models.JobSync).Error; err != nil {
-		t.Fatal(err)
-	}
-	if job.Status != models.JobPending || job.LastError != "mirror stale" {
-		t.Fatalf("reconcile failure should fail the sync job, got %+v", job)
+	if pending != 1 || succeeded != 1 {
+		t.Fatalf("want 1 succeeded + 1 chained pending, got %d/%d", succeeded, pending)
 	}
 }
 
 func TestDrainRecordsFailureForRetry(t *testing.T) {
-	f := &fakeServices{plannerErr: errTestVertexDown}
+	f := &triageFake{err: errTestVertexDown}
 	w := testWorker(t, f)
 	ctx := context.Background()
 	if err := w.Queue.Seed(ctx); err != nil {
@@ -120,7 +59,7 @@ func TestDrainRecordsFailureForRetry(t *testing.T) {
 	}
 	w.drain(ctx)
 	var job models.Job
-	if err := w.Queue.DB.First(&job, "kind = ?", models.JobPlanner).Error; err != nil {
+	if err := w.Queue.DB.First(&job, "kind = ?", models.JobTriage).Error; err != nil {
 		t.Fatal(err)
 	}
 	if job.Status != models.JobPending || job.Attempts != 1 || job.LastError != "vertex down" {
@@ -132,7 +71,7 @@ func TestDrainRecordsFailureForRetry(t *testing.T) {
 }
 
 func TestDrainRecoversPanic(t *testing.T) {
-	f := &fakeServices{panicKind: models.JobTriage}
+	f := &triageFake{panic: true}
 	w := testWorker(t, f)
 	ctx := context.Background()
 	if err := w.Queue.Seed(ctx); err != nil {
@@ -148,25 +87,8 @@ func TestDrainRecoversPanic(t *testing.T) {
 	}
 }
 
-func TestDrainKeepsSyncWarnings(t *testing.T) {
-	f := &fakeServices{syncErrs: map[string]string{"work": "token expired", "personal": "rate limited"}}
-	w := testWorker(t, f)
-	ctx := context.Background()
-	if err := w.Queue.Seed(ctx); err != nil {
-		t.Fatal(err)
-	}
-	w.drain(ctx)
-	var job models.Job
-	if err := w.Queue.DB.First(&job, "kind = ? AND status = ?", models.JobSync, models.JobSucceeded).Error; err != nil {
-		t.Fatal(err)
-	}
-	if job.LastError != "personal: rate limited; work: token expired" {
-		t.Fatalf("want sorted warning string, got %q", job.LastError)
-	}
-}
-
 func TestStartSeedsAndStops(t *testing.T) {
-	f := &fakeServices{}
+	f := &triageFake{}
 	w := testWorker(t, f)
 	if err := w.Start(t.Context()); err != nil {
 		t.Fatalf("start: %v", err)
@@ -175,7 +97,7 @@ func TestStartSeedsAndStops(t *testing.T) {
 	for time.Now().Before(deadline) {
 		var n int64
 		w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-		if n == 3 {
+		if n == 1 {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -183,15 +105,14 @@ func TestStartSeedsAndStops(t *testing.T) {
 	w.Stop()
 	var n int64
 	w.Queue.DB.Model(&models.Job{}).Where("status = ?", models.JobSucceeded).Count(&n)
-	if n != 3 {
-		t.Fatalf("want 3 succeeded jobs after start, got %d", n)
+	if n != 1 {
+		t.Fatalf("want 1 succeeded job after start, got %d", n)
 	}
 }
 
 func TestEnqueuePokesWorker(t *testing.T) {
-	f := &fakeServices{}
-	w := testWorker(t, f)
-	if _, _, err := w.Enqueue(context.Background(), models.JobSync); err != nil {
+	w := testWorker(t, &triageFake{})
+	if _, _, err := w.Enqueue(context.Background(), models.JobTriage); err != nil {
 		t.Fatal(err)
 	}
 	select {

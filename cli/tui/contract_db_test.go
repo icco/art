@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"go.icco.me/art/lib/api/handlers"
+	"go.icco.me/art/lib/settings"
 	"go.icco.me/art/lib/testdb"
 )
 
@@ -14,31 +15,26 @@ import (
 // contract drift (e.g. sending fields DisallowUnknownFields rejects) fails here.
 func TestClientAgainstRealHandlers(t *testing.T) {
 	db := testdb.Open(t)
-	h := &handlers.Handlers{DB: db}
+	h := &handlers.Handlers{DB: db, Settings: settings.New(db, nil)}
 	r := chi.NewRouter()
-	r.Post("/projects", h.ProjectsCreate)
-	r.Patch("/projects/{id}", h.ProjectsUpdate)
-	r.Post("/habits", h.HabitsCreate)
-	r.Patch("/habits/{id}", h.HabitsUpdate)
+	r.Get("/settings", h.SettingsGet)
+	r.Put("/settings", h.SettingsUpdate)
 	server := httptest.NewServer(r)
 	defer server.Close()
 
 	c := stubClient(server)
 	ctx := context.Background()
 
-	hb, err := c.CreateHabit(ctx, Habit{Name: "Walk", BlockDurationMinutes: 30, Cadence: Cadence{Type: "per_week", Count: 3}, Active: true})
+	s, err := c.GetSettings(ctx)
 	if err != nil {
-		t.Fatalf("create habit: %v", err)
+		t.Fatalf("get settings: %v", err)
 	}
-	if _, err := c.UpdateHabit(ctx, hb.ID, Habit{Name: "Walk more", BlockDurationMinutes: 45, Cadence: Cadence{Type: "per_week", Count: 2}, Active: true}); err != nil {
-		t.Fatalf("update habit: %v", err)
-	}
-
-	p, err := c.CreateProject(ctx, Project{Name: "Book", Kind: "work", TargetHours: 40})
+	s.TriageBackfillDays = 3
+	got, err := c.UpdateSettings(ctx, s)
 	if err != nil {
-		t.Fatalf("create project: %v", err)
+		t.Fatalf("update settings: %v", err)
 	}
-	if _, err := c.UpdateProject(ctx, p.ID, Project{Name: "Book", Kind: "work", TargetHours: 20}); err != nil {
-		t.Fatalf("update project: %v", err)
+	if got.TriageBackfillDays != 3 {
+		t.Fatalf("backfill = %d, want 3", got.TriageBackfillDays)
 	}
 }

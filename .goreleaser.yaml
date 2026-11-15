@@ -42,7 +42,7 @@ homebrew_casks:
       owner: icco
       name: homebrew-tap
     homepage: https://github.com/icco/art
-    description: Personal scheduling agent — TUI for the art server
+    description: Personal email triage agent — TUI for the art server
     binaries:
       - art
     hooks:

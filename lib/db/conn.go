@@ -15,8 +15,7 @@ import (
 
 // Open connects to dsn, wires zap logging, and runs AutoMigrate.
 func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
-	// ErrRecordNotFound is expected control flow (e.g. a calendar's first
-	// sync), not an error worth a stack trace.
+	// ErrRecordNotFound is expected control flow, not an error worth a stack trace.
 	gormLog := zapgorm2.New(log)
 	gormLog.IgnoreRecordNotFoundError = true
 	cfg := &gorm.Config{Logger: gormLog, TranslateError: true}
@@ -32,17 +31,14 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	if err := dropSessionGlobalEventIndex(db); err != nil {
-		return nil, fmt.Errorf("drop session event index: %w", err)
-	}
 	if err := db.AutoMigrate(models.All()...); err != nil {
 		return nil, fmt.Errorf("auto-migrate: %w", err)
 	}
 	if err := migrateEmailCategories(db); err != nil {
 		return nil, fmt.Errorf("migrate email categories: %w", err)
 	}
-	if err := dropArtCalendarColumn(db); err != nil {
-		return nil, fmt.Errorf("drop art calendar column: %w", err)
+	if err := dropScheduling(db); err != nil {
+		return nil, fmt.Errorf("drop scheduling schema: %w", err)
 	}
 	if err := migrateKindConstraints(db); err != nil {
 		return nil, fmt.Errorf("migrate kind constraints: %w", err)
@@ -88,27 +84,18 @@ func migrateKindConstraints(db *gorm.DB) error {
 		 CHECK (kind IN ('planner','triage','reconcile'))`)
 }
 
-// dropSessionGlobalEventIndex retires the table-global unique index on
-// sessions.google_event_id (now unique per account+calendar). AutoMigrate
-// never drops indexes, so this is explicit. Idempotent.
-func dropSessionGlobalEventIndex(db *gorm.DB) error {
+// dropScheduling removes the tables and account columns of the retired calendar
+// planner. AutoMigrate never drops anything, so this is explicit. Idempotent.
+func dropScheduling(db *gorm.DB) error {
 	m := db.Migrator()
-	if !m.HasIndex(&models.Session{}, "idx_session_google_event") {
-		return nil
+	for _, col := range []string{"art_calendar_id", "primary_calendar_id"} {
+		if m.HasColumn(&models.Account{}, col) {
+			if err := m.DropColumn(&models.Account{}, col); err != nil {
+				return err
+			}
+		}
 	}
-	return m.DropIndex(&models.Session{}, "idx_session_google_event")
-}
-
-// dropArtCalendarColumn removes the retired art_calendar_id column. Art always
-// writes focus blocks to the account's primary calendar, so the separate
-// art-calendar override no longer exists. AutoMigrate never drops columns, so
-// this is explicit. Idempotent: a no-op once the column is gone.
-func dropArtCalendarColumn(db *gorm.DB) error {
-	m := db.Migrator()
-	if !m.HasColumn(&models.Account{}, "art_calendar_id") {
-		return nil
-	}
-	return m.DropColumn(&models.Account{}, "art_calendar_id")
+	return m.DropTable("sessions", "habits", "projects", "working_hours", "events", "sync_states")
 }
 
 // migrateEmailCategories remaps the retired 'read'/'thinking' categories to

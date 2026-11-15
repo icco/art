@@ -14,7 +14,6 @@ import (
 	"go.icco.me/art/lib/models"
 	"golang.org/x/oauth2"
 	googleoauth "golang.org/x/oauth2/google"
-	"google.golang.org/api/calendar/v3"
 	"google.golang.org/api/gmail/v1"
 	oauthv2 "google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
@@ -28,7 +27,6 @@ import (
 // it never drafts, sends, or deletes mail. Adding it forces re-consent on every
 // linked account.
 var Scopes = []string{
-	calendar.CalendarScope,
 	gmail.GmailModifyScope,
 	"openid",
 	"https://www.googleapis.com/auth/userinfo.email",
@@ -128,12 +126,7 @@ func (f *Flow) Complete(ctx context.Context, state, code string) (string, string
 		f.revoke(ctx, tok.RefreshToken)
 		return "", "", fmt.Errorf("oauth: userinfo: %w", err)
 	}
-	primary, err := fetchPrimaryCalendar(ctx, ts)
-	if err != nil {
-		f.revoke(ctx, tok.RefreshToken)
-		return "", "", fmt.Errorf("oauth: primary calendar: %w", err)
-	}
-	if err := f.Store.Save(ctx, p.kind, email, primary, tok); err != nil {
+	if err := f.Store.Save(ctx, p.kind, email, tok); err != nil {
 		f.revoke(ctx, tok.RefreshToken)
 		return "", "", fmt.Errorf("oauth: save: %w", err)
 	}
@@ -222,18 +215,6 @@ func fetchEmail(ctx context.Context, ts oauth2.TokenSource) (string, error) {
 		return "", err
 	}
 	return info.Email, nil
-}
-
-func fetchPrimaryCalendar(ctx context.Context, ts oauth2.TokenSource) (string, error) {
-	svc, err := calendar.NewService(ctx, option.WithTokenSource(ts))
-	if err != nil {
-		return "", err
-	}
-	cal, err := svc.Calendars.Get("primary").Context(ctx).Do()
-	if err != nil {
-		return "", err
-	}
-	return cal.Id, nil
 }
 
 func randState() (string, error) {

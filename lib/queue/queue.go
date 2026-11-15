@@ -40,18 +40,9 @@ func backoff(attempt int) time.Duration {
 	return d
 }
 
-// cadence is how often a kind repeats: sync (which reconciles as its tail) runs
-// every 10 minutes so manual calendar edits are caught quickly; the planner
-// runs hourly and triage every 30 minutes.
-//
-// The planner ran every 15 min as an LLM agent; hourly is enough for a 30-day
-// window now that a pass is free, and sync retracts clashes within minutes.
+// cadence is how often a kind repeats.
 func cadence(kind models.JobKind) time.Duration {
 	switch kind {
-	case models.JobSync:
-		return 10 * time.Minute
-	case models.JobPlanner:
-		return time.Hour
 	case models.JobTriage:
 		return 30 * time.Minute
 	default:
@@ -99,8 +90,7 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 	return job, running, err
 }
 
-// claimSQL claims the next due job; kinds sharing a slot run
-// sync → planner → triage.
+// claimSQL claims the next due job.
 //
 // The bound is a parameter, not the database's now(): run_at is written from
 // Go's clock, and an app clock milliseconds ahead would claim nothing at all.
@@ -109,7 +99,7 @@ UPDATE jobs SET status = 'running', started_at = ?, attempts = attempts + 1, upd
 WHERE id = (
 	SELECT id FROM jobs
 	WHERE status = 'pending' AND run_at <= ?
-	ORDER BY run_at, CASE kind WHEN 'sync' THEN 0 WHEN 'planner' THEN 1 ELSE 2 END
+	ORDER BY run_at
 	LIMIT 1
 	FOR UPDATE SKIP LOCKED
 )
@@ -208,7 +198,7 @@ func (q *Queue) Reap(ctx context.Context) error {
 }
 
 // DropRetiredKinds deletes queued jobs of no-longer-served kinds, so a row from
-// a merged-away kind (e.g. the old reconcile) can't fail and re-chain forever.
+// a merged-away kind (e.g. the old sync or planner) can't fail and re-chain forever.
 func (q *Queue) DropRetiredKinds(ctx context.Context) error {
 	kinds := models.JobKinds()
 	valid := make([]string, len(kinds))

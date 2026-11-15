@@ -13,16 +13,12 @@ import (
 // settingsForm holds the knobs as strings; huh validates before submit and
 // settings() reparses, so a bad number never reaches the API.
 type settingsForm struct {
-	softTitles     string
-	triageEnabled  bool
-	triageDryRun   bool
-	threshold      string
-	backfillDays   string
-	reconcileDays  string
-	horizonDays    string
-	blockMinMinute string
-	blockMaxMinute string
-	dailyBudget    string
+	triageEnabled bool
+	triageDryRun  bool
+	threshold     string
+	backfillDays  string
+	reconcileDays string
+	dailyBudget   string
 }
 
 // settingsPage edits the runtime settings. Deploy-time config (timezone, owner
@@ -119,11 +115,8 @@ func (fd *settingsForm) settings() (Settings, error) {
 		return Settings{}, fmt.Errorf("daily budget %q: %w", fd.dailyBudget, errNotNumber)
 	}
 	nums := map[string]string{
-		"backfill days":     fd.backfillDays,
-		"reconcile days":    fd.reconcileDays,
-		"plan horizon days": fd.horizonDays,
-		"min block minutes": fd.blockMinMinute,
-		"max block minutes": fd.blockMaxMinute,
+		"backfill days":  fd.backfillDays,
+		"reconcile days": fd.reconcileDays,
 	}
 	parsed := map[string]int{}
 	for label, raw := range nums {
@@ -134,29 +127,13 @@ func (fd *settingsForm) settings() (Settings, error) {
 		parsed[label] = n
 	}
 	return Settings{
-		SoftEventTitles:           splitTitles(fd.softTitles),
 		TriageEnabled:             fd.triageEnabled,
 		TriageDryRun:              fd.triageDryRun,
 		TriageConfidenceThreshold: threshold,
 		TriageBackfillDays:        parsed["backfill days"],
 		TriageReconcileDays:       parsed["reconcile days"],
-		PlanHorizonDays:           parsed["plan horizon days"],
-		FocusBlockMinMinutes:      parsed["min block minutes"],
-		FocusBlockMaxMinutes:      parsed["max block minutes"],
 		DailyBudgetUSD:            budget,
 	}, nil
-}
-
-// splitTitles turns the comma-separated field into titles, dropping blanks so
-// an empty field means "no soft events" rather than one empty title.
-func splitTitles(s string) []string {
-	out := []string{}
-	for t := range strings.SplitSeq(s, ",") {
-		if t = strings.TrimSpace(t); t != "" {
-			out = append(out, t)
-		}
-	}
-	return out
 }
 
 func (p settingsPage) View() string {
@@ -167,19 +144,12 @@ func (p settingsPage) View() string {
 		return titleStyle.Render("Settings") + "\n\n" + faintStyle.Render("loading…")
 	}
 	s := p.settings
-	titles := "—"
-	if len(s.SoftEventTitles) > 0 {
-		titles = strings.Join(s.SoftEventTitles, ", ")
-	}
 	rows := [][2]string{
-		{"Soft event titles", titles},
 		{"Triage enabled", onOff(s.TriageEnabled)},
 		{"Triage dry run", onOff(s.TriageDryRun)},
 		{"Confidence threshold", strconv.FormatFloat(s.TriageConfidenceThreshold, 'f', -1, 64)},
 		{"Triage backfill days", strconv.Itoa(s.TriageBackfillDays)},
 		{"Triage reconcile days", strconv.Itoa(s.TriageReconcileDays)},
-		{"Plan horizon days", strconv.Itoa(s.PlanHorizonDays)},
-		{"Focus block minutes", fmt.Sprintf("%d-%d", s.FocusBlockMinMinutes, s.FocusBlockMaxMinutes)},
 		{"Daily LLM budget", budgetLabel(s.DailyBudgetUSD)},
 	}
 	var b strings.Builder
@@ -200,27 +170,19 @@ func onOff(b bool) string {
 
 func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
 	fd := &settingsForm{
-		softTitles:     strings.Join(s.SoftEventTitles, ", "),
-		triageEnabled:  s.TriageEnabled,
-		triageDryRun:   s.TriageDryRun,
-		threshold:      strconv.FormatFloat(s.TriageConfidenceThreshold, 'f', -1, 64),
-		backfillDays:   strconv.Itoa(s.TriageBackfillDays),
-		reconcileDays:  strconv.Itoa(s.TriageReconcileDays),
-		horizonDays:    strconv.Itoa(s.PlanHorizonDays),
-		blockMinMinute: strconv.Itoa(s.FocusBlockMinMinutes),
-		blockMaxMinute: strconv.Itoa(s.FocusBlockMaxMinutes),
-		dailyBudget:    strconv.FormatFloat(s.DailyBudgetUSD, 'f', -1, 64),
+		triageEnabled: s.TriageEnabled,
+		triageDryRun:  s.TriageDryRun,
+		threshold:     strconv.FormatFloat(s.TriageConfidenceThreshold, 'f', -1, 64),
+		backfillDays:  strconv.Itoa(s.TriageBackfillDays),
+		reconcileDays: strconv.Itoa(s.TriageReconcileDays),
+		dailyBudget:   strconv.FormatFloat(s.DailyBudgetUSD, 'f', -1, 64),
 	}
 	form := huh.NewForm(huh.NewGroup(
-		huh.NewInput().Title("Soft event titles (comma separated)").Value(&fd.softTitles),
 		huh.NewConfirm().Title("Triage enabled").Affirmative("on").Negative("off").Value(&fd.triageEnabled),
 		huh.NewConfirm().Title("Triage dry run").Affirmative("dry").Negative("live").Value(&fd.triageDryRun),
 		huh.NewInput().Title("Confidence threshold (0-1)").Value(&fd.threshold).Validate(validateFloat),
 		huh.NewInput().Title("Triage backfill days").Value(&fd.backfillDays).Validate(validateInt),
 		huh.NewInput().Title("Triage reconcile days").Value(&fd.reconcileDays).Validate(validateInt),
-		huh.NewInput().Title("Plan horizon days").Value(&fd.horizonDays).Validate(validateInt),
-		huh.NewInput().Title("Min focus block minutes").Value(&fd.blockMinMinute).Validate(validateInt),
-		huh.NewInput().Title("Max focus block minutes").Value(&fd.blockMaxMinute).Validate(validateInt),
 		huh.NewInput().Title("Daily LLM budget in USD (0 = unlimited)").Value(&fd.dailyBudget).Validate(validateFloat),
 	))
 	if w > 0 {

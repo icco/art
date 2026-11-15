@@ -25,14 +25,7 @@ type Config struct {
 	CredentialsEnv string
 	Triage         TriageConfig
 	RateLimitRPM   int
-	// SoftEventTitles are human-event summaries the planner may schedule over,
-	// kept as written so the settings API and TUI show them the way the calendar
-	// does. Consumers normalize at use time via models.NewSoftTitles.
-	SoftEventTitles []string
 }
-
-// DefaultSoftTitles are the owner's standing placeholder blocks.
-var DefaultSoftTitles = []string{"Morning Prep", "Lunch", "Dinner Decompress"}
 
 // Triage defaults, shared with lib/settings so a settings row and an unset env
 // var agree on the fallback.
@@ -101,17 +94,6 @@ func Load() (*Config, error) {
 	}
 	if err := errors.Join(p.errs...); err != nil {
 		return nil, err
-	}
-
-	// Unset means the built-in list; set-but-empty disables soft events entirely.
-	softRaw := DefaultSoftTitles
-	if v, ok := os.LookupEnv("SOFT_EVENT_TITLES"); ok {
-		softRaw = strings.Split(v, ",")
-	}
-	for _, t := range softRaw {
-		if t = strings.TrimSpace(t); t != "" {
-			c.SoftEventTitles = append(c.SoftEventTitles, t)
-		}
 	}
 
 	for e := range strings.SplitSeq(os.Getenv("OWNER_EMAILS"), ",") {

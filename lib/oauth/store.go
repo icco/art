@@ -18,7 +18,7 @@ type Store struct {
 }
 
 // Save upserts an Account row, sealing the refresh token before write.
-func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primaryCal string, tok *oauth2.Token) error {
+func (s *Store) Save(ctx context.Context, kind models.AccountKind, email string, tok *oauth2.Token) error {
 	if tok.RefreshToken == "" {
 		return fmt.Errorf("%w — revoke and retry with prompt=consent", errNoRefreshToken)
 	}
@@ -36,13 +36,12 @@ func (s *Store) Save(ctx context.Context, kind models.AccountKind, email, primar
 		Kind:                  kind,
 		Email:                 email,
 		RefreshTokenEncrypted: sealed,
-		PrimaryCalendarID:     primaryCal,
 	}
 	return s.DB.WithContext(ctx).
 		Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "kind"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"email", "refresh_token_encrypted", "primary_calendar_id", "updated_at",
+				"email", "refresh_token_encrypted", "updated_at",
 			}),
 		}).
 		Create(&a).Error

@@ -9,16 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// SyncRun enqueues a calendar-sync job; clients poll /jobs/{id}.
-func (h *Handlers) SyncRun(w http.ResponseWriter, r *http.Request) {
-	h.enqueueJob(w, r, models.JobSync)
-}
-
-// ReplanRun enqueues a planner pass; clients poll /agent-runs or /jobs/{id}.
-func (h *Handlers) ReplanRun(w http.ResponseWriter, r *http.Request) {
-	h.enqueueJob(w, r, models.JobPlanner)
-}
-
 // TriageRun enqueues an email-triage pass; clients poll /agent-runs or /jobs/{id}.
 func (h *Handlers) TriageRun(w http.ResponseWriter, r *http.Request) {
 	h.enqueueJob(w, r, models.JobTriage)
@@ -47,7 +37,7 @@ func (h *Handlers) JobsList(w http.ResponseWriter, r *http.Request) {
 	q := h.DB.WithContext(r.Context())
 	if kind := r.URL.Query().Get("kind"); kind != "" {
 		if !models.JobKind(kind).Valid() {
-			writeError(w, r, http.StatusBadRequest, "kind must be one of sync, planner, triage")
+			writeError(w, r, http.StatusBadRequest, "kind must be triage")
 			return
 		}
 		q = q.Where("kind = ?", kind)

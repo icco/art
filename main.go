@@ -10,16 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"go.icco.me/art/lib/agent"
 	"go.icco.me/art/lib/api"
 	"go.icco.me/art/lib/api/handlers"
-	"go.icco.me/art/lib/calendar"
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/db"
 	"go.icco.me/art/lib/email"
 	"go.icco.me/art/lib/oauth"
 	"go.icco.me/art/lib/queue"
-	"go.icco.me/art/lib/reconcile"
 	"go.icco.me/art/lib/settings"
 	gutillog "go.icco.me/gutil/logging"
 	"go.uber.org/zap"
@@ -62,12 +59,9 @@ func run(log *zap.SugaredLogger) error {
 	// Env config seeds the settings store; DB rows win once written.
 	settingsStore := settings.New(gdb, cfg)
 
-	syncRunner := &calendar.Runner{DB: gdb, OAuth: oauthFlow, TZ: cfg.Timezone}
-	reconciler := &reconcile.Runner{DB: gdb, Cal: &calendar.Manager{OAuth: oauthFlow}, TZ: cfg.Timezone, Settings: settingsStore}
-	planner := &agent.Planner{Cfg: cfg, DB: gdb, OAuth: oauthFlow, Settings: settingsStore}
 	triager := &email.Runner{Cfg: cfg, DB: gdb, OAuth: oauthFlow, Settings: settingsStore}
 
-	worker := queue.New(gdb, syncRunner, reconciler, planner, triager)
+	worker := queue.New(gdb, triager)
 
 	h := &handlers.Handlers{
 		Cfg:      cfg,
@@ -75,7 +69,6 @@ func run(log *zap.SugaredLogger) error {
 		OAuth:    oauthFlow,
 		Jobs:     worker,
 		Triage:   triager,
-		Calendar: &calendar.Manager{OAuth: oauthFlow},
 		Settings: settingsStore,
 	}
 	router := api.NewRouter(api.Deps{Cfg: cfg, DB: gdb, H: h, Log: log})

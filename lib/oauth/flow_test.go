@@ -34,7 +34,7 @@ func TestTokenSourceCachesAndPersistsRotation(t *testing.T) {
 	f.OAuth.Endpoint = oauth2.Endpoint{TokenURL: srv.URL}
 
 	ctx := context.Background()
-	if err := store.Save(ctx, models.AccountPersonal, "a@b.com", "primary", &oauth2.Token{RefreshToken: "r1"}); err != nil {
+	if err := store.Save(ctx, models.AccountPersonal, "a@b.com", &oauth2.Token{RefreshToken: "r1"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,8 +103,8 @@ func TestStartURL(t *testing.T) {
 	if u.Query().Get("prompt") != "consent" {
 		t.Fatal("prompt=consent missing")
 	}
-	if !strings.Contains(u.Query().Get("scope"), "calendar") {
-		t.Fatal("scope missing calendar")
+	if scope := u.Query().Get("scope"); !strings.Contains(scope, "gmail.modify") || strings.Contains(scope, "calendar") {
+		t.Fatalf("scope = %q, want gmail.modify and no calendar", scope)
 	}
 }
 

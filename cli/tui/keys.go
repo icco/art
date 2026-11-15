@@ -6,28 +6,11 @@ import "charm.land/bubbles/v2/key"
 // bindings (e.g. list navigation) on top of these.
 type keyMap struct {
 	Dashboard key.Binding
-	Calendar  key.Binding
-	Projects  key.Binding
-	Habits    key.Binding
 	Digest    key.Binding
-	Sessions  key.Binding
-	Hours     key.Binding
 	Settings  key.Binding
 
-	PrevWeek key.Binding
-	NextWeek key.Binding
+	Edit key.Binding
 
-	Up       key.Binding
-	Down     key.Binding
-	PrevKind key.Binding
-	NextKind key.Binding
-
-	Add    key.Binding
-	Edit   key.Binding
-	Delete key.Binding
-
-	Replan  key.Binding
-	Sync    key.Binding
 	Triage  key.Binding
 	Reject  key.Binding
 	Archive key.Binding
@@ -40,28 +23,11 @@ type keyMap struct {
 func defaultKeyMap() keyMap {
 	return keyMap{
 		Dashboard: key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "dashboard")),
-		Calendar:  key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "calendar")),
-		Projects:  key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "projects")),
-		Habits:    key.NewBinding(key.WithKeys("4"), key.WithHelp("4", "habits")),
-		Digest:    key.NewBinding(key.WithKeys("5"), key.WithHelp("5", "digest")),
-		Sessions:  key.NewBinding(key.WithKeys("6"), key.WithHelp("6", "sessions")),
-		Hours:     key.NewBinding(key.WithKeys("7"), key.WithHelp("7", "hours")),
-		Settings:  key.NewBinding(key.WithKeys("8"), key.WithHelp("8", "settings")),
+		Digest:    key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "digest")),
+		Settings:  key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "settings")),
 
-		PrevWeek: key.NewBinding(key.WithKeys("left", "h"), key.WithHelp("←/h", "prev week")),
-		NextWeek: key.NewBinding(key.WithKeys("right", "l"), key.WithHelp("→/l", "next week")),
+		Edit: key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
 
-		Up:       key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "up")),
-		Down:     key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "down")),
-		PrevKind: key.NewBinding(key.WithKeys("left"), key.WithHelp("←", "kind")),
-		NextKind: key.NewBinding(key.WithKeys("right"), key.WithHelp("→", "kind")),
-
-		Add:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add")),
-		Edit:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
-		Delete: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
-
-		Replan:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "replan")),
-		Sync:    key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "sync")),
 		Triage:  key.NewBinding(key.WithKeys("t"), key.WithHelp("t", "triage")),
 		Reject:  key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "mark bad")),
 		Archive: key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive ↔ inbox")),
@@ -90,11 +56,8 @@ func (h pageHelp) ShortHelp() []key.Binding {
 // global run/back/help/quit keys.
 func (h pageHelp) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
-		{
-			h.keys.Dashboard, h.keys.Calendar, h.keys.Projects, h.keys.Habits,
-			h.keys.Digest, h.keys.Sessions, h.keys.Hours, h.keys.Settings,
-		},
+		{h.keys.Dashboard, h.keys.Digest, h.keys.Settings},
 		h.page,
-		{h.keys.Replan, h.keys.Sync, h.keys.Triage, h.keys.Back, h.keys.Help, h.keys.Quit},
+		{h.keys.Triage, h.keys.Back, h.keys.Help, h.keys.Quit},
 	}
 }

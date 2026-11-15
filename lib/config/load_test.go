@@ -3,7 +3,6 @@ package config
 import (
 	"encoding/base64"
 	"os"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -92,38 +91,6 @@ func TestLoadValidate(t *testing.T) {
 	}
 	if cfg.Triage.MaxPerRun != 1000 {
 		t.Errorf("MaxPerRun default = %d, want 1000", cfg.Triage.MaxPerRun)
-	}
-}
-
-func TestLoadSoftTitles(t *testing.T) {
-	setValidEnv(t)
-	_ = os.Unsetenv("SOFT_EVENT_TITLES")
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	// Kept as written, not lowercased: these are shown in the settings UI.
-	if !slices.Equal(cfg.SoftEventTitles, DefaultSoftTitles) {
-		t.Fatalf("default soft titles = %v, want %v", cfg.SoftEventTitles, DefaultSoftTitles)
-	}
-
-	t.Setenv("SOFT_EVENT_TITLES", " Lunch ,,Nap")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if !slices.Equal(cfg.SoftEventTitles, []string{"Lunch", "Nap"}) {
-		t.Fatalf("soft titles = %v, want [Lunch Nap] trimmed and with no defaults", cfg.SoftEventTitles)
-	}
-
-	// Set-but-empty turns the feature off.
-	t.Setenv("SOFT_EVENT_TITLES", "")
-	cfg, err = Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if len(cfg.SoftEventTitles) != 0 {
-		t.Fatalf("soft titles = %v, want empty", cfg.SoftEventTitles)
 	}
 }
 

@@ -1,3 +1,4 @@
+// Package handlers implements the HTTP handlers exposed by the art API.
 package handlers
 
 import (
@@ -14,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// The working-hours replacement is the largest payload and fits in <8 KiB.
+// maxBodyBytes caps request bodies; every payload is a few hundred bytes.
 const maxBodyBytes = 64 * 1024
 
 // Handlers wires HTTP handlers to their service dependencies.
@@ -24,7 +25,6 @@ type Handlers struct {
 	OAuth    OAuthService
 	Jobs     JobsService
 	Triage   TriageService
-	Calendar CalendarService
 	Settings *settings.Store
 }
 
@@ -43,11 +43,6 @@ type (
 	TriageService interface {
 		Reverse(ctx context.Context, id string) (models.EmailMessage, error)
 		SetArchived(ctx context.Context, id string, archived bool) (models.EmailMessage, error)
-	}
-	// CalendarService retracts Art-managed calendar events; satisfied by
-	// *calendar.Manager.
-	CalendarService interface {
-		DeleteManaged(ctx context.Context, account models.AccountKind, calendarID, eventID string) error
 	}
 )
 

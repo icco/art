@@ -1,11 +1,6 @@
 # art
 
-Personal scheduling agent. Blocks focus time on your work + personal Google
-Calendars for **projects** (target hours toward a deadline) and **habits**
-(recurring practice) over a rolling 30-day window — writing new events only,
-never touching events you made.
-
-Scheduling is deterministic — no LLM involved. It also triages both Gmail
+Personal email triage agent. It triages your work and personal Gmail
 inboxes with Gemini Flash, under a daily spend cap: archives bulk mail and labels
 what needs a reply, reading, or thought. Its only actions are applying labels
 and archiving — it never drafts, sends, or deletes mail. Message bodies are read
@@ -39,41 +34,16 @@ curl -s -X POST "http://localhost:8080/oauth/start?account=personal" \
 (a user token can't carry an arbitrary one), so set `OIDC_AUDIENCE` to that
 client ID — see `.env.example`.
 
-Set working hours (minutes past midnight in `ART_TIMEZONE`):
-
-```sh
-curl -s -X PUT http://localhost:8080/working-hours \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '[{"slot_kind":"work","day_of_week":1,"start_minute":540,"end_minute":1080}]'
-```
-
-A single day can change without resending the table:
-
-```sh
-curl -s -X PATCH http://localhost:8080/working-hours/work/1 \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '[{"start_minute":540,"end_minute":720},{"start_minute":780,"end_minute":1080}]'
-```
-
 ## Settings
 
-`GET`/`PUT /settings` edits the knobs Art reads on every run — the soft event
-titles, the triage switches (enabled, dry run, confidence threshold, backfill
-and reconcile days), and the planner bounds (plan horizon in days, min/max focus
-block minutes). The env vars above seed them, so nothing changes until you write
+`GET`/`PUT /settings` edits the knobs Art reads on every run: the triage
+switches (enabled, dry run, confidence threshold, backfill and reconcile days)
+and the daily LLM budget. The env vars above seed them, so nothing changes until you write
 a value; after that the stored value wins, no redeploy needed.
 
 Only those keys exist. Owner emails, the OIDC audience, the encryption key, the
 database URL and the Google/Vertex credentials stay env-only, and so does
-`ART_TIMEZONE` — changing it would silently reinterpret every working-hours row
-and move existing plans.
-
-## Soft events
-
-Standing blocks like *Morning Prep*, *Lunch*, or *Dinner Decompress* reserve
-intent, not a commitment. List their exact titles in `SOFT_EVENT_TITLES` and the
-planner may book over them — but only after every genuinely free slot is taken,
-and reconcile won't retract what it books. Everything else stays hard.
+`ART_TIMEZONE`, which sets the day boundary for the daily budget.
 
 ## Use the TUI
 
@@ -81,9 +51,8 @@ and reconcile won't retract what it books. Everything else stays hard.
 ART_API_URL=https://art.example.com art
 ```
 
-The TUI authenticates as *you* via `gcloud` — no stored secrets. `r` replans,
-`t` triages. `7` shows working hours as a grid (`e` edits the selected day) and
-`8` edits the settings above.
+The TUI authenticates as *you* via `gcloud` — no stored secrets. `t` triages,
+`2` shows the triage digest and `3` edits the settings above.
 
 ## Email triage
 
@@ -104,7 +73,7 @@ the TUI are fed back into the next run as corrections.
 Gmail uses the `gmail.modify` **restricted scope**, so:
 
 - Re-link both accounts after enabling (the scope was added to the shared
-  consent; existing calendar links break until re-linked).
+  consent; existing links break until re-linked).
 - The consumer account needs you added as a Test User on the OAuth consent
   screen; the Workspace account may need the OAuth client allowlisted by an admin.
 - Run `TRIAGE_DRY_RUN=true` first — Art classifies and writes audit rows without

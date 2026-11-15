@@ -10,28 +10,20 @@ import (
 // the allowlist: decodeJSON rejects unknown fields, so no other key — least of
 // all a secret — can reach the store. A nil field keeps its current value.
 type settingsReq struct {
-	SoftEventTitles           *[]string `json:"soft_event_titles"`
-	TriageEnabled             *bool     `json:"triage_enabled"`
-	TriageDryRun              *bool     `json:"triage_dry_run"`
-	TriageConfidenceThreshold *float64  `json:"triage_confidence_threshold"`
-	TriageBackfillDays        *int      `json:"triage_backfill_days"`
-	TriageReconcileDays       *int      `json:"triage_reconcile_days"`
-	PlanHorizonDays           *int      `json:"plan_horizon_days"`
-	FocusBlockMinMinutes      *int      `json:"focus_block_min_minutes"`
-	FocusBlockMaxMinutes      *int      `json:"focus_block_max_minutes"`
-	DailyBudgetUSD            *float64  `json:"daily_budget_usd"`
+	TriageEnabled             *bool    `json:"triage_enabled"`
+	TriageDryRun              *bool    `json:"triage_dry_run"`
+	TriageConfidenceThreshold *float64 `json:"triage_confidence_threshold"`
+	TriageBackfillDays        *int     `json:"triage_backfill_days"`
+	TriageReconcileDays       *int     `json:"triage_reconcile_days"`
+	DailyBudgetUSD            *float64 `json:"daily_budget_usd"`
 }
 
 func (req settingsReq) apply(v *settings.Values) {
-	assign(&v.SoftEventTitles, req.SoftEventTitles)
 	assign(&v.TriageEnabled, req.TriageEnabled)
 	assign(&v.TriageDryRun, req.TriageDryRun)
 	assign(&v.TriageConfidenceThreshold, req.TriageConfidenceThreshold)
 	assign(&v.TriageBackfillDays, req.TriageBackfillDays)
 	assign(&v.TriageReconcileDays, req.TriageReconcileDays)
-	assign(&v.PlanHorizonDays, req.PlanHorizonDays)
-	assign(&v.FocusBlockMinMinutes, req.FocusBlockMinMinutes)
-	assign(&v.FocusBlockMaxMinutes, req.FocusBlockMaxMinutes)
 	assign(&v.DailyBudgetUSD, req.DailyBudgetUSD)
 }
 
