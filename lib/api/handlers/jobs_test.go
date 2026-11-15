@@ -89,7 +89,7 @@ func TestJobsListAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w := do(t, r, "GET", "/jobs?kind=sync&status=succeeded", nil)
+	w := do(t, r, "GET", "/jobs?kind=triage&status=succeeded", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list: %d %s", w.Code, w.Body)
 	}
