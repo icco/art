@@ -19,6 +19,7 @@ import (
 	"go.icco.me/art/lib/queue"
 	"go.icco.me/art/lib/settings"
 	gutillog "go.icco.me/gutil/logging"
+	"go.icco.me/gutil/tracing"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +29,19 @@ func main() {
 		panic(err) // logger setup can't itself log; nothing else to do
 	}
 	defer gutillog.Sync(log)
+
+	ctx := context.Background()
+	shutdown, err := tracing.Init(ctx, "art")
+	if err != nil {
+		log.Fatalw("tracing init", "err", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(shutdownCtx); err != nil {
+			log.Warnw("tracing shutdown", "err", err)
+		}
+	}()
 
 	if err := run(log); err != nil {
 		log.Fatalw("fatal", "err", err)

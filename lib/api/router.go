@@ -14,6 +14,7 @@ import (
 	"go.icco.me/art/lib/api/handlers"
 	"go.icco.me/art/lib/config"
 	gutillog "go.icco.me/gutil/logging"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -79,7 +80,11 @@ func NewRouter(d Deps) http.Handler {
 		r.Post("/triage/run", d.H.TriageRun)
 	})
 
-	return r
+	return otelhttp.NewHandler(r, "art",
+		otelhttp.WithFilter(func(req *http.Request) bool {
+			return req.URL.Path != "/metrics" && req.URL.Path != "/healthz" && req.URL.Path != "/"
+		}),
+	)
 }
 
 // clientIPKey keys the rate limiter. X-Forwarded-For is only trusted from the
