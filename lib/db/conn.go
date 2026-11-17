@@ -24,7 +24,7 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("gorm open: %w", err)
 	}
-	if err := db.Use(gormtracing.NewPlugin(gormtracing.WithoutMetrics())); err != nil {
+	if err := db.Use(gormtracing.NewPlugin(gormtracing.WithoutMetrics(), gormtracing.WithoutQueryVariables())); err != nil {
 		return nil, fmt.Errorf("gorm tracing plugin: %w", err)
 	}
 	// Bound the pool; the Postgres instance is shared with other services.

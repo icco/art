@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,10 +31,16 @@ func main() {
 	}
 	defer gutillog.Sync(log)
 
+	if err := runServer(log); err != nil {
+		log.Fatalw("fatal", "err", err)
+	}
+}
+
+func runServer(log *zap.SugaredLogger) error {
 	ctx := context.Background()
 	shutdown, err := tracing.Init(ctx, "art")
 	if err != nil {
-		log.Fatalw("tracing init", "err", err)
+		return fmt.Errorf("tracing init: %w", err)
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -43,9 +50,7 @@ func main() {
 		}
 	}()
 
-	if err := run(log); err != nil {
-		log.Fatalw("fatal", "err", err)
-	}
+	return run(log)
 }
 
 func run(log *zap.SugaredLogger) error {
