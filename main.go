@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -19,6 +20,7 @@ import (
 	"go.icco.me/art/lib/queue"
 	"go.icco.me/art/lib/settings"
 	gutillog "go.icco.me/gutil/logging"
+	"go.icco.me/gutil/tracing"
 	"go.uber.org/zap"
 )
 
@@ -29,9 +31,26 @@ func main() {
 	}
 	defer gutillog.Sync(log)
 
-	if err := run(log); err != nil {
+	if err := runServer(log); err != nil {
 		log.Fatalw("fatal", "err", err)
 	}
+}
+
+func runServer(log *zap.SugaredLogger) error {
+	ctx := context.Background()
+	shutdown, err := tracing.Init(ctx, "art")
+	if err != nil {
+		return fmt.Errorf("tracing init: %w", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := shutdown(shutdownCtx); err != nil {
+			log.Warnw("tracing shutdown", "err", err)
+		}
+	}()
+
+	return run(log)
 }
 
 func run(log *zap.SugaredLogger) error {

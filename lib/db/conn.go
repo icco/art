@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormtracing "gorm.io/plugin/opentelemetry/tracing"
 	"moul.io/zapgorm2"
 )
 
@@ -22,6 +23,9 @@ func Open(dsn string, log *zap.Logger) (*gorm.DB, error) {
 	db, err := gorm.Open(postgres.Open(dsn), cfg)
 	if err != nil {
 		return nil, fmt.Errorf("gorm open: %w", err)
+	}
+	if err := db.Use(gormtracing.NewPlugin(gormtracing.WithoutMetrics(), gormtracing.WithoutQueryVariables())); err != nil {
+		return nil, fmt.Errorf("gorm tracing plugin: %w", err)
 	}
 	// Bound the pool; the Postgres instance is shared with other services.
 	sqlDB, err := db.DB()
