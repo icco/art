@@ -132,7 +132,7 @@ func (m rootModel) handleKey(k tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			return m, nil
 		}
-		m.busy, m.status = true, "triaging…"
+		m.busy, m.status, m.err = true, "triaging…", nil
 		return m, tea.Sequence(triage(m.client), tea.Batch(loadEmails(m.client), loadRuns(m.client)))
 	default:
 		return m.routeToCurrent(k)

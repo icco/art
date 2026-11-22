@@ -110,3 +110,16 @@ func TestPollBaseline(t *testing.T) {
 		}
 	}
 }
+
+func TestTriageKeyClearsStaleError(t *testing.T) {
+	m := newRootWithClient(Config{}, deadClient(), true)
+	m.err = errAPIStatus
+	mm, _ := m.handleKey(tea.KeyPressMsg{Code: 't'})
+	res := mm.(rootModel)
+	if res.err != nil {
+		t.Fatalf("expected err to be cleared, got: %v", res.err)
+	}
+	if !res.busy || res.status != "triaging…" {
+		t.Fatalf("expected busy and status triaging…, got busy=%v status=%q", res.busy, res.status)
+	}
+}
