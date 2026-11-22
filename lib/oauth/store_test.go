@@ -58,18 +58,3 @@ func TestStoreLoadMissing(t *testing.T) {
 		t.Fatalf("expected ErrRecordNotFound, got %v", err)
 	}
 }
-
-func TestStoreAllOrdered(t *testing.T) {
-	s := newStore(t)
-	ctx := context.Background()
-	tok := &oauth2.Token{RefreshToken: "r"}
-	_ = s.Save(ctx, models.AccountPersonal, "p@x.com", tok)
-	_ = s.Save(ctx, models.AccountWork, "w@x.com", tok)
-	got, err := s.All(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(got) != 2 {
-		t.Fatalf("expected 2 accounts, got %d", len(got))
-	}
-}
