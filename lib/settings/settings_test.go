@@ -1,6 +1,8 @@
 package settings_test
 
 import (
+	"errors"
+	"sync"
 	"testing"
 
 	"go.icco.me/art/lib/config"
@@ -143,5 +145,77 @@ func TestSaveRejectsInvalid(t *testing.T) {
 	db.Model(&models.Setting{}).Count(&n)
 	if n != 0 {
 		t.Errorf("a rejected Save must write nothing, got %d rows", n)
+	}
+}
+
+func TestUpdateRoundTrip(t *testing.T) {
+	db := testdb.Open(t)
+	store := settings.New(db, seedCfg())
+
+	got, err := store.Update(t.Context(), func(v *settings.Values) error {
+		v.TriageBackfillDays = 30
+		v.DailyBudgetUSD = 15.5
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.TriageBackfillDays != 30 || got.DailyBudgetUSD != 15.5 {
+		t.Fatalf("unexpected updated values: %+v", got)
+	}
+	loaded, err := store.Load(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.TriageBackfillDays != 30 || loaded.DailyBudgetUSD != 15.5 {
+		t.Fatalf("unexpected loaded values: %+v", loaded)
+	}
+}
+
+func TestUpdateRejectsInvalid(t *testing.T) {
+	db := testdb.Open(t)
+	store := settings.New(db, seedCfg())
+
+	_, err := store.Update(t.Context(), func(v *settings.Values) error {
+		v.TriageBackfillDays = 0
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected error on invalid setting")
+	}
+	if !errors.Is(err, settings.ErrInvalidSetting) {
+		t.Fatalf("expected ErrInvalidSetting, got %v", err)
+	}
+	var n int64
+	db.Model(&models.Setting{}).Count(&n)
+	if n != 0 {
+		t.Errorf("rejected Update must write nothing, got %d rows", n)
+	}
+}
+
+func TestUpdateConcurrent(t *testing.T) {
+	db := testdb.Open(t)
+	store := settings.New(db, seedCfg())
+
+	const workers = 4
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := range workers {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, err := store.Update(t.Context(), func(v *settings.Values) error {
+				v.TriageBackfillDays = idx + 1
+				return nil
+			})
+			if err != nil {
+				errs <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent update failed: %v", err)
 	}
 }

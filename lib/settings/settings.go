@@ -37,6 +37,9 @@ const maxDailyBudgetUSD = 100.0
 // maxDays is a sanity rail on the day-count settings.
 const maxDays = 365
 
+// settingsLockKey is the Postgres advisory transaction lock for settings updates.
+const settingsLockKey = 0x4152545f5354 // "ART_ST"
+
 // Keys returns every settable key.
 func Keys() []string {
 	return []string{
@@ -127,10 +130,59 @@ func (s *Store) Save(ctx context.Context, vals Values) error {
 		return err
 	}
 	rows := encode(vals)
-	return s.DB.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
-	}).Create(&rows).Error
+	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", settingsLockKey).Error; err != nil {
+			return err
+		}
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+		}).Create(&rows).Error
+	})
+}
+
+// Update executes fn inside a transaction with settings locked.
+func (s *Store) Update(ctx context.Context, fn func(v *Values) error) (Values, error) {
+	var result Values
+	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", settingsLockKey).Error; err != nil {
+			return err
+		}
+		out, err := s.loadLocked(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if fn != nil {
+			if err := fn(&out); err != nil {
+				return err
+			}
+		}
+		if err := out.Validate(); err != nil {
+			return err
+		}
+		rows := encode(out)
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+		}).Create(&rows).Error; err != nil {
+			return err
+		}
+		result = out
+		return nil
+	})
+	return result, err
+}
+
+func (s *Store) loadLocked(ctx context.Context, tx *gorm.DB) (Values, error) {
+	out := s.Defaults
+	var rows []models.Setting
+	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("key IN ?", Keys()).Find(&rows).Error; err != nil {
+		return out, err
+	}
+	for _, row := range rows {
+		apply(&out, row.Key, row.Value)
+	}
+	return out, nil
 }
 
 func apply(v *Values, key, raw string) {

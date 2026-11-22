@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 
 	"go.icco.me/art/lib/settings"
@@ -52,18 +53,16 @@ func (h *Handlers) SettingsUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, http.StatusBadRequest, err.Error())
 		return
 	}
-	vals, err := h.Settings.Load(r.Context())
+	vals, err := h.Settings.Update(r.Context(), func(v *settings.Values) error {
+		req.apply(v)
+		return nil
+	})
 	if err != nil {
-		writeServerError(w, r, "settings load", err)
-		return
-	}
-	req.apply(&vals)
-	if err := vals.Validate(); err != nil {
-		writeError(w, r, http.StatusBadRequest, err.Error())
-		return
-	}
-	if err := h.Settings.Save(r.Context(), vals); err != nil {
-		writeServerError(w, r, "settings save", err)
+		if errors.Is(err, settings.ErrInvalidSetting) {
+			writeError(w, r, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeServerError(w, r, "settings update", err)
 		return
 	}
 	writeJSON(w, r, http.StatusOK, vals)
