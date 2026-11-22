@@ -30,6 +30,9 @@ func TestUserPrompt(t *testing.T) {
 			t.Errorf("prompt missing %q in:\n%s", want, p)
 		}
 	}
+	if strings.Index(p, "Account: work") > strings.Index(p, emailFenceBegin) {
+		t.Errorf("account must precede the untrusted block:\n%s", p)
+	}
 	mp := &gmail.Message{Account: models.AccountPersonal, From: "a@b.com"}
 	if p := userPrompt(mp); !strings.Contains(p, "Account: personal") {
 		t.Errorf("prompt missing Account: personal in:\n%s", p)
