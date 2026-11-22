@@ -1,8 +1,8 @@
 # art
 
 Personal email triage agent. It triages your work and personal Gmail
-inboxes with Gemini Flash, under a daily spend cap: archives bulk mail and labels
-what needs a reply, reading, or thought. Its only actions are applying labels
+inboxes with Gemini Flash, under a daily spend cap: archives bulk mail, labels
+what needs a reply, and leaves the rest in the inbox. Its only actions are applying labels
 and archiving — it never drafts, sends, or deletes mail. Message bodies are read
 only from the inbox. Every action is reversible and recorded.
 
@@ -38,8 +38,8 @@ client ID — see `.env.example`.
 
 `GET`/`PUT /settings` edits the knobs Art reads on every run: the triage
 switches (enabled, dry run, confidence threshold, backfill and reconcile days)
-and the daily LLM budget. The env vars above seed them, so nothing changes until you write
-a value; after that the stored value wins, no redeploy needed.
+and the daily LLM budget. The env vars above seed them (the budget has no env var and
+starts at $2), so nothing changes until you write a value; after that the stored value wins, no redeploy needed.
 
 Only those keys exist. Owner emails, the OIDC audience, the encryption key, the
 database URL and the Google/Vertex credentials stay env-only, and so does
@@ -91,5 +91,5 @@ allow-listed email is required for all data endpoints. `/`, `/healthz`,
 
 ## Out of scope for v1
 
-Multi-user, mobile/web UI, push notifications, Sentry/OTel exporters,
+Multi-user, mobile/web UI, push notifications, Sentry,
 service-account domain delegation.
