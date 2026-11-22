@@ -27,7 +27,7 @@ Guidance for coding agents working in this repo. Operator docs live in [README.m
 ## Commands
 
 ```sh
-task build         # builds ./bin/art
+task build         # builds ./bin/art-server and ./bin/art
 task run           # run server
 task test          # run tests (-p 1 required, shares one DB schema; TEST_DATABASE_URL required for DB tests)
 task lint          # run vet and gofmt
