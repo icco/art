@@ -57,7 +57,8 @@ func NewRouter(d Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(secureMiddleware.Handler)
 	r.Use(httprate.LimitBy(rpm, time.Minute, clientIPKey))
-	r.Use(middleware.Timeout(60 * time.Second))
+	// Must be shorter than http.Server WriteTimeout (30s) so slow requests return 504.
+	r.Use(middleware.Timeout(25 * time.Second))
 
 	// Public: health, the Google OAuth redirect, and Prometheus scrape.
 	r.Get("/", handlers.Health)

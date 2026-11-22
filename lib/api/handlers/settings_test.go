@@ -2,6 +2,7 @@ package handlers_test
 
 import (
 	"net/http"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -47,6 +48,42 @@ func TestSettingsGetAndUpdate(t *testing.T) {
 	// An absent field keeps its value rather than resetting to zero.
 	if got.TriageReconcileDays != 7 || got.TriageConfidenceThreshold != 0.8 {
 		t.Errorf("absent field was overwritten: %+v", got)
+	}
+}
+
+func TestSettingsUpdateConcurrent(t *testing.T) {
+	db := testdb.Open(t)
+	r := settingsRouter(db)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		w := do(t, r, "PUT", "/settings", map[string]any{"triage_backfill_days": 3})
+		if w.Code != http.StatusOK {
+			t.Errorf("update 1 failed: %d %s", w.Code, w.Body)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		w := do(t, r, "PUT", "/settings", map[string]any{"daily_budget_usd": 5})
+		if w.Code != http.StatusOK {
+			t.Errorf("update 2 failed: %d %s", w.Code, w.Body)
+		}
+	}()
+	wg.Wait()
+
+	var got settings.Values
+	w := do(t, r, "GET", "/settings", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get: %d %s", w.Code, w.Body)
+	}
+	mustDecode(t, w, &got)
+	if got.TriageBackfillDays != 3 {
+		t.Errorf("triage_backfill_days was clobbered: %d", got.TriageBackfillDays)
+	}
+	if got.DailyBudgetUSD != 5 {
+		t.Errorf("daily_budget_usd was clobbered: %v", got.DailyBudgetUSD)
 	}
 }
 

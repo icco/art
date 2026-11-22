@@ -3,6 +3,7 @@ package gmail
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -50,13 +51,16 @@ func (c *Client) EnsureLabels(ctx context.Context) (map[string]string, error) {
 			// 409 means the label appeared since we listed; re-list and reuse.
 			var gerr *googleapi.Error
 			if errors.As(err, &gerr) && gerr.Code == http.StatusConflict {
-				if existing, err = c.labelsByLowerName(ctx); err != nil {
-					return nil, err
+				relist, listErr := c.labelsByLowerName(ctx)
+				if listErr != nil {
+					return nil, listErr
 				}
-				if id, ok := existing[strings.ToLower(name)]; ok {
+				if id, ok := relist[strings.ToLower(name)]; ok {
+					existing = relist
 					out[name] = id
 					continue
 				}
+				return nil, fmt.Errorf("conflict creating label %q but still missing: %w", name, err)
 			}
 			return nil, err
 		}

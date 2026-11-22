@@ -37,6 +37,9 @@ const maxDailyBudgetUSD = 100.0
 // maxDays is a sanity rail on the day-count settings.
 const maxDays = 365
 
+// settingsLockKey is the Postgres advisory transaction lock for settings updates.
+const settingsLockKey = 0x4152545f5354 // "ART_ST"
+
 // Keys returns every settable key.
 func Keys() []string {
 	return []string{
@@ -58,16 +61,16 @@ type Values struct {
 // Validate rejects values the triager could not act on.
 func (v Values) Validate() error {
 	if t := v.TriageConfidenceThreshold; t < 0 || t > 1 {
-		return fmt.Errorf("%w: triage_confidence_threshold must be in [0, 1], got %v", errInvalidSetting, t)
+		return fmt.Errorf("%w: triage_confidence_threshold must be in [0, 1], got %v", ErrInvalidSetting, t)
 	}
 	if d := v.TriageBackfillDays; d < 1 || d > maxDays {
-		return fmt.Errorf("%w: triage_backfill_days must be 1-%d, got %d", errInvalidSetting, maxDays, d)
+		return fmt.Errorf("%w: triage_backfill_days must be 1-%d, got %d", ErrInvalidSetting, maxDays, d)
 	}
 	if d := v.TriageReconcileDays; d < 0 || d > maxDays {
-		return fmt.Errorf("%w: triage_reconcile_days must be 0-%d, got %d", errInvalidSetting, maxDays, d)
+		return fmt.Errorf("%w: triage_reconcile_days must be 0-%d, got %d", ErrInvalidSetting, maxDays, d)
 	}
 	if b := v.DailyBudgetUSD; b < 0 || b > maxDailyBudgetUSD {
-		return fmt.Errorf("%w: daily_budget_usd must be 0-%v (0 disables the cap), got %v", errInvalidSetting, maxDailyBudgetUSD, b)
+		return fmt.Errorf("%w: daily_budget_usd must be 0-%v (0 disables the cap), got %v", ErrInvalidSetting, maxDailyBudgetUSD, b)
 	}
 	return nil
 }
@@ -127,10 +130,60 @@ func (s *Store) Save(ctx context.Context, vals Values) error {
 		return err
 	}
 	rows := encode(vals)
-	return s.DB.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
-	}).Create(&rows).Error
+	return s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", settingsLockKey).Error; err != nil {
+			return err
+		}
+		return tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+		}).Create(&rows).Error
+	})
+}
+
+// Update applies fn to the stored settings, validates, and saves them in one
+// locked transaction so concurrent updates cannot overwrite each other.
+func (s *Store) Update(ctx context.Context, fn func(v *Values) error) (Values, error) {
+	var result Values
+	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(?)", settingsLockKey).Error; err != nil {
+			return err
+		}
+		out, err := s.loadLocked(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if fn != nil {
+			if err := fn(&out); err != nil {
+				return err
+			}
+		}
+		if err := out.Validate(); err != nil {
+			return err
+		}
+		rows := encode(out)
+		if err := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "key"}},
+			DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
+		}).Create(&rows).Error; err != nil {
+			return err
+		}
+		result = out
+		return nil
+	})
+	return result, err
+}
+
+func (s *Store) loadLocked(ctx context.Context, tx *gorm.DB) (Values, error) {
+	out := s.Defaults
+	var rows []models.Setting
+	if err := tx.WithContext(ctx).Where("key IN ?", Keys()).Find(&rows).Error; err != nil {
+		return out, err
+	}
+	for _, row := range rows {
+		apply(&out, row.Key, row.Value)
+	}
+	return out, nil
 }
 
 func apply(v *Values, key, raw string) {

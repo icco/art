@@ -128,6 +128,9 @@ func (t *Triager) RunAccount(ctx context.Context, runID string, kind models.Acco
 			summary["errors"]++
 			continue
 		}
+		if msg.Account == "" {
+			msg.Account = kind
+		}
 		// Defensive: the label search can lag, so skip anything already tagged.
 		if triagedID != "" && slices.Contains(msg.LabelIDs, triagedID) {
 			continue

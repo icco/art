@@ -67,6 +67,7 @@ func reverseAndRecord(ctx context.Context, db *gorm.DB, gm reversalGmailer, row 
 	// a stale direction flag for the archive/inbox toggle.
 	if kind == reversalUnarchived {
 		updates["archived"] = false
+		updates["action"] = models.ActionKeep
 	}
 	if err := db.WithContext(ctx).Model(&models.EmailMessage{}).
 		Where("id = ?", row.ID).
@@ -78,6 +79,7 @@ func reverseAndRecord(ctx context.Context, db *gorm.DB, gm reversalGmailer, row 
 	row.ReconciledAt = &now
 	if kind == reversalUnarchived {
 		row.Archived = false
+		row.Action = models.ActionKeep
 	}
 	return *row, nil
 }

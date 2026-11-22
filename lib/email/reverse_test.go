@@ -138,12 +138,18 @@ func TestReverseAndRecordClearsArchived(t *testing.T) {
 	if out.Archived {
 		t.Error("returned row should have Archived=false after un-archive")
 	}
+	if out.Action != models.ActionKeep {
+		t.Errorf("returned row Action = %q, want keep", out.Action)
+	}
 	var got models.EmailMessage
 	if err := db.First(&got, "id = ?", row.ID).Error; err != nil {
 		t.Fatal(err)
 	}
 	if got.Archived {
 		t.Error("persisted row should have Archived=false after un-archive")
+	}
+	if got.Action != models.ActionKeep {
+		t.Errorf("persisted row Action = %q, want keep", got.Action)
 	}
 }
 

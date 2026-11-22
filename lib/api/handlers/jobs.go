@@ -4,7 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -59,8 +58,12 @@ func (h *Handlers) JobsList(w http.ResponseWriter, r *http.Request) {
 
 // JobsGet responds with a single job by id.
 func (h *Handlers) JobsGet(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathUUID(w, r)
+	if !ok {
+		return
+	}
 	var job models.Job
-	if err := h.DB.WithContext(r.Context()).First(&job, "id = ?", chi.URLParam(r, "id")).Error; err != nil {
+	if err := h.DB.WithContext(r.Context()).First(&job, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			writeError(w, r, http.StatusNotFound, "job not found")
 			return
