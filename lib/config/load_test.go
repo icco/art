@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/base64"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -140,5 +141,23 @@ func TestLoadBadTimezone(t *testing.T) {
 	t.Setenv("OIDC_AUDIENCE", "x")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected timezone error")
+	}
+}
+
+func TestLoadRejectsOutOfRangeTriageInts(t *testing.T) {
+	cases := map[string]string{
+		"TRIAGE_BACKFILL_DAYS":  "0",
+		"TRIAGE_RECONCILE_DAYS": "366",
+		"TRIAGE_MAX_PER_RUN":    "0",
+	}
+	for env, val := range cases {
+		t.Run(env, func(t *testing.T) {
+			setValidEnv(t)
+			t.Setenv(env, val)
+			_, err := Load()
+			if !errors.Is(err, errInvalidEnv) || !strings.Contains(err.Error(), env) {
+				t.Fatalf("want %s range error, got %v", env, err)
+			}
+		})
 	}
 }
