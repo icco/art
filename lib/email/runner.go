@@ -125,7 +125,7 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 	if err := guard.Allow(); err != nil {
 		log.Warnw("skipping triage: daily budget spent",
 			"spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
-		*runErrs = append(*runErrs, err.Error())
+		counts["budget_stopped"]++
 		return 0, 0, 0
 	}
 
@@ -146,6 +146,12 @@ func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings
 
 	// Triage new inbox mail for each linked account.
 	for _, kind := range []models.AccountKind{models.AccountPersonal, models.AccountWork} {
+		if err := guard.Allow(); err != nil {
+			log.Warnw("skipping account: daily budget spent", "account", kind,
+				"spent_usd", guard.SpentUSD(), "budget_usd", guard.BudgetUSD())
+			counts["budget_stopped"]++
+			break
+		}
 		gm, err := gmail.NewClient(ctx, r.OAuth, kind)
 		if err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {

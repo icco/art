@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/models"
@@ -142,5 +143,62 @@ func TestFinishRecordsSummary(t *testing.T) {
 	_ = db.First(&got2, "id = ?", run2.ID).Error
 	if got2.Status != models.AgentRunFailed || got2.Error != "boom" {
 		t.Errorf("errored run: status=%q error=%q", got2.Status, got2.Error)
+	}
+}
+
+func TestRunAllBudgetExhausted(t *testing.T) {
+	db := testdb.Open(t)
+	log, err := gutillog.NewLogger("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := gutillog.NewContext(context.Background(), log)
+
+	cfg := &config.Config{
+		Timezone: time.UTC,
+		Triage: config.TriageConfig{
+			Enabled: true,
+		},
+	}
+	pastRun := models.AgentRun{
+		Kind:      models.AgentRunTriage,
+		StartedAt: time.Now(),
+		Status:    models.AgentRunSucceeded,
+		Model:     config.TriageModel,
+		TokensIn:  100_000,
+		TokensOut: 100_000,
+	}
+	if err := db.Create(&pastRun).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	st := settings.New(db, cfg)
+	vals, err := st.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals.DailyBudgetUSD = 0.01
+	vals.TriageEnabled = true
+	if err := st.Save(ctx, vals); err != nil {
+		t.Fatal(err)
+	}
+	r := &Runner{Cfg: cfg, DB: db, Settings: st}
+	if err := r.RunAll(ctx); err != nil {
+		t.Fatalf("budget exhausted RunAll should succeed, got: %v", err)
+	}
+
+	var latest models.AgentRun
+	if err := db.Order("started_at desc").First(&latest).Error; err != nil {
+		t.Fatal(err)
+	}
+	if latest.Status != models.AgentRunSucceeded {
+		t.Errorf("status = %q, want succeeded", latest.Status)
+	}
+	var summary map[string]any
+	if err := json.Unmarshal(latest.Summary, &summary); err != nil {
+		t.Fatal(err)
+	}
+	if summary["budget_stopped"].(float64) < 1 {
+		t.Errorf("expected budget_stopped in summary: %v", summary)
 	}
 }
