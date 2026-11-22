@@ -118,6 +118,9 @@ func Load() (*Config, error) {
 	return c, c.validate()
 }
 
+// maxTriageDays matches the settings store's rail on the day-count settings.
+const maxTriageDays = 365
+
 func (c *Config) validate() error {
 	var missing []string
 	if c.DatabaseURL == "" {
@@ -146,6 +149,15 @@ func (c *Config) validate() error {
 	}
 	if t := c.Triage.ConfidenceThreshold; t < 0 || t > 1 {
 		return fmt.Errorf("%w: TRIAGE_CONFIDENCE_THRESHOLD must be in [0, 1], got %v", errInvalidEnv, t)
+	}
+	if d := c.Triage.BackfillDays; d < 1 || d > maxTriageDays {
+		return fmt.Errorf("%w: TRIAGE_BACKFILL_DAYS must be 1-%d, got %d", errInvalidEnv, maxTriageDays, d)
+	}
+	if d := c.Triage.ReconcileDays; d < 0 || d > maxTriageDays {
+		return fmt.Errorf("%w: TRIAGE_RECONCILE_DAYS must be 0-%d, got %d", errInvalidEnv, maxTriageDays, d)
+	}
+	if n := c.Triage.MaxPerRun; n < 1 {
+		return fmt.Errorf("%w: TRIAGE_MAX_PER_RUN must be at least 1, got %d", errInvalidEnv, n)
 	}
 	return nil
 }

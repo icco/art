@@ -7,7 +7,7 @@ import (
 )
 
 // AgentRunsList responds with recent agent runs, newest first. Supports an
-// optional kind filter (planner|triage) plus standard pagination.
+// optional kind filter (triage, or the retired planner and reconcile) plus standard pagination.
 func (h *Handlers) AgentRunsList(w http.ResponseWriter, r *http.Request) {
 	limit, offset, ok := parsePagination(w, r)
 	if !ok {
@@ -16,7 +16,7 @@ func (h *Handlers) AgentRunsList(w http.ResponseWriter, r *http.Request) {
 	q := h.DB.WithContext(r.Context())
 	if kind := r.URL.Query().Get("kind"); kind != "" {
 		if !models.AgentRunKind(kind).Valid() {
-			writeError(w, r, http.StatusBadRequest, "kind must be 'planner' or 'triage'")
+			writeError(w, r, http.StatusBadRequest, "kind must be 'triage', 'planner' or 'reconcile'")
 			return
 		}
 		q = q.Where("kind = ?", kind)

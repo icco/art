@@ -4,6 +4,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"go.icco.me/art/lib/models"
@@ -68,27 +69,55 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 	var job models.Job
 	running := false
 	err := q.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		err := tx.Where("kind = ? AND status = ?", kind, models.JobRunning).First(&job).Error
-		if err == nil {
-			running = true
-			return nil
-		}
-		if !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		err = tx.Where("kind = ? AND status = ?", kind, models.JobPending).First(&job).Error
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		// A lost insert race means another caller's row exists, but the worker
+		// may already have claimed it, so re-read running and pending.
+		for range 2 {
+			var found bool
+			var err error
+			job, running, found, err = activeJob(tx, kind)
+			if err != nil {
+				return err
+			}
+			if found {
+				if running {
+					return nil
+				}
+				job.RunAt = q.now()
+				return tx.Model(&job).Update("run_at", job.RunAt).Error
+			}
+			if testHookBeforeEnqueueInsert != nil {
+				testHookBeforeEnqueueInsert()
+			}
 			job = models.Job{Kind: kind, Status: models.JobPending, RunAt: q.now(), MaxAttempts: maxAttempts}
-			return tx.Create(&job).Error
+			res := tx.Clauses(onePendingConflict).Create(&job)
+			if res.Error != nil || res.RowsAffected > 0 {
+				return res.Error
+			}
+			if testHookAfterEnqueueConflict != nil {
+				testHookAfterEnqueueConflict()
+			}
 		}
-		if err != nil {
-			return err
-		}
-		job.RunAt = q.now()
-		return tx.Model(&job).Update("run_at", job.RunAt).Error
+		return fmt.Errorf("enqueue %s: %w", kind, errEnqueueRace)
 	})
 	return job, running, err
 }
+
+// activeJob returns kind's running job, else its pending job.
+func activeJob(tx *gorm.DB, kind models.JobKind) (models.Job, bool, bool, error) {
+	var job models.Job
+	err := tx.Where("kind = ? AND status IN ?", kind, []models.JobStatus{models.JobRunning, models.JobPending}).
+		Order("status = 'running' DESC").First(&job).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return models.Job{}, false, false, nil
+	}
+	if err != nil {
+		return models.Job{}, false, false, err
+	}
+	return job, job.Status == models.JobRunning, true, nil
+}
+
+// Test hooks for interleaving a concurrent insert and claim inside Enqueue.
+var testHookBeforeEnqueueInsert, testHookAfterEnqueueConflict func()
 
 // claimSQL claims the next due job.
 //

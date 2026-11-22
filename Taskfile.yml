@@ -29,10 +29,11 @@ tasks:
       # -p 1 serializes package test binaries; they share one Postgres schema.
       - go test -p 1 ./...
   lint:
-    desc: Vet and check formatting
+    desc: Vet, check formatting, and run golangci-lint
     cmds:
       - go vet ./...
       - test -z "$(gofmt -l .)" || (echo "run gofmt"; exit 1)
+      - golangci-lint run ./...
   tidy:
     desc: Tidy go modules
     cmds:

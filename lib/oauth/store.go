@@ -82,10 +82,3 @@ func (s *Store) Load(ctx context.Context, kind models.AccountKind) (*oauth2.Toke
 	}
 	return &tok, a, nil
 }
-
-// All returns all linked accounts in deterministic order.
-func (s *Store) All(ctx context.Context) ([]models.Account, error) {
-	var out []models.Account
-	err := s.DB.WithContext(ctx).Order("kind").Find(&out).Error
-	return out, err
-}

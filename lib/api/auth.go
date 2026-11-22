@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -11,9 +10,7 @@ import (
 	"google.golang.org/api/idtoken"
 )
 
-type idCtxKey struct{}
-
-// Identity is the authenticated caller information stored on a request context.
+// Identity is the authenticated caller.
 type Identity struct {
 	Email string
 }
@@ -35,13 +32,11 @@ func OIDCMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 				http.Error(w, "invalid id token", http.StatusUnauthorized)
 				return
 			}
-			id, err := authorize(payload, cfg)
-			if err != nil {
+			if _, err := authorize(payload, cfg); err != nil {
 				http.Error(w, "not authorized", http.StatusForbidden)
 				return
 			}
-			ctx := context.WithValue(r.Context(), idCtxKey{}, id)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r)
 		})
 	}
 }
@@ -69,10 +64,4 @@ func emailVerified(claims map[string]any) bool {
 	default:
 		return false
 	}
-}
-
-// FromContext returns the Identity stored on ctx by OIDCMiddleware, if any.
-func FromContext(ctx context.Context) (Identity, bool) {
-	id, ok := ctx.Value(idCtxKey{}).(Identity)
-	return id, ok
 }

@@ -48,9 +48,9 @@ func TestStartAndAwaitConsecutiveErrors(t *testing.T) {
 	defer server.Close()
 
 	client := stubClient(server)
-	msg := startAndAwait(client, "triage", func(context.Context) (string, error) {
-		return "started", nil
-	}, "triage")
+	msg := startAndAwaitJob(client, func(context.Context) (string, string, error) {
+		return "started", "", nil
+	})
 
 	em, ok := msg.(errMsg)
 	if !ok {
@@ -79,9 +79,9 @@ func TestStartAndAwaitDisabledJob(t *testing.T) {
 	defer server.Close()
 
 	client := stubClient(server)
-	msg := startAndAwaitJob(client, "triage", func(context.Context) (string, string, error) {
+	msg := startAndAwaitJob(client, func(context.Context) (string, string, error) {
 		return "started", "j-disabled", nil
-	}, "triage")
+	})
 
 	sm, ok := msg.(statusMsg)
 	if !ok {
@@ -111,9 +111,9 @@ func TestStartAndAwaitFailedJobWithoutRun(t *testing.T) {
 	defer server.Close()
 
 	client := stubClient(server)
-	msg := startAndAwaitJob(client, "triage", func(context.Context) (string, string, error) {
+	msg := startAndAwaitJob(client, func(context.Context) (string, string, error) {
 		return "started", "j-failed", nil
-	}, "triage")
+	})
 
 	em, ok := msg.(errMsg)
 	if !ok {
@@ -147,9 +147,9 @@ func TestStartAndAwaitRunsFailWhileJobPolls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+	msg := startAndAwaitJob(stubClient(server), func(context.Context) (string, string, error) {
 		return "started", "j1", nil
-	}, "triage")
+	})
 	if _, ok := msg.(errMsg); !ok {
 		t.Fatalf("expected errMsg when /agent-runs keeps failing, got %T: %+v", msg, msg)
 	}
@@ -172,9 +172,9 @@ func TestStartAndAwaitJobFailsWhileRunsPoll(t *testing.T) {
 	}))
 	defer server.Close()
 
-	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+	msg := startAndAwaitJob(stubClient(server), func(context.Context) (string, string, error) {
 		return "started", "j1", nil
-	}, "triage")
+	})
 	if _, ok := msg.(errMsg); !ok {
 		t.Fatalf("expected errMsg when /jobs keeps failing, got %T: %+v", msg, msg)
 	}
@@ -203,9 +203,9 @@ func TestStartAndAwaitFinalRunLookupFails(t *testing.T) {
 	}))
 	defer server.Close()
 
-	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+	msg := startAndAwaitJob(stubClient(server), func(context.Context) (string, string, error) {
 		return "started", "j1", nil
-	}, "triage")
+	})
 	if _, ok := msg.(errMsg); !ok {
 		t.Fatalf("expected errMsg when the final run lookup fails, got %T: %+v", msg, msg)
 	}

@@ -87,6 +87,9 @@ func loadRuns(c *Client) tea.Cmd {
 	}
 }
 
+// triageKind is both the agent-run kind polled and the status label.
+const triageKind = "triage"
+
 const (
 	triagePollInterval       = 2 * time.Second
 	triagePollTimeout        = 8 * time.Minute
@@ -96,24 +99,17 @@ const (
 // triage starts a detached triage pass and polls until it lands.
 func triage(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		return startAndAwaitJob(c, "triage", func(ctx context.Context) (string, string, error) {
+		return startAndAwaitJob(c, func(ctx context.Context) (string, string, error) {
 			status, job, err := c.TriageJob(ctx)
 			return status, job.ID, err
-		}, "triage")
+		})
 	}
 }
 
-// startAndAwait triggers a detached pass and polls until a run past the
-// baseline settles.
-func startAndAwait(c *Client, kind string, start func(context.Context) (string, error), label string) tea.Msg {
-	return startAndAwaitJob(c, kind, func(ctx context.Context) (string, string, error) {
-		status, err := start(ctx)
-		return status, "", err
-	}, label)
-}
-
-func startAndAwaitJob(c *Client, kind string, start func(context.Context) (string, string, error), label string) tea.Msg {
-	latest, err := latestRunOf(c, kind)
+// startAndAwaitJob triggers a detached pass and polls until a run past the
+// baseline settles or the enqueued job finishes.
+func startAndAwaitJob(c *Client, start func(context.Context) (string, string, error)) tea.Msg {
+	latest, err := latestRunOf(c, triageKind)
 	if err != nil {
 		return errMsg{err}
 	}
@@ -129,7 +125,7 @@ func startAndAwaitJob(c *Client, kind string, start func(context.Context) (strin
 	deadline := timeNow().Add(triagePollTimeout)
 	for timeNow().Before(deadline) {
 		timeSleep(triagePollInterval)
-		latest, err := latestRunOf(c, kind)
+		latest, err := latestRunOf(c, triageKind)
 		if err != nil {
 			runFails++
 			if runFails >= maxConsecutivePollErrors {
@@ -138,7 +134,7 @@ func startAndAwaitJob(c *Client, kind string, start func(context.Context) (strin
 		} else {
 			runFails = 0
 			if settled(latest, baseline) {
-				return runOutcome(label, latest)
+				return runOutcome(latest)
 			}
 		}
 
@@ -159,28 +155,28 @@ func startAndAwaitJob(c *Client, kind string, start func(context.Context) (strin
 		switch job.Status {
 		case "failed":
 			if job.LastError != "" {
-				return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, job.LastError)}
+				return errMsg{fmt.Errorf("%s %w: %s", triageKind, errJobFailed, job.LastError)}
 			}
-			return errMsg{fmt.Errorf("%s %w", label, errJobFailed)}
+			return errMsg{fmt.Errorf("%s %w", triageKind, errJobFailed)}
 		case "succeeded":
-			latest, err := latestRunOf(c, kind)
+			latest, err := latestRunOf(c, triageKind)
 			if err != nil {
 				return errMsg{err}
 			}
 			if settled(latest, baseline) {
-				return runOutcome(label, latest)
+				return runOutcome(latest)
 			}
-			return statusMsg(label + " finished, no run recorded (disabled?)")
+			return statusMsg(triageKind + " finished, no run recorded (disabled?)")
 		}
 	}
-	return statusMsg(label + " still running…")
+	return statusMsg(triageKind + " still running…")
 }
 
-func runOutcome(label string, run *AgentRun) tea.Msg {
+func runOutcome(run *AgentRun) tea.Msg {
 	if run.Status == "failed" {
-		return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, run.Error)}
+		return errMsg{fmt.Errorf("%s %w: %s", triageKind, errJobFailed, run.Error)}
 	}
-	return statusMsg(label + " done")
+	return statusMsg(triageKind + " done")
 }
 
 // settled reports whether a run distinct from baseline has finished.

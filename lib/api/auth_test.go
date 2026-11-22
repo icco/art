@@ -100,9 +100,3 @@ func TestOIDCMiddleware_BadToken(t *testing.T) {
 		t.Fatalf("bad token: got %d", w.Code)
 	}
 }
-
-func TestFromContext_Empty(t *testing.T) {
-	if _, ok := FromContext(context.Background()); ok {
-		t.Fatal("FromContext should return ok=false on empty ctx")
-	}
-}

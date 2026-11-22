@@ -69,7 +69,7 @@ const (
 	ActionReply EmailAction = "reply"
 	// ActionKeep means art only labeled Art/Triaged.
 	ActionKeep EmailAction = "keep"
-	// ActionNone means art classified but applied nothing (dry run).
+	// ActionNone is the column default for a row with no recorded action.
 	ActionNone EmailAction = "none"
 )
 
@@ -131,19 +131,19 @@ type Account struct {
 	RefreshTokenEncrypted []byte      `gorm:"type:bytea;not null"                                                     json:"-"`
 }
 
-// AgentRun records one planner or triage invocation, its model usage, and
+// AgentRun records one triage invocation, its model usage, and
 // outcome. Kind discriminates which agent produced the row.
 type AgentRun struct {
 	Base
-	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'planner';index;check:kind IN ('planner','triage','reconcile')" json:"kind"`
-	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started"                                              json:"started_at"`
+	Kind      AgentRunKind   `gorm:"type:varchar(16);not null;default:'triage';index;check:kind IN ('planner','triage','reconcile')" json:"kind"`
+	StartedAt time.Time      `gorm:"not null;default:now();index:idx_agent_runs_started"                                             json:"started_at"`
 	EndedAt   *time.Time     `json:"ended_at,omitempty"`
-	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')"     json:"status"`
-	Model     string         `gorm:"type:varchar(64);not null;default:''"                                                             json:"model"`
-	TokensIn  int            `gorm:"not null;default:0"                                                                               json:"tokens_in"`
-	TokensOut int            `gorm:"not null;default:0"                                                                               json:"tokens_out"`
-	Summary   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"                                                                 json:"summary"`
-	Error     string         `gorm:"type:text;not null;default:''"                                                                    json:"error"`
+	Status    AgentRunStatus `gorm:"type:varchar(16);not null;default:'running';check:status IN ('running','succeeded','failed')"    json:"status"`
+	Model     string         `gorm:"type:varchar(64);not null;default:''"                                                            json:"model"`
+	TokensIn  int            `gorm:"not null;default:0"                                                                              json:"tokens_in"`
+	TokensOut int            `gorm:"not null;default:0"                                                                              json:"tokens_out"`
+	Summary   datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"                                                                json:"summary"`
+	Error     string         `gorm:"type:text;not null;default:''"                                                                   json:"error"`
 }
 
 // EmailMessage is one triaged Gmail message: its metadata, the classification

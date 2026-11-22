@@ -209,12 +209,6 @@ func (c *Client) TriageJob(ctx context.Context) (string, Job, error) {
 	return out.Status, out.Job, c.do(ctx, "POST", "/triage/run", nil, &out)
 }
 
-// Triage triggers a detached triage pass and returns "started" or "running".
-func (c *Client) Triage(ctx context.Context) (string, error) {
-	status, _, err := c.TriageJob(ctx)
-	return status, err
-}
-
 // ReverseEmail marks a triaged decision bad and undoes it server-side.
 func (c *Client) ReverseEmail(ctx context.Context, id string) (Email, error) {
 	var out Email
