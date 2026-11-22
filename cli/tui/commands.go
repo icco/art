@@ -125,60 +125,62 @@ func startAndAwaitJob(c *Client, kind string, start func(context.Context) (strin
 	}
 	baseline := pollBaseline(latest, status)
 
-	var lastErr error
-	consecutiveErrors := 0
+	runFails, jobFails := 0, 0
 	deadline := timeNow().Add(triagePollTimeout)
 	for timeNow().Before(deadline) {
 		timeSleep(triagePollInterval)
 		latest, err := latestRunOf(c, kind)
 		if err != nil {
-			consecutiveErrors++
-			lastErr = err
-			if consecutiveErrors >= maxConsecutivePollErrors {
-				return errMsg{lastErr}
+			runFails++
+			if runFails >= maxConsecutivePollErrors {
+				return errMsg{err}
 			}
 		} else {
-			consecutiveErrors = 0
+			runFails = 0
 			if settled(latest, baseline) {
-				if latest.Status == "failed" {
-					return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, latest.Error)}
-				}
-				return statusMsg(label + " done")
+				return runOutcome(label, latest)
 			}
 		}
 
-		if jobID != "" {
-			jobCtx, jobCancel := bg()
-			job, jerr := c.GetJob(jobCtx, jobID)
-			jobCancel()
-			if jerr != nil {
-				consecutiveErrors++
-				lastErr = jerr
-				if consecutiveErrors >= maxConsecutivePollErrors {
-					return errMsg{lastErr}
-				}
-			} else {
-				consecutiveErrors = 0
-				if job.Status == "failed" {
-					if job.LastError != "" {
-						return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, job.LastError)}
-					}
-					return errMsg{fmt.Errorf("%s %w", label, errJobFailed)}
-				}
-				if job.Status == "succeeded" {
-					latest, err := latestRunOf(c, kind)
-					if err == nil && settled(latest, baseline) {
-						if latest.Status == "failed" {
-							return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, latest.Error)}
-						}
-						return statusMsg(label + " done")
-					}
-					return statusMsg(label + " finished, no run recorded (disabled?)")
-				}
+		if jobID == "" {
+			continue
+		}
+		jobCtx, jobCancel := bg()
+		job, err := c.GetJob(jobCtx, jobID)
+		jobCancel()
+		if err != nil {
+			jobFails++
+			if jobFails >= maxConsecutivePollErrors {
+				return errMsg{err}
 			}
+			continue
+		}
+		jobFails = 0
+		switch job.Status {
+		case "failed":
+			if job.LastError != "" {
+				return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, job.LastError)}
+			}
+			return errMsg{fmt.Errorf("%s %w", label, errJobFailed)}
+		case "succeeded":
+			latest, err := latestRunOf(c, kind)
+			if err != nil {
+				return errMsg{err}
+			}
+			if settled(latest, baseline) {
+				return runOutcome(label, latest)
+			}
+			return statusMsg(label + " finished, no run recorded (disabled?)")
 		}
 	}
 	return statusMsg(label + " still running…")
+}
+
+func runOutcome(label string, run *AgentRun) tea.Msg {
+	if run.Status == "failed" {
+		return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, run.Error)}
+	}
+	return statusMsg(label + " done")
 }
 
 // settled reports whether a run distinct from baseline has finished.

@@ -123,3 +123,90 @@ func TestStartAndAwaitFailedJobWithoutRun(t *testing.T) {
 		t.Fatalf("expected last_error in errMsg, got: %v", em.err)
 	}
 }
+
+func TestStartAndAwaitRunsFailWhileJobPolls(t *testing.T) {
+	origSleep := timeSleep
+	timeSleep = func(time.Duration) {}
+	defer func() { timeSleep = origSleep }()
+
+	runCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/agent-runs":
+			runCalls++
+			if runCalls == 1 {
+				encodeJSON(t, w, []AgentRun{})
+				return
+			}
+			http.Error(w, "runs down", http.StatusInternalServerError)
+		case "/jobs/j1":
+			encodeJSON(t, w, Job{ID: "j1", Status: "running"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+		return "started", "j1", nil
+	}, "triage")
+	if _, ok := msg.(errMsg); !ok {
+		t.Fatalf("expected errMsg when /agent-runs keeps failing, got %T: %+v", msg, msg)
+	}
+}
+
+func TestStartAndAwaitJobFailsWhileRunsPoll(t *testing.T) {
+	origSleep := timeSleep
+	timeSleep = func(time.Duration) {}
+	defer func() { timeSleep = origSleep }()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/agent-runs":
+			encodeJSON(t, w, []AgentRun{})
+		case "/jobs/j1":
+			http.Error(w, "jobs down", http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+		return "started", "j1", nil
+	}, "triage")
+	if _, ok := msg.(errMsg); !ok {
+		t.Fatalf("expected errMsg when /jobs keeps failing, got %T: %+v", msg, msg)
+	}
+}
+
+func TestStartAndAwaitFinalRunLookupFails(t *testing.T) {
+	origSleep := timeSleep
+	timeSleep = func(time.Duration) {}
+	defer func() { timeSleep = origSleep }()
+
+	runCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/agent-runs":
+			runCalls++
+			if runCalls <= 2 {
+				encodeJSON(t, w, []AgentRun{})
+				return
+			}
+			http.Error(w, "runs down", http.StatusInternalServerError)
+		case "/jobs/j1":
+			encodeJSON(t, w, Job{ID: "j1", Status: "succeeded"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	msg := startAndAwaitJob(stubClient(server), "triage", func(context.Context) (string, string, error) {
+		return "started", "j1", nil
+	}, "triage")
+	if _, ok := msg.(errMsg); !ok {
+		t.Fatalf("expected errMsg when the final run lookup fails, got %T: %+v", msg, msg)
+	}
+}
