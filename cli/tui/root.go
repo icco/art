@@ -146,6 +146,10 @@ func (m rootModel) navigate(to pageID) (tea.Model, tea.Cmd) {
 	if m.current() == to {
 		return m, nil
 	}
+	if to == pageDashboard {
+		m.stack = []pageID{pageDashboard}
+		return m, m.pages[to].Init()
+	}
 	for i, id := range m.stack {
 		if id == to {
 			m.stack = append(m.stack[:i], m.stack[i+1:]...)
@@ -161,7 +165,7 @@ func (m rootModel) pop() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.stack = m.stack[:len(m.stack)-1]
-	return m, nil
+	return m, m.pages[m.current()].Init()
 }
 
 func (m rootModel) routeToCurrent(msg tea.Msg) (tea.Model, tea.Cmd) {
