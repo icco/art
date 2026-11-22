@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"google.golang.org/api/gmail/v1"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 )
 
@@ -135,6 +137,29 @@ func TestEnsureLabelsCreateConflict(t *testing.T) {
 	}
 	if labels[LabelTriaged] != "L1" {
 		t.Errorf("labels = %v", labels)
+	}
+}
+
+func TestEnsureLabelsCreateConflictStillMissing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/labels") && r.Method == http.MethodGet:
+			writeJSON(t, w, &gmail.ListLabelsResponse{})
+		case strings.HasSuffix(r.URL.Path, "/labels") && r.Method == http.MethodPost:
+			http.Error(w, `{"error": {"code": 409, "message": "Label name exists or conflicts"}}`, http.StatusConflict)
+		default:
+			http.Error(w, "unexpected "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+
+	labels, err := testClient(t, srv).EnsureLabels(context.Background())
+	if err == nil {
+		t.Fatalf("expected error on persistent conflict, got labels=%v", labels)
+	}
+	var gerr *googleapi.Error
+	if !errors.As(err, &gerr) || gerr.Code != http.StatusConflict {
+		t.Errorf("expected 409 error wrapped, got %v", err)
 	}
 }
 
