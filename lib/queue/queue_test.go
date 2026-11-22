@@ -345,3 +345,29 @@ func TestEnqueueConcurrentSharesOnePending(t *testing.T) {
 		t.Fatalf("want every caller to get the same pending job, got %d ids", len(seen))
 	}
 }
+
+// TestEnqueueReportsRunningAfterLostRaceAndClaim covers a lost insert race
+// where the worker claims the winner's row before Enqueue re-reads it.
+func TestEnqueueReportsRunningAfterLostRaceAndClaim(t *testing.T) {
+	q, now := fixedQueue(t)
+	ctx := context.Background()
+	testHookBeforeEnqueueInsert = func() {
+		testHookBeforeEnqueueInsert = nil
+		mustJob(t, q, models.JobTriage, models.JobPending, now, 0)
+	}
+	testHookAfterEnqueueConflict = func() {
+		testHookAfterEnqueueConflict = nil
+		if _, err := q.Claim(ctx); err != nil {
+			t.Errorf("claim: %v", err)
+		}
+	}
+	t.Cleanup(func() { testHookBeforeEnqueueInsert, testHookAfterEnqueueConflict = nil, nil })
+
+	job, running, err := q.Enqueue(ctx, models.JobTriage)
+	if err != nil {
+		t.Fatalf("enqueue after lost race: %v", err)
+	}
+	if !running || job.Status != models.JobRunning {
+		t.Fatalf("want the claimed job reported running, got running=%v %+v", running, job)
+	}
+}
