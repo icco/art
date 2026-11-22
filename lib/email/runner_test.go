@@ -99,6 +99,39 @@ func TestTriageWedged(t *testing.T) {
 	}
 }
 
+func TestTriageRunError(t *testing.T) {
+	t.Parallel()
+	wedgedErr := errClassifiedNone
+	tests := []struct {
+		name          string
+		processed     int
+		runErrs       []string
+		budgetStopped int
+		wedged        error
+		wantErr       bool
+	}{
+		{"quiet inbox", 0, nil, 0, nil, false},
+		{"processed mail", 3, nil, 0, nil, false},
+		{"processed mail with account error", 3, []string{"work: client: failed"}, 0, nil, false},
+		{"budget stopped upfront", 0, nil, 1, nil, false},
+		{"budget stopped mid-run", 0, nil, 1, nil, false},
+		{"wedged error", 0, nil, 0, wedgedErr, true},
+		{"setup error classifier", 0, []string{"classifier: init failed"}, 0, nil, true},
+		{"setup error gmail client", 0, []string{"personal: client: oauth error"}, 0, nil, true},
+		{"setup error run account", 0, []string{"personal: ensure labels: timeout"}, 0, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := triageRunError(tt.processed, tt.runErrs, tt.budgetStopped, tt.wedged)
+			if got := err != nil; got != tt.wantErr {
+				t.Errorf("triageRunError(%d, %v, %d, %v) = %v, want err=%v",
+					tt.processed, tt.runErrs, tt.budgetStopped, tt.wedged, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestFinishRecordsSummary(t *testing.T) {
 	db := testdb.Open(t)
 	r := &Runner{Cfg: &config.Config{Triage: config.TriageConfig{DryRun: true}}, DB: db}
@@ -200,5 +233,53 @@ func TestRunAllBudgetExhausted(t *testing.T) {
 	}
 	if summary["budget_stopped"].(float64) < 1 {
 		t.Errorf("expected budget_stopped in summary: %v", summary)
+	}
+}
+
+func TestRunAllFailsOnSetupError(t *testing.T) {
+	db := testdb.Open(t)
+	log, err := gutillog.NewLogger("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := gutillog.NewContext(context.Background(), log)
+
+	acc := models.Account{
+		Kind:                  models.AccountPersonal,
+		Email:                 "test@example.com",
+		RefreshTokenEncrypted: []byte("invalid-token"),
+	}
+	if err := db.Create(&acc).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &config.Config{
+		Timezone: time.UTC,
+		Triage: config.TriageConfig{
+			Enabled: true,
+		},
+	}
+	st := settings.New(db, cfg)
+	vals, err := st.Load(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	vals.TriageEnabled = true
+	if err := st.Save(ctx, vals); err != nil {
+		t.Fatal(err)
+	}
+
+	r := &Runner{Cfg: cfg, DB: db, Settings: st}
+	err = r.RunAll(ctx)
+	if err == nil {
+		t.Fatal("expected error from RunAll when account client setup fails, got nil")
+	}
+
+	var latest models.AgentRun
+	if err := db.Order("started_at desc").First(&latest).Error; err != nil {
+		t.Fatal(err)
+	}
+	if latest.Status != models.AgentRunFailed {
+		t.Errorf("status = %q, want failed", latest.Status)
 	}
 }

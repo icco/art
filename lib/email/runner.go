@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.icco.me/art/lib/config"
@@ -89,7 +90,7 @@ func (r *Runner) RunAll(ctx context.Context) error {
 	if err := r.finish(ctx, run.ID, vals.TriageDryRun, counts, runErrs, tokensIn, tokensOut); err != nil {
 		return err
 	}
-	return wedged
+	return triageRunError(processed, runErrs, counts["budget_stopped"], wedged)
 }
 
 // triageWedged distinguishes a quiet inbox from triage being down. Per-message
@@ -101,6 +102,16 @@ func triageWedged(processed, errs, budgetStopped int) error {
 		return nil
 	}
 	return fmt.Errorf("%w (%d attempted)", errClassifiedNone, errs)
+}
+
+func triageRunError(processed int, runErrs []string, budgetStopped int, wedged error) error {
+	if wedged != nil {
+		return wedged
+	}
+	if processed == 0 && len(runErrs) > 0 && budgetStopped == 0 {
+		return fmt.Errorf("%w: %s", errRunFailed, strings.Join(runErrs, "; "))
+	}
+	return nil
 }
 
 func (r *Runner) triageAccounts(ctx context.Context, runID string, vals settings.Values, counts map[string]int, runErrs *[]string) (processed, tokensIn, tokensOut int) {
