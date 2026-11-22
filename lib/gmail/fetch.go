@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.icco.me/art/lib/models"
 	"golang.org/x/net/html"
 	"google.golang.org/api/gmail/v1"
 )
@@ -47,6 +48,7 @@ func (c *Client) ThreadHasSentMessage(ctx context.Context, threadID string) (boo
 type Message struct {
 	ID         string
 	ThreadID   string
+	Account    models.AccountKind
 	From       string
 	To         string
 	Subject    string
@@ -98,6 +100,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*Message, error) {
 	out := &Message{
 		ID:       m.Id,
 		ThreadID: m.ThreadId,
+		Account:  c.Account.Kind,
 		Snippet:  m.Snippet,
 		LabelIDs: m.LabelIds,
 	}

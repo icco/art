@@ -16,12 +16,23 @@ import (
 )
 
 func TestUserPrompt(t *testing.T) {
-	m := &gmail.Message{From: "a@b.com", To: "me@x.com", Subject: "Hi", Snippet: "snip", Body: "the body"}
+	m := &gmail.Message{
+		Account: models.AccountWork,
+		From:    "a@b.com",
+		To:      "me@x.com",
+		Subject: "Hi",
+		Snippet: "snip",
+		Body:    "the body",
+	}
 	p := userPrompt(m)
-	for _, want := range []string{"From: a@b.com", "Subject: Hi", "the body"} {
+	for _, want := range []string{"Account: work", "From: a@b.com", "Subject: Hi", "the body"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt missing %q in:\n%s", want, p)
 		}
+	}
+	mp := &gmail.Message{Account: models.AccountPersonal, From: "a@b.com"}
+	if p := userPrompt(mp); !strings.Contains(p, "Account: personal") {
+		t.Errorf("prompt missing Account: personal in:\n%s", p)
 	}
 	// Falls back to the snippet when there is no body.
 	if p := userPrompt(&gmail.Message{Snippet: "only snippet"}); !strings.Contains(p, "only snippet") {
