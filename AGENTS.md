@@ -30,7 +30,7 @@ Guidance for coding agents working in this repo. Operator docs live in [README.m
 task build         # builds ./bin/art-server and ./bin/art
 task run           # run server
 task test          # run tests (-p 1 required, shares one DB schema; TEST_DATABASE_URL required for DB tests)
-task lint          # run vet and gofmt
+task lint          # run vet, gofmt, and golangci-lint
 golangci-lint run  # run full linters
 task tidy          # tidy go modules
 ```
