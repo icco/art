@@ -1,13 +1,16 @@
 package email
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/models"
+	"go.icco.me/art/lib/oauth"
 	"go.icco.me/art/lib/settings"
 	"go.icco.me/art/lib/testdb"
 	gutillog "go.icco.me/gutil/logging"
@@ -190,7 +193,10 @@ func TestRunAllBudgetExhausted(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
 		Triage: config.TriageConfig{
-			Enabled: true,
+			Enabled:             true,
+			BackfillDays:        config.DefaultTriageBackfillDays,
+			ReconcileDays:       config.DefaultTriageReconcileDays,
+			ConfidenceThreshold: config.DefaultTriageConfidenceThreshold,
 		},
 	}
 	pastRun := models.AgentRun{
@@ -256,7 +262,10 @@ func TestRunAllFailsOnSetupError(t *testing.T) {
 	cfg := &config.Config{
 		Timezone: time.UTC,
 		Triage: config.TriageConfig{
-			Enabled: true,
+			Enabled:             true,
+			BackfillDays:        config.DefaultTriageBackfillDays,
+			ReconcileDays:       config.DefaultTriageReconcileDays,
+			ConfidenceThreshold: config.DefaultTriageConfidenceThreshold,
 		},
 	}
 	st := settings.New(db, cfg)
@@ -269,7 +278,13 @@ func TestRunAllFailsOnSetupError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := &Runner{Cfg: cfg, DB: db, Settings: st}
+	t.Setenv("GEMINI_API_KEY", "test-key")
+	sealer, err := oauth.NewSealer(bytes.Repeat([]byte{0x02}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	flow := oauth.NewFlow("cid", "csec", "http://localhost/cb", &oauth.Store{DB: db, Sealer: sealer})
+	r := &Runner{Cfg: cfg, DB: db, Settings: st, OAuth: flow}
 	err = r.RunAll(ctx)
 	if err == nil {
 		t.Fatal("expected error from RunAll when account client setup fails, got nil")
@@ -281,5 +296,8 @@ func TestRunAllFailsOnSetupError(t *testing.T) {
 	}
 	if latest.Status != models.AgentRunFailed {
 		t.Errorf("status = %q, want failed", latest.Status)
+	}
+	if !strings.HasPrefix(latest.Error, "personal: client:") {
+		t.Errorf("error = %q, want the personal account client failure", latest.Error)
 	}
 }
