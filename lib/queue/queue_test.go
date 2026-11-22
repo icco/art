@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -311,5 +312,36 @@ func TestReapStaleIgnoresRunningRowsWithNoStartedAt(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("reaped %d row(s) with a null started_at", n)
+	}
+}
+
+func TestEnqueueConcurrentSharesOnePending(t *testing.T) {
+	q, _ := fixedQueue(t)
+	const n = 8
+	ids := make(chan string, n)
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() {
+			job, _, err := q.Enqueue(context.Background(), models.JobTriage)
+			if err != nil {
+				errs <- err
+				return
+			}
+			ids <- job.ID
+		})
+	}
+	wg.Wait()
+	close(ids)
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent enqueue: %v", err)
+	}
+	seen := map[string]bool{}
+	for id := range ids {
+		seen[id] = true
+	}
+	if len(seen) != 1 {
+		t.Fatalf("want every caller to get the same pending job, got %d ids", len(seen))
 	}
 }

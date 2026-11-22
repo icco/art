@@ -79,7 +79,13 @@ func (q *Queue) Enqueue(ctx context.Context, kind models.JobKind) (models.Job, b
 		err = tx.Where("kind = ? AND status = ?", kind, models.JobPending).First(&job).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			job = models.Job{Kind: kind, Status: models.JobPending, RunAt: q.now(), MaxAttempts: maxAttempts}
-			return tx.Create(&job).Error
+			res := tx.Clauses(onePendingConflict).Create(&job)
+			if res.Error != nil || res.RowsAffected > 0 {
+				return res.Error
+			}
+			// A concurrent Enqueue inserted the pending row first; report that one.
+			job = models.Job{}
+			return tx.Where("kind = ? AND status = ?", kind, models.JobPending).First(&job).Error
 		}
 		if err != nil {
 			return err
