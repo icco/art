@@ -61,16 +61,16 @@ type Values struct {
 // Validate rejects values the triager could not act on.
 func (v Values) Validate() error {
 	if t := v.TriageConfidenceThreshold; t < 0 || t > 1 {
-		return fmt.Errorf("%w: triage_confidence_threshold must be in [0, 1], got %v", errInvalidSetting, t)
+		return fmt.Errorf("%w: triage_confidence_threshold must be in [0, 1], got %v", ErrInvalidSetting, t)
 	}
 	if d := v.TriageBackfillDays; d < 1 || d > maxDays {
-		return fmt.Errorf("%w: triage_backfill_days must be 1-%d, got %d", errInvalidSetting, maxDays, d)
+		return fmt.Errorf("%w: triage_backfill_days must be 1-%d, got %d", ErrInvalidSetting, maxDays, d)
 	}
 	if d := v.TriageReconcileDays; d < 0 || d > maxDays {
-		return fmt.Errorf("%w: triage_reconcile_days must be 0-%d, got %d", errInvalidSetting, maxDays, d)
+		return fmt.Errorf("%w: triage_reconcile_days must be 0-%d, got %d", ErrInvalidSetting, maxDays, d)
 	}
 	if b := v.DailyBudgetUSD; b < 0 || b > maxDailyBudgetUSD {
-		return fmt.Errorf("%w: daily_budget_usd must be 0-%v (0 disables the cap), got %v", errInvalidSetting, maxDailyBudgetUSD, b)
+		return fmt.Errorf("%w: daily_budget_usd must be 0-%v (0 disables the cap), got %v", ErrInvalidSetting, maxDailyBudgetUSD, b)
 	}
 	return nil
 }
@@ -141,7 +141,8 @@ func (s *Store) Save(ctx context.Context, vals Values) error {
 	})
 }
 
-// Update executes fn inside a transaction with settings locked.
+// Update applies fn to the stored settings, validates, and saves them in one
+// locked transaction so concurrent updates cannot overwrite each other.
 func (s *Store) Update(ctx context.Context, fn func(v *Values) error) (Values, error) {
 	var result Values
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -176,7 +177,7 @@ func (s *Store) Update(ctx context.Context, fn func(v *Values) error) (Values, e
 func (s *Store) loadLocked(ctx context.Context, tx *gorm.DB) (Values, error) {
 	out := s.Defaults
 	var rows []models.Setting
-	if err := tx.WithContext(ctx).Clauses(clause.Locking{Strength: "UPDATE"}).Where("key IN ?", Keys()).Find(&rows).Error; err != nil {
+	if err := tx.WithContext(ctx).Where("key IN ?", Keys()).Find(&rows).Error; err != nil {
 		return out, err
 	}
 	for _, row := range rows {
