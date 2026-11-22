@@ -4,8 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -60,9 +58,8 @@ func (h *Handlers) JobsList(w http.ResponseWriter, r *http.Request) {
 
 // JobsGet responds with a single job by id.
 func (h *Handlers) JobsGet(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid id")
+	id, ok := pathUUID(w, r)
+	if !ok {
 		return
 	}
 	var job models.Job

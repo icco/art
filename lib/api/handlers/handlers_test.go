@@ -176,3 +176,38 @@ func TestEmailSetArchived(t *testing.T) {
 		t.Fatalf("unknown id: got %d, want 404", w.Code)
 	}
 }
+
+func TestEmailReverseCanonicalizesID(t *testing.T) {
+	var got string
+	h := &handlers.Handlers{Triage: recordingTriage{id: &got}}
+	r := chi.NewRouter()
+	r.Post("/emails/{id}/reverse", h.EmailReverse)
+	w := do(t, r, "POST", "/emails/urn:uuid:11111111-1111-1111-1111-111111111111/reverse", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("urn id: %d %s", w.Code, w.Body)
+	}
+	if got != "11111111-1111-1111-1111-111111111111" {
+		t.Fatalf("service got %q, want canonical uuid", got)
+	}
+}
+
+func TestServerErrorAfterDeadlineIs504(t *testing.T) {
+	h := &handlers.Handlers{Triage: stubTriage{err: context.DeadlineExceeded}}
+	r := chi.NewRouter()
+	r.Post("/emails/{id}/reverse", h.EmailReverse)
+	w := do(t, r, "POST", "/emails/11111111-1111-1111-1111-111111111111/reverse", nil)
+	if w.Code != http.StatusGatewayTimeout {
+		t.Fatalf("deadline: got %d, want 504", w.Code)
+	}
+}
+
+type recordingTriage struct{ id *string }
+
+func (s recordingTriage) Reverse(_ context.Context, id string) (models.EmailMessage, error) {
+	*s.id = id
+	return models.EmailMessage{}, nil
+}
+func (s recordingTriage) SetArchived(_ context.Context, id string, _ bool) (models.EmailMessage, error) {
+	*s.id = id
+	return models.EmailMessage{}, nil
+}

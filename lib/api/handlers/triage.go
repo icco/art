@@ -4,8 +4,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -13,9 +11,8 @@ import (
 // EmailReverse marks a triaged decision wrong: it undoes the Gmail action and
 // records the reversal so the classifier learns. Returns the updated row.
 func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid id")
+	id, ok := pathUUID(w, r)
+	if !ok {
 		return
 	}
 	msg, err := h.Triage.Reverse(r.Context(), id)
@@ -34,9 +31,8 @@ func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
 // (Gmail labels only, never writing mail) and records the change for learning.
 // Returns the updated row.
 func (h *Handlers) EmailSetArchived(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	if _, err := uuid.Parse(id); err != nil {
-		writeError(w, r, http.StatusBadRequest, "invalid id")
+	id, ok := pathUUID(w, r)
+	if !ok {
 		return
 	}
 	var body struct {
