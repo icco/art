@@ -186,12 +186,33 @@ func (c *Client) ListEmails(ctx context.Context) ([]Email, error) {
 	return out, c.do(ctx, "GET", "/emails?limit=200", nil, &out)
 }
 
-// Triage triggers a detached triage pass and returns "started" or "running".
-func (c *Client) Triage(ctx context.Context) (string, error) {
+// Job mirrors the API job resource.
+type Job struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Status    string `json:"status"`
+	LastError string `json:"last_error"`
+}
+
+// GetJob returns a job by id.
+func (c *Client) GetJob(ctx context.Context, id string) (Job, error) {
+	var out Job
+	return out, c.do(ctx, "GET", "/jobs/"+id, nil, &out)
+}
+
+// TriageJob triggers a detached triage pass and returns the status and enqueued job.
+func (c *Client) TriageJob(ctx context.Context) (string, Job, error) {
 	var out struct {
 		Status string `json:"status"`
+		Job    Job    `json:"job"`
 	}
-	return out.Status, c.do(ctx, "POST", "/triage/run", nil, &out)
+	return out.Status, out.Job, c.do(ctx, "POST", "/triage/run", nil, &out)
+}
+
+// Triage triggers a detached triage pass and returns "started" or "running".
+func (c *Client) Triage(ctx context.Context) (string, error) {
+	status, _, err := c.TriageJob(ctx)
+	return status, err
 }
 
 // ReverseEmail marks a triaged decision bad and undoes it server-side.

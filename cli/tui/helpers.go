@@ -12,6 +12,9 @@ import (
 // timeNow is the clock used by the TUI; overridable in tests.
 var timeNow = time.Now
 
+// timeSleep is the sleep used by polling loops; overridable in tests.
+var timeSleep = time.Sleep
+
 // detectDark reports whether the terminal has a dark background, so bubbles
 // components can be styled appropriately.
 func detectDark() bool {
