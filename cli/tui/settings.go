@@ -84,9 +84,13 @@ func (p settingsPage) updateForm(msg tea.Msg) (Page, tea.Cmd) {
 	}
 	switch p.form.State {
 	case huh.StateCompleted:
-		submit := p.submitForm()
+		s, err := p.fd.settings()
+		if err != nil {
+			p.form = buildSettingsForm(p.fd, p.width, p.height)
+			return p, tea.Batch(p.form.Init(), func() tea.Msg { return errMsg{err} })
+		}
 		p.form, p.fd = nil, nil
-		return p, tea.Sequence(submit, loadSettings(p.client))
+		return p, tea.Sequence(saveSettings(p.client, s), loadSettings(p.client))
 	case huh.StateAborted:
 		p.form, p.fd = nil, nil
 		return p, nil
@@ -168,15 +172,7 @@ func onOff(b bool) string {
 	return subtleStyle.Render("no")
 }
 
-func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
-	fd := &settingsForm{
-		triageEnabled: s.TriageEnabled,
-		triageDryRun:  s.TriageDryRun,
-		threshold:     strconv.FormatFloat(s.TriageConfidenceThreshold, 'f', -1, 64),
-		backfillDays:  strconv.Itoa(s.TriageBackfillDays),
-		reconcileDays: strconv.Itoa(s.TriageReconcileDays),
-		dailyBudget:   strconv.FormatFloat(s.DailyBudgetUSD, 'f', -1, 64),
-	}
+func buildSettingsForm(fd *settingsForm, w, ht int) *huh.Form {
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewConfirm().Title("Triage enabled").Affirmative("on").Negative("off").Value(&fd.triageEnabled),
 		huh.NewConfirm().Title("Triage dry run").Affirmative("dry").Negative("live").Value(&fd.triageDryRun),
@@ -188,7 +184,19 @@ func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
 	if w > 0 {
 		form = form.WithWidth(w).WithHeight(ht)
 	}
-	return form, fd
+	return form
+}
+
+func newSettingsForm(s Settings, w, ht int) (*huh.Form, *settingsForm) {
+	fd := &settingsForm{
+		triageEnabled: s.TriageEnabled,
+		triageDryRun:  s.TriageDryRun,
+		threshold:     strconv.FormatFloat(s.TriageConfidenceThreshold, 'f', -1, 64),
+		backfillDays:  strconv.Itoa(s.TriageBackfillDays),
+		reconcileDays: strconv.Itoa(s.TriageReconcileDays),
+		dailyBudget:   strconv.FormatFloat(s.DailyBudgetUSD, 'f', -1, 64),
+	}
+	return buildSettingsForm(fd, w, ht), fd
 }
 
 // budgetLabel renders the daily Vertex AI ceiling; zero means the cap is off.

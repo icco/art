@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/huh/v2"
 )
 
 func TestSettingsPageRendersAndSubmits(t *testing.T) {
@@ -67,5 +70,41 @@ func TestSettingsSubmitRejectsBadNumbers(t *testing.T) {
 		if _, ok := p.submitForm()().(errMsg); !ok {
 			t.Errorf("%s should not submit", name)
 		}
+	}
+}
+
+func TestSettingsUpdateFormRetainsDataOnParseError(t *testing.T) {
+	fd := &settingsForm{
+		triageEnabled: true,
+		threshold:     "not-a-number",
+		backfillDays:  "7",
+		reconcileDays: "7",
+		dailyBudget:   "2",
+	}
+	p := settingsPage{
+		client: deadClient(),
+		fd:     fd,
+		form:   buildSettingsForm(fd, 80, 24),
+	}
+	p.form.State = huh.StateCompleted
+	updatedPage, cmd := p.updateForm(tea.WindowSizeMsg{Width: 80, Height: 24})
+	up := updatedPage.(settingsPage)
+	if up.form == nil {
+		t.Fatal("form should be retained on parse error")
+	}
+	if up.fd == nil {
+		t.Fatal("form data should be retained on parse error")
+	}
+	if up.fd.threshold != "not-a-number" {
+		t.Fatalf("expected retained threshold %q, got %q", "not-a-number", up.fd.threshold)
+	}
+	var foundErr bool
+	for _, msg := range execCmds(cmd) {
+		if _, ok := msg.(errMsg); ok {
+			foundErr = true
+		}
+	}
+	if !foundErr {
+		t.Fatal("expected errMsg to be emitted")
 	}
 }

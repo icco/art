@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -158,5 +159,111 @@ func TestDigestNoFormWithoutSelection(t *testing.T) {
 	}
 	if dp.FullInput() {
 		t.Error("FullInput must be false when no item is selected")
+	}
+}
+
+func TestDigestUpdateForwardsAsyncListMessages(t *testing.T) {
+	p := makeDigestWithEmail(t)
+	// Start filtering for "banana"
+	p.list.SetFilterText("banana")
+	// Now update with items via emailsMsg, which returns a filterItems command
+	pg, cmd := p.Update(emailsMsg{emails: []Email{
+		{ID: "e1", Subject: "apple"},
+		{ID: "e2", Subject: "banana"},
+	}})
+	if cmd == nil {
+		t.Fatal("expected command from SetItems while filtered")
+	}
+	filterMatchesMsg := cmd()
+	if filterMatchesMsg == nil {
+		t.Fatal("expected filter matches msg from cmd")
+	}
+	// Forward the filter message to Update
+	pg, _ = pg.Update(filterMatchesMsg)
+	dp := pg.(digestPage)
+	if len(dp.list.VisibleItems()) != 1 {
+		t.Fatalf("expected 1 visible item, got %d", len(dp.list.VisibleItems()))
+	}
+	if it, ok := dp.list.VisibleItems()[0].(emailItem); !ok || it.e.ID != "e2" {
+		t.Fatalf("expected e2 banana, got %+v", dp.list.VisibleItems()[0])
+	}
+}
+
+func TestDigestFilterStateFullInputAndKeyRouting(t *testing.T) {
+	p := newDigestPage(nil, false)
+	pg, _ := p.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	pg, _ = pg.Update(emailsMsg{emails: []Email{
+		{ID: "e1", Subject: "apple", Action: "archived", Applied: true},
+		{ID: "e2", Subject: "banana", Action: "inbox", Applied: true},
+	}})
+	dp := pg.(digestPage)
+
+	// Enter filter mode
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: '/'})
+	dp = pg.(digestPage)
+	if !dp.list.SettingFilter() {
+		t.Fatal("expected SettingFilter to be true")
+	}
+	if !dp.FullInput() {
+		t.Fatal("expected FullInput to be true while setting filter")
+	}
+
+	// While setting filter, typing 'a' or 'x' should NOT trigger archive or confirm form
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	dp = pg.(digestPage)
+	if dp.form != nil {
+		t.Fatal("typing in filter should not open confirm form")
+	}
+	if dp.list.FilterValue() != "a" {
+		t.Fatalf("expected filter value %q, got %q", "a", dp.list.FilterValue())
+	}
+
+	// Apply the filter
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	dp = pg.(digestPage)
+	if dp.list.SettingFilter() {
+		t.Fatal("SettingFilter should be false after enter")
+	}
+	if !dp.list.IsFiltered() {
+		t.Fatal("IsFiltered should be true after applying filter")
+	}
+	if !dp.FullInput() {
+		t.Fatal("FullInput should be true when filter is applied")
+	}
+
+	// In FilterApplied state, 'x' still opens the confirm form
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: 'x'})
+	dp = pg.(digestPage)
+	if dp.form == nil {
+		t.Fatal("pressing x with filter applied should open confirm form")
+	}
+	// Cancel the confirm form
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	dp = pg.(digestPage)
+	if dp.form != nil {
+		t.Fatal("esc should close confirm form")
+	}
+	if !dp.list.IsFiltered() {
+		t.Fatal("list should still be filtered after closing confirm form")
+	}
+
+	// In FilterApplied state, 'a' triggers archive command
+	pg, cmd := dp.Update(tea.KeyPressMsg{Code: 'a'})
+	dp = pg.(digestPage)
+	if cmd == nil {
+		t.Fatal("pressing a with filter applied should trigger archive cmd")
+	}
+
+	// In FilterApplied state, esc clears the filter
+	pg, _ = dp.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	dp = pg.(digestPage)
+	if dp.list.IsFiltered() {
+		t.Fatal("esc should clear filter")
+	}
+	if dp.list.FilterState() != list.Unfiltered {
+		t.Fatalf("expected Unfiltered state, got %v", dp.list.FilterState())
+	}
+	if dp.FullInput() {
+		t.Fatal("FullInput should be false after clearing filter")
 	}
 }

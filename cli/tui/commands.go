@@ -88,47 +88,99 @@ func loadRuns(c *Client) tea.Cmd {
 }
 
 const (
-	triagePollInterval = 2 * time.Second
-	triagePollTimeout  = 8 * time.Minute
+	triagePollInterval       = 2 * time.Second
+	triagePollTimeout        = 8 * time.Minute
+	maxConsecutivePollErrors = 3
 )
 
 // triage starts a detached triage pass and polls until it lands.
 func triage(c *Client) tea.Cmd {
 	return func() tea.Msg {
-		return startAndAwait(c, "triage", c.Triage, "triage")
+		return startAndAwaitJob(c, "triage", func(ctx context.Context) (string, string, error) {
+			status, job, err := c.TriageJob(ctx)
+			return status, job.ID, err
+		}, "triage")
 	}
 }
 
 // startAndAwait triggers a detached pass and polls until a run past the
 // baseline settles.
 func startAndAwait(c *Client, kind string, start func(context.Context) (string, error), label string) tea.Msg {
+	return startAndAwaitJob(c, kind, func(ctx context.Context) (string, string, error) {
+		status, err := start(ctx)
+		return status, "", err
+	}, label)
+}
+
+func startAndAwaitJob(c *Client, kind string, start func(context.Context) (string, string, error), label string) tea.Msg {
 	latest, err := latestRunOf(c, kind)
 	if err != nil {
 		return errMsg{err}
 	}
 	startCtx, cancel := bg()
-	status, err := start(startCtx)
+	status, jobID, err := start(startCtx)
 	cancel()
 	if err != nil {
 		return errMsg{err}
 	}
 	baseline := pollBaseline(latest, status)
 
+	runFails, jobFails := 0, 0
 	deadline := timeNow().Add(triagePollTimeout)
 	for timeNow().Before(deadline) {
-		time.Sleep(triagePollInterval)
+		timeSleep(triagePollInterval)
 		latest, err := latestRunOf(c, kind)
 		if err != nil {
+			runFails++
+			if runFails >= maxConsecutivePollErrors {
+				return errMsg{err}
+			}
+		} else {
+			runFails = 0
+			if settled(latest, baseline) {
+				return runOutcome(label, latest)
+			}
+		}
+
+		if jobID == "" {
 			continue
 		}
-		if settled(latest, baseline) {
-			if latest.Status == "failed" {
-				return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, latest.Error)}
+		jobCtx, jobCancel := bg()
+		job, err := c.GetJob(jobCtx, jobID)
+		jobCancel()
+		if err != nil {
+			jobFails++
+			if jobFails >= maxConsecutivePollErrors {
+				return errMsg{err}
 			}
-			return statusMsg(label + " done")
+			continue
+		}
+		jobFails = 0
+		switch job.Status {
+		case "failed":
+			if job.LastError != "" {
+				return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, job.LastError)}
+			}
+			return errMsg{fmt.Errorf("%s %w", label, errJobFailed)}
+		case "succeeded":
+			latest, err := latestRunOf(c, kind)
+			if err != nil {
+				return errMsg{err}
+			}
+			if settled(latest, baseline) {
+				return runOutcome(label, latest)
+			}
+			return statusMsg(label + " finished, no run recorded (disabled?)")
 		}
 	}
 	return statusMsg(label + " still running…")
+}
+
+func runOutcome(label string, run *AgentRun) tea.Msg {
+	if run.Status == "failed" {
+		return errMsg{fmt.Errorf("%s %w: %s", label, errJobFailed, run.Error)}
+	}
+	return statusMsg(label + " done")
 }
 
 // settled reports whether a run distinct from baseline has finished.

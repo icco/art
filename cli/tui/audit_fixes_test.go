@@ -110,3 +110,42 @@ func TestPollBaseline(t *testing.T) {
 		}
 	}
 }
+
+func TestTriageKeyClearsStaleError(t *testing.T) {
+	m := newRootWithClient(Config{}, deadClient(), true)
+	m.err = errAPIStatus
+	mm, _ := m.handleKey(tea.KeyPressMsg{Code: 't'})
+	res := mm.(rootModel)
+	if res.err != nil {
+		t.Fatalf("expected err to be cleared, got: %v", res.err)
+	}
+	if !res.busy || res.status != "triaging…" {
+		t.Fatalf("expected busy and status triaging…, got busy=%v status=%q", res.busy, res.status)
+	}
+}
+
+func TestNavigateDashboardResetsStack(t *testing.T) {
+	m := newRootWithClient(Config{}, deadClient(), true)
+	mm, _ := m.navigate(pageSettings)
+	m = mm.(rootModel)
+	mm, _ = m.navigate(pageDigest)
+	m = mm.(rootModel)
+	mm, _ = m.navigate(pageDashboard)
+	m = mm.(rootModel)
+	if len(m.stack) != 1 || m.stack[0] != pageDashboard {
+		t.Fatalf("expected stack [pageDashboard], got %+v", m.stack)
+	}
+}
+
+func TestPopReturnsDestinationInit(t *testing.T) {
+	m := newRootWithClient(Config{}, deadClient(), true)
+	m.stack = []pageID{pageDashboard, pageSettings}
+	mm, cmd := m.pop()
+	m = mm.(rootModel)
+	if m.current() != pageDashboard {
+		t.Fatalf("expected current page pageDashboard, got %v", m.current())
+	}
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd from pop to refresh destination page")
+	}
+}

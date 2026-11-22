@@ -70,3 +70,37 @@ func TestClientErrorResponse(t *testing.T) {
 		t.Fatal("expected error on 400 response")
 	}
 }
+
+func TestClientTriageJobAndGetJob(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == "POST" && r.URL.Path == "/triage/run":
+			encodeJSON(t, w, map[string]any{
+				"status": "queued",
+				"job":    Job{ID: "j-123", Kind: "triage", Status: "pending"},
+			})
+		case r.Method == "GET" && r.URL.Path == "/jobs/j-123":
+			encodeJSON(t, w, Job{ID: "j-123", Kind: "triage", Status: "succeeded"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := stubClient(server)
+	status, job, err := client.TriageJob(context.Background())
+	if err != nil {
+		t.Fatalf("TriageJob failed: %v", err)
+	}
+	if status != "queued" || job.ID != "j-123" {
+		t.Fatalf("unexpected TriageJob result: status=%s, job=%+v", status, job)
+	}
+
+	gotJob, err := client.GetJob(context.Background(), "j-123")
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+	if gotJob.ID != "j-123" || gotJob.Status != "succeeded" {
+		t.Fatalf("unexpected GetJob result: %+v", gotJob)
+	}
+}

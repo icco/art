@@ -64,7 +64,7 @@ func newDigestPage(c *Client, isDark bool) digestPage {
 }
 
 func (p digestPage) Title() string   { return "digest" }
-func (p digestPage) FullInput() bool { return p.form != nil || p.list.SettingFilter() }
+func (p digestPage) FullInput() bool { return p.form != nil || p.list.FilterState() != list.Unfiltered }
 func (p digestPage) bindings() []key.Binding {
 	return []key.Binding{p.keys.Archive, p.keys.Reject}
 }
@@ -91,7 +91,9 @@ func (p digestPage) Update(msg tea.Msg) (Page, tea.Cmd) {
 	if p.form != nil {
 		return p.updateForm(msg)
 	}
-	return p, nil
+	var cmd tea.Cmd
+	p.list, cmd = p.list.Update(msg)
+	return p, cmd
 }
 
 func (p digestPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
@@ -99,6 +101,9 @@ func (p digestPage) handleKey(m tea.KeyPressMsg) (Page, tea.Cmd) {
 		var cmd tea.Cmd
 		p.list, cmd = p.list.Update(m)
 		return p, cmd
+	}
+	if key.Matches(m, p.keys.Quit) {
+		return p, tea.Quit
 	}
 	if key.Matches(m, p.keys.Reject) {
 		if it, ok := p.list.SelectedItem().(emailItem); ok {
