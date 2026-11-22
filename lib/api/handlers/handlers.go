@@ -4,9 +4,12 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"go.icco.me/art/lib/config"
 	"go.icco.me/art/lib/models"
 	"go.icco.me/art/lib/settings"
@@ -58,7 +61,22 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, msg string) 
 // the response while still recording them server-side.
 func writeServerError(w http.ResponseWriter, r *http.Request, op string, err error) {
 	gutillog.FromContext(r.Context()).Errorw(op, "err", err)
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+		writeError(w, r, http.StatusGatewayTimeout, "request timed out")
+		return
+	}
 	writeError(w, r, http.StatusInternalServerError, "internal error")
+}
+
+// pathUUID returns the canonical form of the {id} path parameter, writing a 400
+// when it is not a UUID.
+func pathUUID(w http.ResponseWriter, r *http.Request) (string, bool) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid id")
+		return "", false
+	}
+	return id.String(), true
 }
 
 func decodeJSON(r *http.Request, dst any) error {

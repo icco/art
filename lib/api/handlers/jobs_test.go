@@ -120,4 +120,18 @@ func TestJobsListAndGet(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("missing job: %d %s", w.Code, w.Body)
 	}
+
+	w = do(t, r, "GET", "/jobs/not-a-uuid", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: got %d, want 400", w.Code)
+	}
+}
+
+func TestJobsGetMalformedID(t *testing.T) {
+	h := &handlers.Handlers{}
+	r := jobsRouter(h)
+	w := do(t, r, "GET", "/jobs/not-a-uuid", nil)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: got %d, want 400", w.Code)
+	}
 }
