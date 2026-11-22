@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"go.icco.me/art/lib/models"
 	"gorm.io/gorm"
 )
@@ -13,6 +14,10 @@ import (
 // records the reversal so the classifier learns. Returns the updated row.
 func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid id")
+		return
+	}
 	msg, err := h.Triage.Reverse(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -30,6 +35,10 @@ func (h *Handlers) EmailReverse(w http.ResponseWriter, r *http.Request) {
 // Returns the updated row.
 func (h *Handlers) EmailSetArchived(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if _, err := uuid.Parse(id); err != nil {
+		writeError(w, r, http.StatusBadRequest, "invalid id")
+		return
+	}
 	var body struct {
 		Archived bool `json:"archived"`
 	}

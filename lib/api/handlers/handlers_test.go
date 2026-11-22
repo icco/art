@@ -108,15 +108,20 @@ func (s stubTriage) SetArchived(context.Context, string, bool) (models.EmailMess
 }
 
 func TestEmailReverse(t *testing.T) {
-	db := testdb.Open(t)
-
-	h := &handlers.Handlers{DB: db, Triage: stubTriage{
+	h := &handlers.Handlers{Triage: stubTriage{
 		msg: models.EmailMessage{Action: models.ActionArchived, Reversed: true, ReversalKind: "unarchived"},
 	}}
 	r := chi.NewRouter()
 	r.Post("/emails/{id}/reverse", h.EmailReverse)
 
-	w := do(t, r, "POST", "/emails/abc/reverse", nil)
+	const validID = "11111111-1111-1111-1111-111111111111"
+	const missingID = "00000000-0000-0000-0000-000000000000"
+
+	if w := do(t, r, "POST", "/emails/not-a-uuid/reverse", nil); w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: got %d, want 400", w.Code)
+	}
+
+	w := do(t, r, "POST", "/emails/"+validID+"/reverse", nil)
 	if w.Code != http.StatusOK {
 		t.Fatalf("reverse: %d %s", w.Code, w.Body)
 	}
@@ -126,10 +131,10 @@ func TestEmailReverse(t *testing.T) {
 		t.Error("expected reversed row in response")
 	}
 
-	h2 := &handlers.Handlers{DB: db, Triage: stubTriage{err: gorm.ErrRecordNotFound}}
+	h2 := &handlers.Handlers{Triage: stubTriage{err: gorm.ErrRecordNotFound}}
 	r2 := chi.NewRouter()
 	r2.Post("/emails/{id}/reverse", h2.EmailReverse)
-	if w := do(t, r2, "POST", "/emails/missing/reverse", nil); w.Code != http.StatusNotFound {
+	if w := do(t, r2, "POST", "/emails/"+missingID+"/reverse", nil); w.Code != http.StatusNotFound {
 		t.Fatalf("unknown id: got %d, want 404", w.Code)
 	}
 }
@@ -141,7 +146,14 @@ func TestEmailSetArchived(t *testing.T) {
 	r := chi.NewRouter()
 	r.Post("/emails/{id}/archive", h.EmailSetArchived)
 
-	w := do(t, r, "POST", "/emails/abc/archive", map[string]any{"archived": true})
+	const validID = "11111111-1111-1111-1111-111111111111"
+	const missingID = "00000000-0000-0000-0000-000000000000"
+
+	if w := do(t, r, "POST", "/emails/not-a-uuid/archive", map[string]any{"archived": true}); w.Code != http.StatusBadRequest {
+		t.Fatalf("malformed id: got %d, want 400", w.Code)
+	}
+
+	w := do(t, r, "POST", "/emails/"+validID+"/archive", map[string]any{"archived": true})
 	if w.Code != http.StatusOK {
 		t.Fatalf("set archived: %d %s", w.Code, w.Body)
 	}
@@ -152,7 +164,7 @@ func TestEmailSetArchived(t *testing.T) {
 	}
 
 	// Malformed body is a client error.
-	if w := do(t, r, "POST", "/emails/abc/archive", "not-json"); w.Code != http.StatusBadRequest {
+	if w := do(t, r, "POST", "/emails/"+validID+"/archive", "not-json"); w.Code != http.StatusBadRequest {
 		t.Fatalf("malformed body: got %d, want 400", w.Code)
 	}
 
@@ -160,7 +172,7 @@ func TestEmailSetArchived(t *testing.T) {
 	h2 := &handlers.Handlers{Triage: stubTriage{err: gorm.ErrRecordNotFound}}
 	r2 := chi.NewRouter()
 	r2.Post("/emails/{id}/archive", h2.EmailSetArchived)
-	if w := do(t, r2, "POST", "/emails/missing/archive", map[string]any{"archived": false}); w.Code != http.StatusNotFound {
+	if w := do(t, r2, "POST", "/emails/"+missingID+"/archive", map[string]any{"archived": false}); w.Code != http.StatusNotFound {
 		t.Fatalf("unknown id: got %d, want 404", w.Code)
 	}
 }
